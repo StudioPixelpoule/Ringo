@@ -1,9 +1,9 @@
 [build]
   command = "npm run build"
   publish = "dist"
-  environment = { NODE_VERSION = "18" }
 
 [build.environment]
+  NODE_VERSION = "18"
   VITE_SUPABASE_URL = "https://ethbxfjyhtlylajxrshk.supabase.co"
   VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0aGJ4Zmp5aHRseWxhanhyc2hrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDA1MDc2MDAsImV4cCI6MjA1NjA4MzYwMH0.dFBEJoylnbgTq34kaj9Hf_6fpxONrOzQlU_9onw-sRA"
 
@@ -14,7 +14,7 @@
 
 [[headers]]
   for = "/*"
-  [headers.values]
+    [headers.values]
     X-Frame-Options = "DENY"
     X-XSS-Protection = "1; mode=block"
     X-Content-Type-Options = "nosniff"
