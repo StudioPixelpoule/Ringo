@@ -7,7 +7,7 @@ export default defineConfig({
     exclude: ['lucide-react'],
   },
   server: {
-    port: process.env.PORT ? parseInt(process.env.PORT) : 4173,
-    host: '0.0.0.0' // Added to expose the server
+    port: process.env.PORT ? parseInt(process.env.PORT) : 4173, // ✅ Port dynamique Railway
+    host: '0.0.0.0' // ✅ Autorise Railway à accéder au serveur
   }
 });
