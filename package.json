@@ -5,10 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "tsc && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "start": "NODE_ENV=production npx serve -s dist -l $PORT"
+    "start": "serve dist -l $PORT"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.7",
