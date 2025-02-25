@@ -7,9 +7,4 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['lucide-react'],
   },
-  server: {
-    port: process.env.PORT ? parseInt(process.env.PORT) : 5173,
-    host: '0.0.0.0' // Permet l'accès externe, nécessaire pour Railway
-  }
 });
-
