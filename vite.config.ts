@@ -7,7 +7,18 @@ export default defineConfig({
     exclude: ['lucide-react'],
   },
   server: {
-    port: process.env.PORT ? parseInt(process.env.PORT) : 4173, // ✅ Port dynamique Railway
-    host: '0.0.0.0' // ✅ Autorise Railway à accéder au serveur
+    port: process.env.PORT ? parseInt(process.env.PORT) : 4173,
+    host: '0.0.0.0'
+  },
+  build: {
+    sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          supabase: ['@supabase/supabase-js']
+        }
+      }
+    }
   }
 });
