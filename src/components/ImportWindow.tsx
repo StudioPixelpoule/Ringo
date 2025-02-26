@@ -8,7 +8,7 @@ interface ImportWindowProps {
   onClose: () => void;
   userId: string;
   onDocumentAdded: () => Promise<void>;
-  folderStructure: any;
+  folderStructure: FolderStructure;
 }
 
 interface FolderStructure {
@@ -16,6 +16,20 @@ interface FolderStructure {
     files: Document[];
     subfolders: FolderStructure;
   };
+}
+
+interface FolderColumnProps {
+  title: string;
+  folders: string[];
+  files: Document[];
+  selectedItem: string | null;
+  onSelect: (folder: string) => void;
+  onCreateNew: () => void;
+  onDelete: (folder: string) => void;
+  onDeleteFile: (file: Document) => void;
+  isCreating: boolean;
+  onCancelCreate: () => void;
+  onConfirmCreate: (name: string) => void;
 }
 
 const DOCUMENT_TYPES = [
@@ -36,7 +50,7 @@ const GROUP_TYPES = [
 ];
 
 // Composant de colonne pour l'arborescence
-const FolderColumn = ({ 
+const FolderColumn: React.FC<FolderColumnProps> = ({ 
   title, 
   folders, 
   files, 
@@ -49,18 +63,18 @@ const FolderColumn = ({
   onCancelCreate, 
   onConfirmCreate 
 }) => {
-  const [newFolderName, setNewFolderName] = useState('');
-  const [hoveredItem, setHoveredItem] = useState(null);
-  const [hoveredFile, setHoveredFile] = useState(null);
+  const [newFolderName, setNewFolderName] = useState<string>('');
+  const [hoveredItem, setHoveredItem] = useState<string | null>(null);
+  const [hoveredFile, setHoveredFile] = useState<string | null>(null);
 
-  const handleCreate = () => {
+  const handleCreate = (): void => {
     if (newFolderName.trim()) {
       onConfirmCreate(newFolderName.trim());
       setNewFolderName('');
     }
   };
 
-  const formatFileSize = (bytes) => {
+  const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return '0 B';
     const k = 1024;
     const sizes = ['B', 'KB', 'MB', 'GB'];
@@ -207,19 +221,23 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
   folderStructure: initialFolderStructure
 }) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [selectedFolder, setSelectedFolder] = useState('');
+  const [selectedFolder, setSelectedFolder] = useState<string>('');
   const [currentPath, setCurrentPath] = useState<string[]>([]);
   const [creatingInLevel, setCreatingInLevel] = useState<number | null>(null);
-  const [metadata, setMetadata] = useState({
+  const [metadata, setMetadata] = useState<{
+    type: string;
+    group: string;
+    description: string;
+  }>({
     type: '',
     group: '',
     description: ''
   });
   // Ajout d'un état local pour la structure des dossiers
-  const [localFolderStructure, setLocalFolderStructure] = useState(initialFolderStructure);
+  const [localFolderStructure, setLocalFolderStructure] = useState<FolderStructure>(initialFolderStructure);
 
   // Mettre à jour la structure locale quand la structure initiale change
   useEffect(() => {
@@ -244,7 +262,7 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
 
   if (!isOpen) return null;
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>): void => {
     e.preventDefault();
     setIsDragging(false);
     const file = e.dataTransfer.files[0];
@@ -253,14 +271,14 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
     }
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>): void => {
     const file = e.target.files?.[0];
     if (file) {
       setSelectedFile(file);
     }
   };
 
-  const handleMetadataChange = (field: string, value: string) => {
+  const handleMetadataChange = (field: string, value: string): void => {
     setMetadata(prev => ({ ...prev, [field]: value }));
   };
 
@@ -273,7 +291,7 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
       .replace(/[^a-zA-Z0-9._-]/g, '_'); // Remplacer les autres caractères spéciaux par des underscores
   };
 
-  const handleUpload = async () => {
+  const handleUpload = async (): Promise<void> => {
     if (!selectedFile || !selectedFolder) return;
     
     setIsUploading(true);
@@ -325,9 +343,9 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
   };
 
   // Fonction pour mettre à jour la structure des dossiers localement
-  const updateLocalFolderStructure = (path: string[], folderName: string) => {
+  const updateLocalFolderStructure = (path: string[], folderName: string): FolderStructure => {
     // Créer une copie profonde de la structure actuelle
-    const newStructure = JSON.parse(JSON.stringify(localFolderStructure));
+    const newStructure = JSON.parse(JSON.stringify(localFolderStructure)) as FolderStructure;
     
     // Si c'est un dossier de premier niveau
     if (path.length === 0) {
@@ -362,7 +380,7 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
     return newStructure;
   };
 
-  const handleCreateFolder = async (path: string[], name: string) => {
+  const handleCreateFolder = async (path: string[], name: string): Promise<void> => {
     // Mettre à jour la structure locale des dossiers
     const updatedStructure = updateLocalFolderStructure(path, name);
     setLocalFolderStructure(updatedStructure);
@@ -374,7 +392,7 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
   };
 
   // Fonction modifiée pour supprimer uniquement le fichier spécifié
-  const handleDeleteDocument = async (doc: Document) => {
+  const handleDeleteDocument = async (doc: Document): Promise<void> => {
     try {
       // Extraire le nom du fichier de l'URL
       const url = new URL(doc.url);
@@ -411,9 +429,9 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
   };
 
   // Fonction pour supprimer un fichier de la structure locale
-  const removeFileFromLocalStructure = (doc: Document) => {
+  const removeFileFromLocalStructure = (doc: Document): FolderStructure => {
     // Créer une copie profonde de la structure actuelle
-    const newStructure = JSON.parse(JSON.stringify(localFolderStructure));
+    const newStructure = JSON.parse(JSON.stringify(localFolderStructure)) as FolderStructure;
     
     // Si le fichier n'est pas dans un dossier
     if (!doc.folder) {
@@ -448,7 +466,7 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
   };
 
   // Fonction modifiée pour supprimer uniquement le dossier spécifié sans supprimer les fichiers
-  const handleDeleteFolder = async (folderPath: string) => {
+  const handleDeleteFolder = async (folderPath: string): Promise<void> => {
     try {
       // Supprimer le dossier de la structure locale
       const updatedStructure = removeFolderFromLocalStructure(folderPath);
@@ -470,9 +488,9 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
   };
 
   // Fonction pour supprimer un dossier de la structure locale
-  const removeFolderFromLocalStructure = (folderPath: string) => {
+  const removeFolderFromLocalStructure = (folderPath: string): FolderStructure => {
     // Créer une copie profonde de la structure actuelle
-    const newStructure = JSON.parse(JSON.stringify(localFolderStructure));
+    const newStructure = JSON.parse(JSON.stringify(localFolderStructure)) as FolderStructure;
     
     // Si c'est un dossier de premier niveau
     if (!folderPath.includes('/')) {
@@ -482,7 +500,7 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
     
     // Si c'est un sous-dossier
     const pathParts = folderPath.split('/');
-    const folderName = pathParts.pop(); // Dernier élément du chemin
+    const folderName = pathParts.pop() as string; // Dernier élément du chemin
     let current = newStructure;
     
     // Naviguer jusqu'au dossier parent
