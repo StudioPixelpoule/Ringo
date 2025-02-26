@@ -1,3 +1,62 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Import de la police Inter */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+
+.btn-neumorphic {
+  transition: all 0.3s ease;
+  box-shadow: 5px 5px 10px rgba(0, 0, 0, 0.2),
+              -5px -5px 10px rgba(255, 255, 255, 0.1);
+}
+
+.btn-neumorphic:hover {
+  box-shadow: inset 4px 4px 8px rgba(0, 0, 0, 0.2),
+              inset -4px -4px 8px rgba(255, 255, 255, 0.1);
+  transform: scale(0.95);
+}
+
+.btn-neumorphic:active {
+  box-shadow: inset 6px 6px 12px rgba(0, 0, 0, 0.3),
+              inset -6px -6px 12px rgba(255, 255, 255, 0.1);
+  transform: scale(0.9);
+}
+
+.btn-neumorphic-light {
+  transition: all 0.2s ease;
+  background: #f8f9fa;
+  box-shadow: 3px 3px 6px rgba(0, 0, 0, 0.1),
+              -3px -3px 6px rgba(255, 255, 255, 0.8);
+}
+
+.btn-neumorphic-light:hover {
+  box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1),
+              -2px -2px 4px rgba(255, 255, 255, 0.8);
+}
+
+.btn-neumorphic-light:active {
+  box-shadow: inset 2px 2px 4px rgba(0, 0, 0, 0.1),
+              inset -2px -2px 4px rgba(255, 255, 255, 0.8);
+  transform: scale(0.95);
+}
+
+/* Styles pour la mindmap */
+.mindmap-link {
+  stroke: #2f5c54;
+  stroke-width: 1;
+  fill: none;
+  opacity: 0.2;
+}
+
+.mindmap-node text {
+  user-select: none;
+}
+
+.mindmap-node circle {
+  transition: r 0.2s ease;
+}
+
+.mindmap-node:hover circle {
+  r: 8;
+}
