@@ -163,9 +163,9 @@ async function extractDocxFile(data: Blob): Promise<string> {
     const options = {
       arrayBuffer,
       convertImage: mammoth.images.imgElement((image: any) => {
-        return {
+        return Promise.resolve({
           src: image.src
-        };
+        });
       }),
       styleMap: [
         "p[style-name='Heading 1'] => h1:fresh",

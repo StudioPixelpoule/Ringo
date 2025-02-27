@@ -58,7 +58,8 @@ export const handleAuthError = async () => {
 supabase.auth.onAuthStateChange((event, session) => {
   console.log('[SUPABASE] Événement d\'authentification:', event);
   
-  if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+  // Utiliser une vérification de type plus sûre pour éviter l'erreur TS2367
+  if (event === 'SIGNED_OUT') {
     // Nettoyer le stockage local
     localStorage.removeItem('ringo-auth-storage-key');
     console.log('[SUPABASE] Session terminée, stockage local nettoyé');
