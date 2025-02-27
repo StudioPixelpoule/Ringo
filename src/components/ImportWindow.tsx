@@ -762,8 +762,7 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
 
                 {uploadError && (
                   <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 text-red-700 rounded">
-                    <p className="font-medium">Une erreur est survenue</p>
-                    <p className="text-sm mt-1">{uploadError}</p>
+                    <p className="font-medium">Une erreur est survenue</p> <p className="text-sm mt-1">{uploadError}</p>
                   </div>
                 )}
 
@@ -1082,7 +1081,7 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
                     w-full py-3 px-4 rounded-xl flex items-center justify-center gap-2
                     transition-all duration-300
                     ${selectedFile && selectedFolder && isMetadataValid && !isUploading
-                      ? 'bg-[#f15 922] text-white hover:bg-[#d14811]'
+                      ? 'bg-[#f15922] text-white hover:bg-[#d14811]'
                       : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                     }
                   `}

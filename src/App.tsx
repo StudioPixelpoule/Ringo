@@ -15,6 +15,8 @@ import { ChatInput } from './components/ChatInput';
 import { Conversation as ConversationComponent } from './components/Conversation';
 import { ConversationList } from './components/ConversationList';
 import { OpenAIKeyModal } from './components/OpenAIKeyModal';
+import { DocumentBadge } from './components/DocumentBadge';
+import { DocumentsPanel } from './components/DocumentsPanel';
 import { v4 as uuidv4 } from 'uuid';
 
 interface FolderStructure {
@@ -22,6 +24,11 @@ interface FolderStructure {
     files: Document[];
     subfolders: FolderStructure;
   };
+}
+
+interface SharedDocument {
+  document: Document;
+  content: string;
 }
 
 function App() {
@@ -46,8 +53,8 @@ function App() {
   const [documentProcessingStatus, setDocumentProcessingStatus] = useState<'idle' | 'processing' | 'completed' | 'error'>('idle');
   const [manualDocumentInput, setManualDocumentInput] = useState<boolean>(false);
   
-  // Store active conversation's shared document
-  const [activeConversationDocuments, setActiveConversationDocuments] = useState<{[conversationId: string]: {document: Document, content: string}}>({});
+  // Multi-document support
+  const [sharedDocuments, setSharedDocuments] = useState<SharedDocument[]>([]);
   
   // OpenAI configuration
   const [isOpenAIKeyModalOpen, setIsOpenAIKeyModalOpen] = useState(false);
@@ -90,25 +97,12 @@ function App() {
   useEffect(() => {
     if (activeConversationId) {
       loadMessages(activeConversationId);
-      
-      // Restore document content if this conversation has a shared document
-      if (activeConversationDocuments[activeConversationId]) {
-        const { document, content } = activeConversationDocuments[activeConversationId];
-        setCurrentSharedDocument(document);
-        setDocumentContent(content);
-        setDocumentProcessingStatus('completed');
-      } else {
-        setCurrentSharedDocument(null);
-        setDocumentContent("");
-        setDocumentProcessingStatus('idle');
-      }
+      // Réinitialiser les documents partagés lors du changement de conversation
+      setSharedDocuments([]);
     } else {
       setMessages([]);
-      setCurrentSharedDocument(null);
-      setDocumentContent("");
-      setDocumentProcessingStatus('idle');
     }
-  }, [activeConversationId, activeConversationDocuments]);
+  }, [activeConversationId]);
 
   // Effet pour extraire le contenu du document lorsqu'il est partagé
   useEffect(() => {
@@ -122,18 +116,11 @@ function App() {
           if (existingContent) {
             console.log('Contenu du document trouvé dans la base de données');
             setDocumentContent(existingContent);
-            setDocumentProcessingStatus('completed');
             
-            // Store document and content for this conversation
-            if (activeConversationId) {
-              setActiveConversationDocuments(prev => ({
-                ...prev,
-                [activeConversationId]: {
-                  document: currentSharedDocument,
-                  content: existingContent
-                }
-              }));
-            }
+            // Ajouter le document à la liste des documents partagés
+            addSharedDocument(currentSharedDocument, existingContent);
+            
+            setDocumentProcessingStatus('completed');
             return;
           }
           
@@ -149,18 +136,11 @@ function App() {
             setManualDocumentInput(true);
           } else {
             setDocumentContent(content);
-            setDocumentProcessingStatus('completed');
             
-            // Store document and content for this conversation
-            if (activeConversationId) {
-              setActiveConversationDocuments(prev => ({
-                ...prev,
-                [activeConversationId]: {
-                  document: currentSharedDocument,
-                  content: content
-                }
-              }));
-            }
+            // Ajouter le document à la liste des documents partagés
+            addSharedDocument(currentSharedDocument, content);
+            
+            setDocumentProcessingStatus('completed');
           }
         } catch (error) {
           console.error("Erreur lors de l'extraction du contenu:", error);
@@ -177,6 +157,21 @@ function App() {
       setManualDocumentInput(false);
     }
   }, [currentSharedDocument]);
+
+  const addSharedDocument = (document: Document, content: string) => {
+    setSharedDocuments(prev => {
+      // Vérifier si le document existe déjà
+      const exists = prev.some(doc => doc.document.id === document.id);
+      if (exists) return prev;
+      
+      // Ajouter le nouveau document
+      return [...prev, { document, content }];
+    });
+  };
+
+  const removeSharedDocument = (document: Document) => {
+    setSharedDocuments(prev => prev.filter(doc => doc.document.id !== document.id));
+  };
 
   const loadUserProfile = async () => {
     if (!user) return;
@@ -294,39 +289,6 @@ function App() {
       if (error) throw error;
 
       setMessages(data || []);
-      
-      // Check for document sharing messages to restore document context
-      if (data) {
-        const documentMessages = data.filter(msg => 
-          msg.role === 'user' && 
-          msg.content.includes("**Document partagé:**")
-        );
-        
-        if (documentMessages.length > 0) {
-          // Get the most recent document sharing message
-          const lastDocumentMessage = documentMessages[documentMessages.length - 1];
-          const docName = lastDocumentMessage.content.replace("**Document partagé:** ", "");
-          
-          // Find the document in the documents list
-          const sharedDoc = documents.find(doc => doc.name === docName);
-          
-          // If we found the document but don't have its content in our state yet
-          if (sharedDoc && !activeConversationDocuments[conversationId]) {
-            // Try to get the content from the database
-            const content = await getDocumentContent(sharedDoc.id);
-            if (content) {
-              // Store the document and its content for this conversation
-              setActiveConversationDocuments(prev => ({
-                ...prev,
-                [conversationId]: {
-                  document: sharedDoc,
-                  content: content
-                }
-              }));
-            }
-          }
-        }
-      }
     } catch (err) {
       console.error('Erreur lors du chargement des messages:', err);
     }
@@ -351,6 +313,9 @@ function App() {
       // Recharger les conversations et sélectionner la nouvelle
       await loadConversations();
       setActiveConversationId(newConversation.id as string);
+      
+      // Réinitialiser les documents partagés
+      setSharedDocuments([]);
     } catch (err) {
       console.error('Erreur lors de la création d\'une conversation:', err);
     }
@@ -377,17 +342,13 @@ function App() {
       // Mettre à jour l'état local
       setConversations(prev => prev.filter(conv => conv.id !== conversationId));
       
-      // Remove document association for this conversation
-      setActiveConversationDocuments(prev => {
-        const newState = {...prev};
-        delete newState[conversationId];
-        return newState;
-      });
-      
       // Si la conversation supprimée était active, sélectionner une autre
       if (activeConversationId === conversationId) {
         const remainingConversations = conversations.filter(conv => conv.id !== conversationId);
         setActiveConversationId(remainingConversations.length > 0 ? remainingConversations[0].id : null);
+        
+        // Réinitialiser les documents partagés
+        setSharedDocuments([]);
       }
     } catch (err) {
       console.error('Erreur lors de la suppression de la conversation:', err);
@@ -443,16 +404,8 @@ function App() {
       // Stocker le contenu manuellement saisi
       storeManualDocumentContent(currentSharedDocument.id, content);
       
-      // Store document and content for this conversation
-      if (activeConversationId) {
-        setActiveConversationDocuments(prev => ({
-          ...prev,
-          [activeConversationId]: {
-            document: currentSharedDocument,
-            content: content
-          }
-        }));
-      }
+      // Ajouter le document à la liste des documents partagés
+      addSharedDocument(currentSharedDocument, content);
     }
   };
 
@@ -561,17 +514,24 @@ Voici quelques informations contextuelles basées sur les documents disponibles:
 ${context}
 `;
 
-      // Ajouter le contenu du document si disponible
-      const hasSharedDocument = activeConversationDocuments[activeConversationId] || 
-                               (isDocumentMessage && documentContent);
-      
-      if (hasSharedDocument) {
-        // Get the document content either from the current state or from the stored conversation documents
-        const docContent = activeConversationDocuments[activeConversationId]?.content || documentContent;
-        
+      // Ajouter le contenu des documents partagés
+      if (sharedDocuments.length > 0) {
+        systemPrompt += `
+L'utilisateur a partagé ${sharedDocuments.length} document(s). Voici leur contenu:
+
+${sharedDocuments.map((doc, index) => `
+--- DOCUMENT ${index + 1}: ${doc.document.name} ---
+${doc.content.substring(0, 2000)}${doc.content.length > 2000 ? '...' : ''}
+`).join('\n')}
+
+Utilise ces informations pour répondre à la question de l'utilisateur. Si la question porte sur un document spécifique, concentre-toi sur ce document. Si elle demande une comparaison ou une synthèse, prends en compte tous les documents pertinents.
+`;
+      }
+      // Ajouter le contenu du document si disponible (pour la compatibilité avec l'ancien système)
+      else if (isDocumentMessage && documentContent) {
         systemPrompt += `
 L'utilisateur a partagé un document. Voici son contenu:
-${docContent}
+${documentContent}
 
 Utilise ces informations pour répondre à la question de l'utilisateur.
 `;
@@ -609,15 +569,44 @@ Réponds de manière concise, précise et professionnelle. Si tu ne connais pas 
 
       let response;
       
-      if (isAskingForSummary && hasSharedDocument) {
-        // Get the document content and name
-        const docContent = activeConversationDocuments[activeConversationId]?.content || documentContent;
-        const docName = activeConversationDocuments[activeConversationId]?.document.name || 
-                       (currentSharedDocument ? currentSharedDocument.name : "document");
-        
-        // Générer un résumé du document
-        const summary = await summarizeDocument(docContent, docName);
-        response = { content: summary };
+      if (isAskingForSummary && sharedDocuments.length > 0) {
+        // Générer un résumé des documents partagés
+        if (sharedDocuments.length === 1) {
+          // Résumé d'un seul document
+          const doc = sharedDocuments[0];
+          const summary = await summarizeDocument(doc.content, doc.document.name);
+          response = { content: summary };
+        } else {
+          // Résumé comparatif de plusieurs documents
+          const prompt = `
+Tu es un expert en synthèse de documents pour l'IRSST.
+L'utilisateur a partagé ${sharedDocuments.length} documents et souhaite une synthèse comparative.
+
+Voici les documents:
+${sharedDocuments.map((doc, index) => `
+--- DOCUMENT ${index + 1}: ${doc.document.name} ---
+${doc.content.substring(0, 3000)}${doc.content.length > 3000 ? '...' : ''}
+`).join('\n')}
+
+Crée une synthèse comparative qui:
+1. Présente brièvement chaque document
+2. Identifie les points communs et les différences principales
+3. Met en évidence les informations clés de chaque document
+4. Propose une conclusion qui intègre les éléments importants de tous les documents
+
+Utilise un format structuré avec des titres et sous-titres pour organiser l'information.
+`;
+
+          const openai = createOpenAIClient();
+          const summaryResponse = await openai.chat.completions.create({
+            model: "gpt-4-turbo-preview",
+            messages: [{ role: "system", content: prompt }],
+            temperature: 0.5,
+            max_tokens: 2000,
+          });
+          
+          response = { content: summaryResponse.choices[0].message.content || "Je n'ai pas pu générer de synthèse comparative." };
+        }
       } else {
         // Réponse normale via l'API OpenAI
         response = await createChatCompletion({
@@ -835,6 +824,16 @@ Réponds de manière concise, précise et professionnelle. Si tu ne connais pas 
           messages={messages}
           isLoading={isProcessing || documentProcessingStatus === 'processing'}
         />
+
+        {/* Documents Panel */}
+        {sharedDocuments.length > 0 && (
+          <DocumentsPanel
+            documents={sharedDocuments}
+            currentDocument={currentSharedDocument}
+            onSelectDocument={setCurrentSharedDocument}
+            onRemoveDocument={removeSharedDocument}
+          />
+        )}
 
         {/* Manual Document Input */}
         {manualDocumentInput && (

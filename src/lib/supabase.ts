@@ -36,7 +36,8 @@ export const checkSupabaseConnection = async () => {
 
 // Fonction pour gérer les erreurs d'authentification
 export const handleAuthError = async () => {
-  try { console.log('[SUPABASE] Tentative de récupération de la session...');
+  try {
+    console.log('[SUPABASE] Tentative de récupération de la session...');
     const { data, error } = await supabase.auth.getSession();
     
     if (error || !data.session) {
@@ -48,7 +49,7 @@ export const handleAuthError = async () => {
     console.log('[SUPABASE] Session récupérée avec succès');
     return true;
   } catch (err) {
-    console.error('[SUPABASE] Erreur lors de la gestion de l\'authentification:', err); 
+    console.error('[SUPABASE] Erreur lors de la gestion de l\'authentification:', err);
     return false;
   }
 };
@@ -57,7 +58,7 @@ export const handleAuthError = async () => {
 supabase.auth.onAuthStateChange((event, session) => {
   console.log('[SUPABASE] Événement d\'authentification:', event);
   
-  if (event === 'SIGNED_OUT') {
+  if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
     // Nettoyer le stockage local
     localStorage.removeItem('ringo-auth-storage-key');
     console.log('[SUPABASE] Session terminée, stockage local nettoyé');
