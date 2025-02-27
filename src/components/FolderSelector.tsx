@@ -132,10 +132,10 @@ const Column: React.FC<ColumnProps> = ({
               onClick={onCreateNew}
               className="mt-2 text-[#f15922] hover:text-[#d14811] text-sm"
             >
-              Créer un dossier
+               Créer un dossier
             </button>
           </div>
-        ) : (
+         ) : (
           <>
             {folders.map((folder) => (
               <div
@@ -227,6 +227,7 @@ const FolderSelector: React.FC<FolderSelectorProps> = ({
   const getLevelContent = (level: number): { folders: string[], files: Document[] } => {
     let current = folderStructure;
     
+    // For root level
     if (level === 0) {
       return {
         folders: Object.keys(current).filter(k => k !== ''),
@@ -234,20 +235,33 @@ const FolderSelector: React.FC<FolderSelectorProps> = ({
       };
     }
 
-    for (let i = 0; i < level; i++) {
-      const folder = currentPath[i];
-      if (!folder || !current[folder]?.subfolders) {
+    // Navigate to the correct level in the folder structure
+    let path = currentPath.slice(0, level);
+    
+    // If we're looking at a level beyond our current path, return empty
+    if (path.length < level) {
+      return { folders: [], files: [] };
+    }
+    
+    // Navigate through the path
+    for (let i = 0; i < path.length; i++) {
+      const folder = path[i];
+      if (!folder || !current[folder]) {
         return { folders: [], files: [] };
       }
+      
+      // If we're at the target level, return the content
+      if (i === path.length - 1) {
+        return {
+          folders: Object.keys(current[folder].subfolders || {}),
+          files: current[folder].files || []
+        };
+      }
+      
       current = current[folder].subfolders;
     }
 
-    return {
-      folders: Object.keys(current),
-      files: currentPath[level] && current[currentPath[level]]
-        ? current[currentPath[level]].files
-        : []
-    };
+    return { folders: [], files: [] };
   };
 
   const handleCreateNew = (level: number, name: string) => {
@@ -298,7 +312,7 @@ const FolderSelector: React.FC<FolderSelectorProps> = ({
             transform: `translateX(-${currentPath.length * 300}px)`
           }}
         >
-          {[0, 1, 2].map((level) => {
+          {[0, 1, 2, 3].map((level) => {
             const { folders, files } = getLevelContent(level);
             const isVisible = level <= currentPath.length;
 
@@ -307,7 +321,7 @@ const FolderSelector: React.FC<FolderSelectorProps> = ({
                 key={level}
                 level={level}
                 isVisible={isVisible}
-                title={`Niveau ${level + 1}`}
+                title={level === 0 ? "Racine" : `Niveau ${level}`}
                 folders={folders}
                 files={files}
                 selectedItem={currentPath[level] || null}

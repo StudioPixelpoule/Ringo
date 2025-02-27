@@ -60,3 +60,237 @@
 .mindmap-node:hover circle {
   r: 8;
 }
+
+/* Animation pour les points de réflexion */
+@keyframes pulse {
+  0% { transform: scale(0.8); opacity: 0.5; }
+  50% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(0.8); opacity: 0.5; }
+}
+
+.thinking-dot {
+  animation: pulse 1.5s infinite ease-in-out;
+}
+
+.thinking-dot:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.thinking-dot:nth-child(2) {
+  animation-delay: 0.3s;
+}
+
+.thinking-dot:nth-child(3) {
+  animation-delay: 0.6s;
+}
+
+/* Effet de transition pour les messages */
+.message-enter {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.message-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 300ms, transform 300ms;
+}
+
+/* Effet de clignotement du curseur pour l'effet typewriter */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.typewriter-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background-color: currentColor;
+  margin-left: 2px;
+  animation: blink 1s infinite;
+}
+
+/* Styles spécifiques pour React Flow */
+.react-flow__node {
+  transition: transform 0.2s ease;
+}
+
+.react-flow__node:hover {
+  transform: scale(1.05);
+  z-index: 10;
+}
+
+.react-flow__edge {
+  transition: stroke-opacity 0.2s ease;
+}
+
+.react-flow__edge:hover {
+  stroke-opacity: 1;
+}
+
+.react-flow__controls {
+  background-color: rgba(255, 255, 255, 0.8);
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.react-flow__controls-button {
+  border: none !important;
+  background-color: transparent !important;
+  color: #2f5c54 !important;
+}
+
+.react-flow__controls-button:hover {
+  background-color: rgba(47, 92, 84, 0.1) !important;
+}
+
+.react-flow__background {
+  background-color: #f8f7f2;
+}
+
+/* Styles pour le markdown dans les messages */
+.markdown-message h1,
+.markdown-message h2,
+.markdown-message h3,
+.markdown-message h4,
+.markdown-message h5,
+.markdown-message h6 {
+  font-weight: 600;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  line-height: 1.25;
+}
+
+.markdown-message h1 {
+  font-size: 1.5rem;
+  color: #2F4F4F;
+  border-bottom: 1px solid #eaeaea;
+  padding-bottom: 0.3em;
+}
+
+.markdown-message h2 {
+  font-size: 1.3rem;
+  color: #2F4F4F;
+  border-bottom: 1px solid #eaeaea;
+  padding-bottom: 0.3em;
+}
+
+.markdown-message h3 {
+  font-size: 1.15rem;
+  color: #2F4F4F;
+}
+
+.markdown-message h4 {
+  font-size: 1rem;
+  color: #2F4F4F;
+}
+
+.markdown-message p {
+  margin-bottom: 1em;
+  line-height: 1.6;
+}
+
+.markdown-message ul,
+.markdown-message ol {
+  margin-bottom: 1em;
+  padding-left: 1.5em;
+}
+
+.markdown-message ul {
+  list-style-type: disc;
+}
+
+.markdown-message ol {
+  list-style-type: decimal;
+}
+
+.markdown-message li {
+  margin-bottom: 0.5em;
+}
+
+.markdown-message a {
+  color: #f15922;
+  text-decoration: underline;
+}
+
+.markdown-message a:hover {
+  text-decoration: none;
+}
+
+.markdown-message blockquote {
+  border-left: 4px solid #f15922;
+  padding-left: 1em;
+  margin-left: 0;
+  margin-right: 0;
+  font-style: italic;
+  color: #555;
+  background-color: #f9f9f9;
+  padding: 0.5em 1em;
+  margin-bottom: 1em;
+}
+
+.markdown-message code {
+  font-family: monospace;
+  background-color: #f0f0f0;
+  padding: 0.2em 0.4em;
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+
+.markdown-message pre {
+  background-color: #f0f0f0;
+  padding: 1em;
+  border-radius: 5px;
+  overflow-x: auto;
+  margin-bottom: 1em;
+}
+
+.markdown-message pre code {
+  background-color: transparent;
+  padding: 0;
+  border-radius: 0;
+}
+
+.markdown-message table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 1em;
+}
+
+.markdown-message table th,
+.markdown-message table td {
+  border: 1px solid #ddd;
+  padding: 0.5em;
+  text-align: left;
+}
+
+.markdown-message table th {
+  background-color: #f0f0f0;
+  font-weight: 600;
+}
+
+.markdown-message table tr:nth-child(even) {
+  background-color: #f9f9f9;
+}
+
+.markdown-message hr {
+  border: 0;
+  border-top: 1px solid #eaeaea;
+  margin: 1.5em 0;
+}
+
+.markdown-message img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 5px;
+  margin: 1em 0;
+}
+
+.markdown-message strong {
+  font-weight: 600;
+}
+
+.markdown-message em {
+  font-style: italic;
+}

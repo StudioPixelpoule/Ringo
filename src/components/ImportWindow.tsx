@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Upload, FolderPlus, File, Tag, Users, FileText, Check, AlertCircle, ChevronRight, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { processUploadedDocument } from '../lib/documentProcessor';
 import type { Document } from '../lib/types';
 
 interface ImportWindowProps {
@@ -8,7 +9,7 @@ interface ImportWindowProps {
   onClose: () => void;
   userId: string;
   onDocumentAdded: () => Promise<void>;
-  folderStructure: FolderStructure;
+  folderStructure: any;
 }
 
 interface FolderStructure {
@@ -16,20 +17,6 @@ interface FolderStructure {
     files: Document[];
     subfolders: FolderStructure;
   };
-}
-
-interface FolderColumnProps {
-  title: string;
-  folders: string[];
-  files: Document[];
-  selectedItem: string | null;
-  onSelect: (folder: string) => void;
-  onCreateNew: () => void;
-  onDelete: (folder: string) => void;
-  onDeleteFile: (file: Document) => void;
-  isCreating: boolean;
-  onCancelCreate: () => void;
-  onConfirmCreate: (name: string) => void;
 }
 
 const DOCUMENT_TYPES = [
@@ -49,6 +36,20 @@ const GROUP_TYPES = [
   { value: 'EXT', label: 'Recherche externe' }
 ];
 
+interface FolderColumnProps {
+  title: string;
+  folders: string[];
+  files: Document[];
+  selectedItem: string | null;
+  onSelect: (folder: string) => void;
+  onCreateNew: () => void;
+  onDelete: (folder: string) => void;
+  onDeleteFile: (file: Document) => void;
+  isCreating: boolean;
+  onCancelCreate: () => void;
+  onConfirmCreate: (name: string) => void;
+}
+
 // Composant de colonne pour l'arborescence
 const FolderColumn: React.FC<FolderColumnProps> = ({ 
   title, 
@@ -67,7 +68,7 @@ const FolderColumn: React.FC<FolderColumnProps> = ({
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [hoveredFile, setHoveredFile] = useState<string | null>(null);
 
-  const handleCreate = (): void => {
+  const handleCreate = () => {
     if (newFolderName.trim()) {
       onConfirmCreate(newFolderName.trim());
       setNewFolderName('');
@@ -137,7 +138,7 @@ const FolderColumn: React.FC<FolderColumnProps> = ({
               Créer un dossier
             </button>
           </div>
-        ) : (
+         ) : (
           <>
             {folders.map((folder) => (
               <div
@@ -227,22 +228,50 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
   const [selectedFolder, setSelectedFolder] = useState<string>('');
   const [currentPath, setCurrentPath] = useState<string[]>([]);
   const [creatingInLevel, setCreatingInLevel] = useState<number | null>(null);
-  const [metadata, setMetadata] = useState<{
-    type: string;
-    group: string;
-    description: string;
-  }>({
+  const [metadata, setMetadata] = useState({
     type: '',
     group: '',
     description: ''
   });
+  const [processingStatus, setProcessingStatus] = useState<string>('Préparation...');
   // Ajout d'un état local pour la structure des dossiers
   const [localFolderStructure, setLocalFolderStructure] = useState<FolderStructure>(initialFolderStructure);
+  const [emptyFolders, setEmptyFolders] = useState<{[path: string]: boolean}>({});
 
   // Mettre à jour la structure locale quand la structure initiale change
   useEffect(() => {
-    setLocalFolderStructure(initialFolderStructure);
-  }, [initialFolderStructure]);
+    if (isOpen) {
+      const structure = JSON.parse(JSON.stringify(initialFolderStructure));
+      setLocalFolderStructure(structure);
+      
+      // Préserver les dossiers vides
+      const folders = extractAllFolderPaths(structure);
+      const emptyFoldersMap: {[path: string]: boolean} = {};
+      folders.forEach(path => {
+        emptyFoldersMap[path] = true;
+      });
+      setEmptyFolders(emptyFoldersMap);
+    }
+  }, [initialFolderStructure, isOpen]);
+
+  // Extraire tous les chemins de dossiers de la structure
+  const extractAllFolderPaths = (structure: FolderStructure, parentPath: string = ''): string[] => {
+    let paths: string[] = [];
+    
+    Object.keys(structure).forEach(key => {
+      if (key === '') return;
+      
+      const currentPath = parentPath ? `${parentPath}/${key}` : key;
+      paths.push(currentPath);
+      
+      if (structure[key] && structure[key].subfolders) {
+        const subPaths = extractAllFolderPaths(structure[key].subfolders, currentPath);
+        paths = [...paths, ...subPaths];
+      }
+    });
+    
+    return paths;
+  };
 
   // Reset state when modal is opened
   useEffect(() => {
@@ -256,13 +285,13 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
         description: ''
       });
       setUploadError(null);
-      setLocalFolderStructure(initialFolderStructure);
+      setProcessingStatus('Préparation...');
     }
-  }, [isOpen, initialFolderStructure]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>): void => {
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
     const file = e.dataTransfer.files[0];
@@ -271,14 +300,14 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
     }
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>): void => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setSelectedFile(file);
     }
   };
 
-  const handleMetadataChange = (field: string, value: string): void => {
+  const handleMetadataChange = (field: string, value: string) => {
     setMetadata(prev => ({ ...prev, [field]: value }));
   };
 
@@ -291,11 +320,12 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
       .replace(/[^a-zA-Z0-9._-]/g, '_'); // Remplacer les autres caractères spéciaux par des underscores
   };
 
-  const handleUpload = async (): Promise<void> => {
+  const handleUpload = async () => {
     if (!selectedFile || !selectedFolder) return;
     
     setIsUploading(true);
     setUploadError(null);
+    setProcessingStatus('Téléversement du fichier...');
 
     try {
       const fileExt = selectedFile.name.split('.').pop();
@@ -309,7 +339,8 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
       const fileName = `${sanitizedType}_${sanitizedGroup}_${sanitizedDesc}.${fileExt}`;
       const filePath = `${userId}/${fileName}`;
 
-      const { error: uploadError } = await supabase.storage
+      setProcessingStatus('Téléversement vers le stockage...');
+      const { error: uploadError, data: uploadData } = await supabase.storage
         .from('documents')
         .upload(filePath, selectedFile);
 
@@ -319,7 +350,8 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
         .from('documents')
         .getPublicUrl(filePath);
 
-      const { error: dbError } = await supabase
+      setProcessingStatus('Enregistrement des métadonnées...');
+      const { error: dbError, data: documentData } = await supabase
         .from('documents')
         .insert({
           name: fileName,
@@ -328,16 +360,22 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
           url: publicUrl,
           user_id: userId,
           folder: selectedFolder
-        });
+        })
+        .select()
+        .single();
 
       if (dbError) throw dbError;
 
+      // Traiter le document pour extraire son contenu
+      setProcessingStatus('Extraction du contenu du document...');
+      await processUploadedDocument(documentData);
+
+      setProcessingStatus('Finalisation...');
       await onDocumentAdded();
       onClose();
     } catch (err) {
       console.error('Erreur lors de l\'upload:', err);
       setUploadError('Erreur lors de l\'upload du fichier. Assurez-vous que le nom ne contient pas de caractères spéciaux.');
-    } finally {
       setIsUploading(false);
     }
   };
@@ -355,9 +393,14 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
           subfolders: {}
         };
       }
+      
+      // Ajouter au registre des dossiers vides
+      setEmptyFolders(prev => ({...prev, [folderName]: true}));
     } else {
       // Pour les sous-dossiers, naviguer jusqu'au parent
       let current = newStructure;
+      let currentPath = '';
+      
       for (const folder of path) {
         if (!current[folder]) {
           current[folder] = {
@@ -366,6 +409,7 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
           };
         }
         current = current[folder].subfolders;
+        currentPath = currentPath ? `${currentPath}/${folder}` : folder;
       }
       
       // Ajouter le nouveau dossier
@@ -375,12 +419,16 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
           subfolders: {}
         };
       }
+      
+      // Ajouter au registre des dossiers vides
+      const fullPath = currentPath ? `${currentPath}/${folderName}` : folderName;
+      setEmptyFolders(prev => ({...prev, [fullPath]: true}));
     }
     
     return newStructure;
   };
 
-  const handleCreateFolder = async (path: string[], name: string): Promise<void> => {
+  const handleCreateFolder = async (path: string[], name: string) => {
     // Mettre à jour la structure locale des dossiers
     const updatedStructure = updateLocalFolderStructure(path, name);
     setLocalFolderStructure(updatedStructure);
@@ -391,24 +439,9 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
     setSelectedFolder(newPath.join('/'));
   };
 
-  // Fonction modifiée pour supprimer uniquement le fichier spécifié
-  const handleDeleteDocument = async (doc: Document): Promise<void> => {
+  // Fonction pour supprimer uniquement le fichier spécifié
+  const handleDeleteDocument = async (doc: Document) => {
     try {
-      // Extraire le nom du fichier de l'URL
-      const url = new URL(doc.url);
-      const pathParts = url.pathname.split('/');
-      const fileName = pathParts[pathParts.length - 1];
-      
-      // Construire le chemin complet pour la suppression
-      const filePath = `${userId}/${fileName}`;
-      
-      // Supprimer le fichier du stockage
-      const { error: storageError } = await supabase.storage
-        .from('documents')
-        .remove([filePath]);
-
-      if (storageError) throw storageError;
-
       // Supprimer l'entrée de la base de données
       const { error: dbError } = await supabase
         .from('documents')
@@ -417,7 +450,22 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
 
       if (dbError) throw dbError;
 
-      // Mettre à jour la structure locale des dossiers
+      // Extraire le nom du fichier de l'URL pour le supprimer du stockage
+      const fileName = doc.url.split('/').pop();
+      if (fileName) {
+        const filePath = `${userId}/${fileName}`;
+        
+        // Supprimer le fichier du stockage
+        const { error: storageError } = await supabase.storage
+          .from('documents')
+          .remove([filePath]);
+
+        if (storageError) {
+          console.error('Erreur lors de la suppression du fichier dans le stockage:', storageError);
+        }
+      }
+
+      // Mettre à jour la structure locale des dossiers en supprimant uniquement le fichier
       const updatedStructure = removeFileFromLocalStructure(doc);
       setLocalFolderStructure(updatedStructure);
 
@@ -455,7 +503,9 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
       
       if (i === folderPath.length - 1) {
         // Nous sommes dans le dossier contenant le fichier
-        current[folder].files = current[folder].files.filter(file => file.id !== doc.id);
+        if (current[folder].files) {
+          current[folder].files = current[folder].files.filter(file => file.id !== doc.id);
+        }
       } else {
         // Continuer la navigation
         current = current[folder].subfolders;
@@ -465,12 +515,19 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
     return newStructure;
   };
 
-  // Fonction modifiée pour supprimer uniquement le dossier spécifié sans supprimer les fichiers
-  const handleDeleteFolder = async (folderPath: string): Promise<void> => {
+  // Fonction pour supprimer uniquement le dossier spécifié sans supprimer les fichiers
+  const handleDeleteFolder = async (folderPath: string) => {
     try {
       // Supprimer le dossier de la structure locale
       const updatedStructure = removeFolderFromLocalStructure(folderPath);
       setLocalFolderStructure(updatedStructure);
+      
+      // Supprimer du registre des dossiers vides
+      setEmptyFolders(prev => {
+        const newEmptyFolders = {...prev};
+        delete newEmptyFolders[folderPath];
+        return newEmptyFolders;
+      });
       
       // Si le dossier supprimé était sélectionné, revenir au niveau parent
       if (selectedFolder === folderPath || selectedFolder.startsWith(folderPath + '/')) {
@@ -479,9 +536,6 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
         setCurrentPath(newPath);
         setSelectedFolder(newPath.join('/'));
       }
-      
-      // Rafraîchir les données
-      await onDocumentAdded();
     } catch (err) {
       console.error('Erreur lors de la suppression du dossier:', err);
     }
@@ -500,7 +554,7 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
     
     // Si c'est un sous-dossier
     const pathParts = folderPath.split('/');
-    const folderName = pathParts.pop() as string; // Dernier élément du chemin
+    const folderName = pathParts.pop() || ''; // Dernier élément du chemin
     let current = newStructure;
     
     // Naviguer jusqu'au dossier parent
@@ -524,29 +578,61 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
   const getLevelContent = (level: number): { folders: string[], files: Document[] } => {
     let current = localFolderStructure;
     
+    // Pour le niveau racine (niveau 0)
     if (level === 0) {
+      // Récupérer les dossiers de premier niveau
+      let folders = Object.keys(current).filter(k => k !== '');
+      
+      // Ajouter les dossiers vides de premier niveau
+      Object.keys(emptyFolders).forEach(path => {
+        if (!path.includes('/') && !folders.includes(path)) {
+          folders.push(path);
+        }
+      });
+      
       return {
-        folders: Object.keys(current).filter(k => k !== ''),
+        folders: folders,
         files: current['']?.files || []
       };
     }
 
-    // Navigation dans l'arborescence jusqu'au niveau demandé
-    for (let i = 0; i < level; i++) {
-      if (i >= currentPath.length) {
-        return { folders: [], files: [] };
-      }
-      
-      const folder = currentPath[i];
+    // Si nous n'avons pas assez de chemin pour atteindre ce niveau
+    if (currentPath.length < level) {
+      return { folders: [], files: [] };
+    }
+
+    // Naviguer dans l'arborescence jusqu'au niveau demandé
+    let path = currentPath.slice(0, level);
+    let currentPathStr = path.join('/');
+    
+    for (let i = 0; i < path.length; i++) {
+      const folder = path[i];
       
       if (!current[folder]) {
+        // Vérifier si c'est un dossier vide que nous avons créé
+        if (emptyFolders[path.slice(0, i+1).join('/')]) {
+          return { folders: [], files: [] };
+        }
         return { folders: [], files: [] };
       }
       
-      // Si nous sommes au dernier niveau, retourner les fichiers de ce dossier
-      if (i === level - 1) {
+      if (i === path.length - 1) {
+        // Nous sommes au niveau demandé
+        let folders = Object.keys(current[folder].subfolders || {});
+        
+        // Ajouter les dossiers vides de ce niveau
+        Object.keys(emptyFolders).forEach(emptyPath => {
+          const parentPath = currentPathStr;
+          if (emptyPath.startsWith(parentPath + '/')) {
+            const parts = emptyPath.substring(parentPath.length + 1).split('/');
+            if (parts.length === 1 && !folders.includes(parts[0])) {
+              folders.push(parts[0]);
+            }
+          }
+        });
+        
         return {
-          folders: Object.keys(current[folder].subfolders || {}),
+          folders: folders,
           files: current[folder].files || []
         };
       }
@@ -695,6 +781,7 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
 
                 {isUploading && (
                   <div className="mt-6">
+                    <p className="text-sm text-gray-600 mb-2">{processingStatus}</p>
                     <div className="w-full bg-[#f15922]/20 rounded-full h-2 overflow-hidden">
                       <div 
                         className="h-full bg-[#f15922] transition-all duration-300"
@@ -757,7 +844,7 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
                     const { folders, files } = getLevelContent(0);
                     return (
                       <FolderColumn
-                        title="Niveau 1"
+                        title="Racine"
                         folders={folders}
                         files={files}
                         selectedItem={currentPath[0] || null}
@@ -785,7 +872,7 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
                     const { folders, files } = getLevelContent(1);
                     return (
                       <FolderColumn
-                        title="Niveau 2"
+                        title="Niveau 1"
                         folders={folders}
                         files={files}
                         selectedItem={currentPath[1] || null}
@@ -814,7 +901,7 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
                     const { folders, files } = getLevelContent(2);
                     return (
                       <FolderColumn
-                        title="Niveau 3"
+                        title="Niveau 2"
                         folders={folders}
                         files={files}
                         selectedItem={currentPath[2] || null}
@@ -830,6 +917,35 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
                         onCancelCreate={() => setCreatingInLevel(null)}
                         onConfirmCreate={(name) => {
                           handleCreateFolder(currentPath.slice(0, 2), name);
+                          setCreatingInLevel(null);
+                        }}
+                      />
+                    );
+                  })()}
+                </div>
+
+                {/* Level 3 */}
+                <div className="flex-none w-full h-full">
+                  {(() => {
+                    const { folders, files } = getLevelContent(3);
+                    return (
+                      <FolderColumn
+                        title="Niveau 3"
+                        folders={folders}
+                        files={files}
+                        selectedItem={currentPath[3] || null}
+                        onSelect={(folder) => {
+                          const newPath = [...currentPath.slice(0, 3), folder];
+                          setCurrentPath(newPath);
+                          setSelectedFolder(newPath.join('/'));
+                        }}
+                        onCreateNew={() => setCreatingInLevel(3)}
+                        onDelete={(folder) => handleDeleteFolder([...currentPath.slice(0, 3), folder].join('/'))}
+                        onDeleteFile={handleDeleteDocument}
+                        isCreating={creatingInLevel === 3}
+                        onCancelCreate={() => setCreatingInLevel(null)}
+                        onConfirmCreate={(name) => {
+                          handleCreateFolder(currentPath.slice(0, 3), name);
                           setCreatingInLevel(null);
                         }}
                       />
@@ -915,19 +1031,27 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
               <div className="mt-6 pt-6 border-t border-gray-100">
                 <button
                   onClick={handleUpload}
-                  disabled={!selectedFile || !selectedFolder || !isMetadataValid}
+                  disabled={!selectedFile || !selectedFolder || !isMetadataValid || isUploading}
                   className={`
                     w-full py-3 px-4 rounded-xl flex items-center justify-center gap-2
                     transition-all duration-300
-                    ${selectedFile && selectedFolder && isMetadataValid
+                    ${selectedFile && selectedFolder && isMetadataValid && !isUploading
                       ? 'bg-[#f15922] text-white hover:bg-[#d14811]'
                       : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                     }
                   `}
                 >
                   <Upload size={20} />
-                  <span className="font-medium">Téléverser le document</span>
+                  <span className="font-medium">
+                    {isUploading ? 'Traitement en cours...' : 'Téléverser le document'}
+                  </span>
                 </button>
+                
+                {isUploading && (
+                  <p className="text-sm text-center mt-2 text-gray-600">
+                    Le document sera automatiquement traité pour extraction du contenu
+                  </p>
+                )}
               </div>
             </div>
           </div>

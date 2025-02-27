@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import ReactFlow, {
   Node,
   Edge,
@@ -13,12 +13,13 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import type { Document } from '../lib/types';
-import { X, File, Folder } from 'lucide-react';
+import { X, File, Folder, Share2, FileText, FileSpreadsheet, File as FilePdf } from 'lucide-react';
 
 interface MindMapModalProps {
   isOpen: boolean;
   onClose: () => void;
   documents: Document[];
+  onSendToConversation?: (document: Document) => void;
 }
 
 const COLORS = {
@@ -33,6 +34,21 @@ const formatFileSize = (bytes: number): string => {
   const sizes = ['B', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+};
+
+// Fonction pour obtenir l'icône appropriée en fonction du type de fichier
+const getFileIcon = (fileName: string) => {
+  const extension = fileName.split('.').pop()?.toLowerCase();
+  
+  if (['doc', 'docx', 'txt', 'rtf'].includes(extension || '')) {
+    return <FileText className="flex-shrink-0" size={32} />;
+  } else if (['xls', 'xlsx', 'csv'].includes(extension || '')) {
+    return <FileSpreadsheet className="flex-shrink-0" size={32} />;
+  } else if (extension === 'pdf') {
+    return <FilePdf className="flex-shrink-0" size={32} />;
+  } else {
+    return <File className="flex-shrink-0" size={32} />;
+  }
 };
 
 // Nœud personnalisé pour le centre (IRSST)
@@ -66,13 +82,27 @@ const DocumentNode = ({ data }: NodeProps) => (
   <div className="relative flex flex-col items-center p-4 rounded-xl bg-[#dba747] text-white shadow-lg min-w-[180px] max-w-[250px]">
     <Handle type="target" position={Position.Top} className="!bg-[#dba747]" />
     <div className="flex items-center justify-center w-full mb-2">
-      <File className="flex-shrink-0" size={32} />
+      {getFileIcon(data.label)}
     </div>
     <div className="text-center w-full">
       <div className="font-medium text-lg mb-2 break-words">{data.label}</div>
       <div className="text-sm opacity-75">{data.size}</div>
       <div className="text-sm opacity-75">{data.date}</div>
     </div>
+    {data.onSendToConversation && (
+      <button 
+        onClick={(e) => {
+          e.stopPropagation();
+          console.log('[MINDMAP] Envoi du document à la conversation:', data.originalDocument);
+          data.onSendToConversation(data.originalDocument);
+          data.onClose(); // Close the modal when sending to conversation
+        }}
+        className="mt-3 px-3 py-1.5 bg-white text-[#dba747] rounded-lg flex items-center justify-center gap-1.5 mx-auto hover:bg-gray-100 transition-colors"
+      >
+        <Share2 size={14} />
+        <span className="text-xs font-medium">Envoyer à la conversation</span>
+      </button>
+    )}
   </div>
 );
 
@@ -89,7 +119,31 @@ interface FolderStructure {
   subfolders: FolderStructure[];
 }
 
-export const MindMapModal: React.FC<MindMapModalProps> = ({ isOpen, onClose, documents }) => {
+export const MindMapModal: React.FC<MindMapModalProps> = ({ 
+  isOpen, 
+  onClose, 
+  documents,
+  onSendToConversation
+}) => {
+  const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [filteredDocuments, setFilteredDocuments] = useState<Document[]>(documents);
+  
+  // Mettre à jour les documents filtrés lorsque les documents ou le terme de recherche changent
+  useEffect(() => {
+    if (searchTerm.trim() === '') {
+      setFilteredDocuments(documents);
+    } else {
+      const term = searchTerm.toLowerCase();
+      setFilteredDocuments(
+        documents.filter(doc => 
+          doc.name.toLowerCase().includes(term) || 
+          (doc.folder && doc.folder.toLowerCase().includes(term))
+        )
+      );
+    }
+  }, [documents, searchTerm]);
+  
   // Construire la structure hiérarchique des dossiers
   const buildFolderStructure = (docs: Document[]): FolderStructure => {
     const root: FolderStructure = {
@@ -154,9 +208,10 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({ isOpen, onClose, doc
 
   // Générer les nœuds et les liens
   const generateNodesAndEdges = useMemo(() => {
+    console.log('[MINDMAP] Génération des nœuds et des liens pour', filteredDocuments.length, 'documents');
     const nodes: Node[] = [];
     const edges: Edge[] = [];
-    const structure = buildFolderStructure(documents);
+    const structure = buildFolderStructure(filteredDocuments);
 
     // Ajouter le nœud racine (IRSST)
     nodes.push({
@@ -165,7 +220,7 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({ isOpen, onClose, doc
       position: { x: 0, y: 0 },
       data: {
         label: 'IRSST',
-        documents: documents.length
+        documents: filteredDocuments.length
       }
     });
 
@@ -244,7 +299,10 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({ isOpen, onClose, doc
             data: {
               label: doc.name,
               size: formatFileSize(doc.size),
-              date: new Date(doc.created_at).toLocaleDateString()
+              date: new Date(doc.created_at).toLocaleDateString(),
+              originalDocument: doc,
+              onSendToConversation: onSendToConversation,
+              onClose: onClose // Pass onClose to the document node
             }
           });
 
@@ -257,8 +315,7 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({ isOpen, onClose, doc
         });
       };
 
-      // Traiter les sous-dossiers et documents de chaque dossier de premier niveau
-      processSubfolder(folder, x, 2);
+      processSubfolder(folder, x, 1);
     });
 
     // Ajouter les documents à la racine
@@ -275,7 +332,10 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({ isOpen, onClose, doc
         data: {
           label: doc.name,
           size: formatFileSize(doc.size),
-          date: new Date(doc.created_at).toLocaleDateString()
+          date: new Date(doc.created_at).toLocaleDateString(),
+          originalDocument: doc,
+          onSendToConversation: onSendToConversation,
+          onClose: onClose // Pass onClose to the document node
         }
       });
 
@@ -287,17 +347,18 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({ isOpen, onClose, doc
       });
     });
 
+    console.log('[MINDMAP] Génération terminée:', nodes.length, 'nœuds et', edges.length, 'liens');
     return { nodes, edges };
-  }, [documents]);
+  }, [filteredDocuments, onSendToConversation, onClose]);
 
-  const [reactFlowNodes, setNodes, onNodesChange] = useNodesState(generateNodesAndEdges.nodes);
-  const [reactFlowEdges, setEdges, onEdgesChange] = useEdgesState(generateNodesAndEdges.edges);
+  const [nodes, setNodes] = useNodesState(generateNodesAndEdges.nodes);
+  const [edges, setEdges] = useEdgesState(generateNodesAndEdges.edges);
 
   // Mettre à jour les nœuds et les liens lorsque les documents changent
   useEffect(() => {
     setNodes(generateNodesAndEdges.nodes);
     setEdges(generateNodesAndEdges.edges);
-  }, [documents, setNodes, setEdges, generateNodesAndEdges]);
+  }, [filteredDocuments, setNodes, setEdges, generateNodesAndEdges]);
 
   if (!isOpen) return null;
 
@@ -313,23 +374,42 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({ isOpen, onClose, doc
             <h2 className="text-xl font-medium text-gray-800 flex items-center gap-2">
               <span className="text-[#f15922]">IRSST</span>
               <span className="text-gray-400">/</span>
-              <span>Mind Map</span>
+              <span>Base de données visuelle</span>
             </h2>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-50 rounded-full"
-            >
-              <X size={20} />
-            </button>
+            
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Rechercher un document..."
+                  className="w-64 px-4 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#f15922] focus:border-transparent"
+                />
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+              
+              <button
+                onClick={onClose}
+                className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-50 rounded-full"
+              >
+                <X size={20} />
+              </button>
+            </div>
           </div>
         </div>
 
         <div className="w-full h-full pt-16">
           <ReactFlow
-            nodes={reactFlowNodes}
-            edges={reactFlowEdges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
+            nodes={nodes}
+            edges={edges}
             nodeTypes={nodeTypes}
             connectionMode={ConnectionMode.Loose}
             fitView
@@ -360,6 +440,16 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({ isOpen, onClose, doc
               <span className="text-xs text-gray-600">Documents</span>
             </div>
           </div>
+        </div>
+        
+        <div className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-sm p-4 rounded-xl shadow-lg">
+          <h3 className="text-xs font-medium text-gray-600 mb-3 uppercase tracking-wider">
+            Aide
+          </h3>
+          <p className="text-xs text-gray-600 max-w-xs">
+            Cliquez sur un document et utilisez le bouton "Envoyer à la conversation" pour partager le document avec Ringo. 
+            Il pourra alors analyser son contenu et répondre à vos questions.
+          </p>
         </div>
       </div>
     </div>
