@@ -435,7 +435,7 @@ async function extractHtmlFile(data: Blob): Promise<string> {
 /**
  * Essaie d'extraire le contenu d'un fichier de format inconnu
  */
-async function extractGenericFile(data: Blob, fileExtension?: string): Promise <string> {
+async function extractGenericFile(data: Blob, fileExtension?: string): Promise<string> {
   try {
     console.log('[DOCUMENT_EXTRACTION] Tentative d\'extraction comme texte brut pour le format inconnu:', fileExtension);
     const content = await data.text();
@@ -960,7 +960,7 @@ export async function generateDocumentEmbedding(content: string): Promise<number
 /**
  * Transcrit un fichier audio en utilisant l'API Whisper d'OpenAI
  * @param audioUrl URL du fichier audio à transcrire
- * @returns Le texte transcrit
+ * @returns Le tex te transcrit
  */
 export async function transcribeAudio(audioUrl: string): Promise<string> {
   try {
@@ -1002,7 +1002,7 @@ export async function transcribeAudio(audioUrl: string): Promise<string> {
         
         const audioResponse = await fetch(audioUrl);
         if (!audioResponse.ok) {
-          throw new Error(`Erreur HTTP: ${audioResponse.status}`);
+          throw new Error("Erreur HTTP: " + audioResponse.status);
         }
         
         const audioBlob = await audioResponse.blob();
