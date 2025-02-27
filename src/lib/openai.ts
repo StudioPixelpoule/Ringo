@@ -91,14 +91,16 @@ export async function createChatCompletion({
     }
     
     // Vérifier si le contenu du document est trop long
-    const documentContent = systemMessage?.content.match(/L'utilisateur a partagé un document\. Voici son contenu:\n([\s\S]*?)(?=\n\nUtilise ces informations|$)/);
-    if (documentContent && documentContent[1].length > 50000) {
-      console.log('[OPENAI] Contenu du document trop long, troncature nécessaire');
-      // Tronquer le contenu du document pour éviter de dépasser les limites de tokens
-      const truncatedContent = documentContent[1].substring(0, 50000) + "\n\n[Contenu tronqué en raison de sa longueur...]";
-      systemMessage.content = systemMessage.content.replace(documentContent[1], truncatedContent);
-      
-      console.warn('[OPENAI] Contenu du document tronqué pour respecter les limites de tokens.');
+    if (systemMessage) {
+      const documentContent = systemMessage.content.match(/L'utilisateur a partagé un document\. Voici son contenu:\n([\s\S]*?)(?=\n\nUtilise ces informations|$)/);
+      if (documentContent && documentContent[1].length > 50000) {
+        console.log('[OPENAI] Contenu du document trop long, troncature nécessaire');
+        // Tronquer le contenu du document pour éviter de dépasser les limites de tokens
+        const truncatedContent = documentContent[1].substring(0, 50000) + "\n\n[Contenu tronqué en raison de sa longueur...]";
+        systemMessage.content = systemMessage.content.replace(documentContent[1], truncatedContent);
+        
+        console.warn('[OPENAI] Contenu du document tronqué pour respecter les limites de tokens.');
+      }
     }
     
     console.log('[OPENAI] Envoi de la requête à l\'API OpenAI');

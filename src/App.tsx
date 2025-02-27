@@ -499,7 +499,7 @@ Réponds de manière concise, précise et professionnelle. Si tu ne connais pas 
       const fullMessages = [
         { role: 'system', content: systemPrompt },
         ...chatHistory
-      ];
+      ] as Message[];
 
       // Vérifier si l'utilisateur demande un résumé du document
       const isAskingForSummary = 
@@ -719,7 +719,7 @@ Réponds de manière concise, précise et professionnelle. Si tu ne connais pas 
             )}
             <span className="text-white">{user.email}</span>
             <button
-              onClick={handleLogout}
+              onClick={handleLogout} 
               className="btn-neumorphic bg-[#f15922] text-white p-3 rounded-full hover:text-white focus:outline-none"
               title="Déconnexion"
             >
@@ -825,7 +825,7 @@ Réponds de manière concise, précise et professionnelle. Si tu ne connais pas 
             </div>
           </div>
           <button
-            onClick={() => setIsOpenAIKeyModalOpen(true)}
+            onClick={() => setIsOpenAIKeyModalOpen(true)} 
             className="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors"
           >
             Configurer

@@ -53,7 +53,7 @@ const getFileIcon = (fileName: string) => {
 
 // Nœud personnalisé pour le centre (IRSST)
 const RootNode = ({ data }: NodeProps) => (
-  <div className="relative flex items-center justify-center w-40 h-40 rounded-full bg-[#f15922] text-white shadow-lg border-4 border-white">
+  <div className="relative flex items-center justify-center w-40  h-40 rounded-full bg-[#f15922] text-white shadow-lg border-4 border-white">
     <Handle type="source" position={Position.Bottom} className="!bg-[#f15922]" />
     <div className="text-center p-4">
       <div className="text-2xl font-bold mb-2">{data.label}</div>
@@ -206,13 +206,11 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({
     return root;
   };
 
-  // Générer les nœuds et les liens
-  const generateNodesAndEdges = useMemo(() => {
-    console.log('[MINDMAP] Génération des nœuds et des liens pour', filteredDocuments.length, 'documents');
+  // Fonction pour calculer la position optimale des nœuds pour éviter les chevauchements
+  const calculateOptimalLayout = (structure: FolderStructure, documents: Document[]) => {
     const nodes: Node[] = [];
     const edges: Edge[] = [];
-    const structure = buildFolderStructure(filteredDocuments);
-
+    
     // Ajouter le nœud racine (IRSST)
     nodes.push({
       id: 'root',
@@ -220,20 +218,25 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({
       position: { x: 0, y: 0 },
       data: {
         label: 'IRSST',
-        documents: filteredDocuments.length
+        documents: documents.length
       }
     });
 
-    // Calculer l'espacement pour les dossiers de premier niveau
+    // Paramètres de mise en page
     const firstLevelCount = structure.subfolders.length;
-    const xSpacing = 400; // Augmenté pour plus d'espace entre les nœuds
-    const ySpacing = 250; // Augmenté pour plus d'espace vertical
-
-    // Ajouter les dossiers de premier niveau
+    const xSpacing = 600; // Augmenté pour plus d'espace horizontal entre les nœuds
+    const ySpacing = 300; // Augmenté pour plus d'espace vertical
+    const folderRadius = 400; // Rayon pour disposer les dossiers autour de la racine
+    const docSpacing = 250; // Espacement entre les documents
+    
+    // Disposition des dossiers de premier niveau en cercle autour de la racine
     structure.subfolders.forEach((folder, index) => {
-      const x = (index - (firstLevelCount - 1) / 2) * xSpacing;
-      const y = ySpacing;
-
+      // Calculer l'angle pour une disposition circulaire
+      const angle = (2 * Math.PI * index) / firstLevelCount;
+      // Calculer les coordonnées x et y basées sur l'angle et le rayon
+      const x = Math.cos(angle) * folderRadius;
+      const y = Math.sin(angle) * folderRadius + 200; // Décalage vertical pour éviter de superposer avec la racine
+      
       // Ajouter le nœud du dossier
       nodes.push({
         id: folder.path,
@@ -257,13 +260,21 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({
       const processSubfolder = (
         subfolder: FolderStructure,
         parentX: number,
-        level: number
+        parentY: number,
+        level: number,
+        parentAngle: number
       ) => {
+        const itemCount = subfolder.subfolders.length + subfolder.documents.length;
+        const angleSpread = Math.PI / 3; // Angle de propagation des éléments enfants
+        
         // Ajouter les sous-dossiers
         subfolder.subfolders.forEach((sub, subIndex) => {
-          const subCount = subfolder.subfolders.length;
-          const subX = parentX + (subIndex - (subCount - 1) / 2) * (xSpacing / (level + 1));
-          const subY = y + level * ySpacing;
+          // Calculer un nouvel angle basé sur l'angle parent et la position relative
+          const subAngle = parentAngle - (angleSpread / 2) + (angleSpread * subIndex / Math.max(1, subfolder.subfolders.length - 1));
+          const distance = 300 + (level * 100); // Distance augmente avec le niveau
+          
+          const subX = parentX + Math.cos(subAngle) * distance;
+          const subY = parentY + Math.sin(subAngle) * distance;
 
           nodes.push({
             id: sub.path,
@@ -282,14 +293,20 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({
             type: 'smoothstep'
           });
 
-          processSubfolder(sub, subX, level + 1);
+          // Traiter récursivement les sous-dossiers
+          processSubfolder(sub, subX, subY, level + 1, subAngle);
         });
 
-        // Ajouter les documents
+        // Ajouter les documents en arc autour du dossier parent
+        const docAngleSpread = Math.PI / 2; // Plus large pour les documents
         subfolder.documents.forEach((doc, docIndex) => {
           const docCount = subfolder.documents.length;
-          const docX = parentX + (docIndex - (docCount - 1) / 2) * (xSpacing / (level + 2));
-          const docY = y + level * ySpacing + ySpacing;
+          // Calculer l'angle pour chaque document
+          const docAngle = parentAngle - (docAngleSpread / 2) + (docAngleSpread * docIndex / Math.max(1, docCount - 1));
+          const docDistance = 250; // Distance fixe pour les documents
+          
+          const docX = parentX + Math.cos(docAngle) * docDistance;
+          const docY = parentY + Math.sin(docAngle) * docDistance;
 
           const docId = `doc-${doc.id}`;
           nodes.push({
@@ -302,7 +319,7 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({
               date: new Date(doc.created_at).toLocaleDateString(),
               originalDocument: doc,
               onSendToConversation: onSendToConversation,
-              onClose: onClose // Pass onClose to the document node
+              onClose: onClose
             }
           });
 
@@ -315,40 +332,53 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({
         });
       };
 
-      processSubfolder(folder, x, 1);
+      // Traiter les sous-dossiers et documents pour chaque dossier de premier niveau
+      processSubfolder(folder, x, y, 1, angle);
     });
 
-    // Ajouter les documents à la racine
-    structure.documents.forEach((doc, index) => {
-      const docCount = structure.documents.length;
-      const docX = (index - (docCount - 1) / 2) * (xSpacing / 2);
-      const docY = ySpacing;
+    // Ajouter les documents à la racine en cercle
+    const rootDocs = structure.documents;
+    if (rootDocs.length > 0) {
+      const docAngleStep = (2 * Math.PI) / rootDocs.length;
+      const docRadius = 250; // Rayon plus petit pour les documents de la racine
+      
+      rootDocs.forEach((doc, index) => {
+        const docAngle = docAngleStep * index;
+        const docX = Math.cos(docAngle) * docRadius;
+        const docY = Math.sin(docAngle) * docRadius + 200; // Même décalage que pour les dossiers
 
-      const docId = `doc-${doc.id}`;
-      nodes.push({
-        id: docId,
-        type: 'document',
-        position: { x: docX, y: docY },
-        data: {
-          label: doc.name,
-          size: formatFileSize(doc.size),
-          date: new Date(doc.created_at).toLocaleDateString(),
-          originalDocument: doc,
-          onSendToConversation: onSendToConversation,
-          onClose: onClose // Pass onClose to the document node
-        }
+        const docId = `doc-${doc.id}`;
+        nodes.push({
+          id: docId,
+          type: 'document',
+          position: { x: docX, y: docY },
+          data: {
+            label: doc.name,
+            size: formatFileSize(doc.size),
+            date: new Date(doc.created_at).toLocaleDateString(),
+            originalDocument: doc,
+            onSendToConversation: onSendToConversation,
+            onClose: onClose
+          }
+        });
+
+        edges.push({
+          id: `edge-root-${docId}`,
+          source: 'root',
+          target: docId,
+          type: 'smoothstep'
+        });
       });
+    }
 
-      edges.push({
-        id: `edge-root-${docId}`,
-        source: 'root',
-        target: docId,
-        type: 'smoothstep'
-      });
-    });
-
-    console.log('[MINDMAP] Génération terminée:', nodes.length, 'nœuds et', edges.length, 'liens');
     return { nodes, edges };
+  };
+
+  // Générer les nœuds et les liens avec le nouvel algorithme de mise en page
+  const generateNodesAndEdges = useMemo(() => {
+    console.log('[MINDMAP] Génération des nœuds et des liens pour', filteredDocuments.length, 'documents');
+    const structure = buildFolderStructure(filteredDocuments);
+    return calculateOptimalLayout(structure, filteredDocuments);
   }, [filteredDocuments, onSendToConversation, onClose]);
 
   const [nodes, setNodes] = useNodesState(generateNodesAndEdges.nodes);
@@ -416,6 +446,12 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({
             minZoom={0.1}
             maxZoom={1.5}
             defaultViewport={{ x: 0, y: 0, zoom: 0.5 }}
+            fitViewOptions={{
+              padding: 0.2,
+              includeHiddenNodes: false,
+              minZoom: 0.1,
+              maxZoom: 1.2
+            }}
           >
             <Background />
             <Controls />

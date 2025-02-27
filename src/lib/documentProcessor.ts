@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { Document, DocumentContent } from './types';
+import type { Document } from './types';
 import OpenAI from 'openai';
 
 // Créer une instance OpenAI avec la clé API
@@ -60,7 +60,7 @@ export async function extractDocumentContent(document: Document): Promise<string
     
     // Traiter différents types de fichiers
     let extractedContent = '';
-    let extractionStatus = 'success';
+    let extractionStatus: 'pending' | 'processing' | 'success' | 'failed' | 'partial' | 'manual' = 'success';
     
     if (fileExtension === 'txt') {
       extractedContent = await extractTextFile(data);
@@ -162,7 +162,7 @@ async function extractDocxFile(data: Blob): Promise<string> {
     // Options avancées pour l'extraction du texte avec formatage
     const options = {
       arrayBuffer,
-      convertImage: mammoth.images.imgElement((image) => {
+      convertImage: mammoth.images.imgElement((image: any) => {
         return {
           src: image.src
         };
@@ -284,7 +284,7 @@ async function extractPdfFile(data: Blob): Promise<string> {
         };
         return pageData.getTextContent(renderOptions)
           .then(function(textContent: any) {
-            let lastY, text = '';
+            let lastY: number | undefined, text = '';
             // Parcourir les éléments de texte
             for (const item of textContent.items) {
               // Ajouter un saut de ligne si la position Y change significativement
