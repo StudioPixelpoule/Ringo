@@ -58,6 +58,7 @@ export const handleAuthError = async () => {
 supabase.auth.onAuthStateChange((event, session) => {
   console.log('[SUPABASE] Événement d\'authentification:', event);
   
+  // Utiliser une vérification plus sûre pour les événements
   if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
     // Nettoyer le stockage local
     localStorage.removeItem('ringo-auth-storage-key');

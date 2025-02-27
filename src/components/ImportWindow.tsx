@@ -50,6 +50,15 @@ interface FolderColumnProps {
   onConfirmCreate: (name: string) => void;
 }
 
+// Fonction pour formater la taille du fichier
+const formatFileSize = (bytes: number): string => {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+};
+
 // Composant de colonne pour l'arborescence
 const FolderColumn: React.FC<FolderColumnProps> = ({ 
   title, 
@@ -73,14 +82,6 @@ const FolderColumn: React.FC<FolderColumnProps> = ({
       onConfirmCreate(newFolderName.trim());
       setNewFolderName('');
     }
-  };
-
-  const formatFileSize = (bytes: number): string => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
   };
 
   return (
@@ -234,10 +235,13 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
     description: ''
   });
   const [processingStatus, setProcessingStatus] = useState<string>('Préparation...');
-  const [uploadProgress, setUploadProgress] = useState<number>(0);
   // Ajout d'un état local pour la structure des dossiers
   const [localFolderStructure, setLocalFolderStructure] = useState<FolderStructure>(initialFolderStructure);
   const [emptyFolders, setEmptyFolders] = useState<{[path: string]: boolean}>({});
+  
+  // Vérifier si le fichier sélectionné est un fichier audio
+  const fileExtension = selectedFile?.name.split('.').pop()?.toLowerCase();
+  const isAudioFile = ['mp3', 'wav', 'ogg', 'm4a'].includes(fileExtension || '');
 
   // Mettre à jour la structure locale quand la structure initiale change
   useEffect(() => {
@@ -287,8 +291,6 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
       });
       setUploadError(null);
       setProcessingStatus('Préparation...');
-      setUploadProgress(0);
-      setIsUploading(false);
     }
   }, [isOpen]);
 
@@ -329,7 +331,6 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
     setIsUploading(true);
     setUploadError(null);
     setProcessingStatus('Téléversement du fichier...');
-    setUploadProgress(10);
 
     try {
       const fileExt = selectedFile.name.split('.').pop();
@@ -344,47 +345,17 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
       const filePath = `${userId}/${fileName}`;
 
       setProcessingStatus('Téléversement vers le stockage...');
-      setUploadProgress(30);
-      
-      // Utiliser une promesse pour suivre l'upload
-      const uploadPromise = new Promise<{error: any, data: any}>((resolve) => {
-        supabase.storage
-          .from('documents')
-          .upload(filePath, selectedFile, {
-            cacheControl: '3600',
-            upsert: false
-          })
-          .then(result => {
-            resolve(result);
-          })
-          .catch(error => {
-            resolve({ error, data: null });
-          });
-      });
-      
-      // Simuler la progression pendant l'upload
-      const progressInterval = setInterval(() => {
-        setUploadProgress(prev => {
-          if (prev < 60) return prev + 5;
-          return prev;
-        });
-      }, 500);
-      
-      const { error: uploadError, data: uploadData } = await uploadPromise;
-      
-      clearInterval(progressInterval);
-      
+      const { error: uploadError, data: uploadData } = await supabase.storage
+        .from('documents')
+        .upload(filePath, selectedFile);
+
       if (uploadError) throw uploadError;
-      
-      setUploadProgress(70);
 
       const { data: { publicUrl } } = supabase.storage
         .from('documents')
         .getPublicUrl(filePath);
 
       setProcessingStatus('Enregistrement des métadonnées...');
-      setUploadProgress(80);
-      
       const { error: dbError, data: documentData } = await supabase
         .from('documents')
         .insert({
@@ -402,23 +373,15 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
 
       // Traiter le document pour extraire son contenu
       setProcessingStatus('Extraction du contenu du document...');
-      setUploadProgress(90);
-      
       await processUploadedDocument(documentData);
 
       setProcessingStatus('Finalisation...');
-      setUploadProgress(100);
-      
-      // Attendre un peu pour montrer la progression à 100%
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
       await onDocumentAdded();
       onClose();
     } catch (err) {
       console.error('Erreur lors de l\'upload:', err);
       setUploadError('Erreur lors de l\'upload du fichier. Assurez-vous que le nom ne contient pas de caractères spéciaux.');
       setIsUploading(false);
-      setUploadProgress(0);
     }
   };
 
@@ -696,7 +659,6 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
           <button 
             onClick={onClose}
             className="p-2 rounded-full hover:bg-gray-100 transition-colors"
-            disabled={isUploading}
           >
             <X size={20} className="text-gray-500" />
           </button>
@@ -746,7 +708,6 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
                   <button
                     onClick={() => setSelectedFile(null)}
                     className="mt-6 px-4 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors"
-                    disabled={isUploading}
                   >
                     Changer de fichier
                   </button>
@@ -762,7 +723,8 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
 
                 {uploadError && (
                   <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 text-red-700 rounded">
-                    <p className="font-medium">Une erreur est survenue</p> <p className="text-sm mt-1">{uploadError}</p>
+                    <p className="font-medium">Une erreur est survenue</p>
+                    <p className="text-sm mt-1">{uploadError}</p>
                   </div>
                 )}
 
@@ -828,7 +790,7 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
                     <div className="w-full bg-[#f15922]/20 rounded-full h-2 overflow-hidden">
                       <div 
                         className="h-full bg-[#f15922] transition-all duration-300"
-                        style={{ width: `${uploadProgress}%` }}
+                        style={{ width: '50%' }}
                       />
                     </div>
                   </div>
@@ -850,7 +812,6 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
                   className={`hover:text-[#f15922] transition-colors ${
                     currentPath.length === 0 ? 'font-medium text-[#f15922]' : ''
                   }`}
-                  disabled={isUploading}
                 >
                   IRSST
                 </button>
@@ -866,7 +827,6 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
                       className={`hover:text-[#f15922] transition-colors ${
                         index === currentPath.length - 1 ? 'font-medium text-[#f15922]' : ''
                       }`}
-                      disabled={isUploading}
                     >
                       {folder}
                     </button>
@@ -897,9 +857,9 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
                           setCurrentPath([folder]);
                           setSelectedFolder(folder);
                         }}
-                        onCreateNew={() => !isUploading && setCreatingInLevel(0)}
-                        onDelete={(folder) => !isUploading && handleDeleteFolder(folder)}
-                        onDeleteFile={(file) => !isUploading && handleDeleteDocument(file)}
+                        onCreateNew={() => setCreatingInLevel(0)}
+                        onDelete={(folder) => handleDeleteFolder(folder)}
+                        onDeleteFile={handleDeleteDocument}
                         isCreating={creatingInLevel === 0}
                         onCancelCreate={() => setCreatingInLevel(null)}
                         onConfirmCreate={(name) => {
@@ -926,9 +886,9 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
                           setCurrentPath(newPath);
                           setSelectedFolder(newPath.join('/'));
                         }}
-                        onCreateNew={() => !isUploading && setCreatingInLevel(1)}
-                        onDelete={(folder) => !isUploading && handleDeleteFolder([...currentPath.slice(0, 1), folder].join('/'))}
-                        onDeleteFile={(file) => !isUploading && handleDeleteDocument(file)}
+                        onCreateNew={() => setCreatingInLevel(1)}
+                        onDelete={(folder) => handleDeleteFolder([...currentPath.slice(0, 1), folder].join('/'))}
+                        onDeleteFile={handleDeleteDocument}
                         isCreating={creatingInLevel === 1}
                         onCancelCreate={() => setCreatingInLevel(null)}
                         onConfirmCreate={(name) => {
@@ -955,9 +915,9 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
                           setCurrentPath(newPath);
                           setSelectedFolder(newPath.join('/'));
                         }}
-                        onCreateNew={() => !isUploading && setCreatingInLevel(2)}
-                        onDelete={(folder) => !isUploading && handleDeleteFolder([...currentPath.slice(0, 2), folder].join('/'))}
-                        onDeleteFile={(file) => !isUploading && handleDeleteDocument(file)}
+                        onCreateNew={() => setCreatingInLevel(2)}
+                        onDelete={(folder) => handleDeleteFolder([...currentPath.slice(0, 2), folder].join('/'))}
+                        onDeleteFile={handleDeleteDocument}
                         isCreating={creatingInLevel === 2}
                         onCancelCreate={() => setCreatingInLevel(null)}
                         onConfirmCreate={(name) => {
@@ -984,9 +944,9 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
                           setCurrentPath(newPath);
                           setSelectedFolder(newPath.join('/'));
                         }}
-                        onCreateNew={() => !isUploading && setCreatingInLevel(3)}
-                        onDelete={(folder) => !isUploading && handleDeleteFolder([...currentPath.slice(0, 3), folder].join('/'))}
-                        onDeleteFile={(file) => !isUploading && handleDeleteDocument(file)}
+                        onCreateNew={() => setCreatingInLevel(3)}
+                        onDelete={(folder) => handleDeleteFolder([...currentPath.slice(0, 3), folder].join('/'))}
+                        onDeleteFile={handleDeleteDocument}
                         isCreating={creatingInLevel === 3}
                         onCancelCreate={() => setCreatingInLevel(null)}
                         onConfirmCreate={(name) => {
@@ -1094,7 +1054,9 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
                 
                 {isUploading && (
                   <p className="text-sm text-center mt-2 text-gray-600">
-                    Le document sera automatiquement traité pour extraction du contenu
+                    {isAudioFile 
+                      ? 'Le fichier audio sera automatiquement transcrit après le téléversement' 
+                      : 'Le document sera automatiquement traité pour extraction du contenu'}
                   </p>
                 )}
               </div>

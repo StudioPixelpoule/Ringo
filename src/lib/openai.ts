@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import type { Document } from './types';
-import { getDocumentContent } from './documentProcessor';
+import { getDocumentContent, transcribeAudio } from './documentProcessor';
 
 // Fonction pour obtenir la clé API OpenAI
 const getOpenAIKey = (): string => {
@@ -66,6 +66,17 @@ export async function createChatCompletion({
         !systemMessage.content.includes("L'utilisateur a partagé un document. Voici son contenu:")) {
       
       console.log('[OPENAI] Détection d\'un message de partage de document sans contenu');
+      
+      // Vérifier si c'est un fichier audio
+      const docName = lastUserMessage.content.replace("**Document partagé:** ", "");
+      const fileExtension = docName.split('.').pop()?.toLowerCase();
+      
+      if (['mp3', 'wav', 'ogg', 'm4a'].includes(fileExtension || '')) {
+        console.log('[OPENAI] Document audio partagé détecté');
+        return {
+          content: "Je vois que vous avez partagé un fichier audio. La transcription est prête à être analysée, que voulez vous savoir ?"
+        };
+      }
       
       // Si l'utilisateur demande un résumé après avoir partagé un document
       // mais que le contenu n'a pas encore été extrait
@@ -243,6 +254,18 @@ export async function summarizeDocument(content: string, documentName: string, m
     // Créer un client OpenAI avec la clé actuelle
     const openai = createOpenAIClient();
     
+    // Vérifier si c'est un fichier audio
+    const fileExtension = documentName.split('.').pop()?.toLowerCase();
+    if (['mp3', 'wav', 'ogg', 'm4a'].includes(fileExtension || '')) {
+      console.log('[SUMMARY] Résumé d\'un fichier audio demandé');
+      
+      // Vérifier si le contenu est une transcription ou un message d'erreur
+      if (content.includes("Pour les fichiers audio, une transcription") || 
+          content.includes("Ce document est un fichier audio")) {
+        return "Je ne peux pas résumer ce fichier audio car il n'a pas encore été transcrit. Veuillez d'abord fournir une transcription du contenu audio en utilisant le champ de saisie qui apparaît en bas de l'écran.";
+      }
+    }
+    
     // Limiter la taille du contenu pour respecter les limites de tokens
     const maxInputLength = 15000;
     const truncatedContent = content.length > maxInputLength 
@@ -285,3 +308,89 @@ ${truncatedContent}
     return "Une erreur s'est produite lors de la génération du résumé. Veuillez réessayer plus tard.";
   }
 }
+
+// Fonction pour transcrire un fichier audio
+export async function transcribeAudio(audioUrl: string): Promise<string> {
+  try {
+    console.log('[TRANSCRIPTION] Tentative de transcription audio pour:', audioUrl);
+    
+    // Obtenir la clé API
+    const apiKey = getOpenAIKey();
+    
+    // Vérifier si la clé API est disponible
+    if (apiKey === 'dummy-key' || apiKey === 'your-openai-api-key-here') {
+      console.warn('[TRANSCRIPTION] Clé API OpenAI non configurée. Impossible de transcrire l\'audio.');
+      return "Impossible de transcrire l'audio car la clé API OpenAI n'est pas configurée.";
+    }
+    
+    // Créer un client OpenAI avec la clé actuelle
+    const openai = createOpenAIClient();
+    
+    // Tenter de télécharger le fichier audio
+    console.log('[TRANSCRIPTION] Téléchargement du fichier audio:', audioUrl);
+    
+    try {
+      const response = await fetch(audioUrl);
+      if (!response.ok) {
+        throw new Error(`Erreur HTTP: ${response.status}`);
+      }
+      
+      const audioBlob = await response.blob();
+      console.log('[TRANSCRIPTION] Fichier audio téléchargé avec succès, taille:', audioBlob.size, 'octets');
+      
+      // Vérifier si le fichier est trop volumineux pour l'API
+      const maxSizeInBytes = 25 * 1024 * 1024; // 25 MB
+      if (audioBlob.size > maxSizeInBytes) {
+        console.warn('[TRANSCRIPTION] Fichier audio trop volumineux:', audioBlob.size, 'octets');
+        return "Le fichier audio est trop volumineux pour être transcrit automatiquement (limite de 25 Mo). Veuillez saisir manuellement la transcription.";
+      }
+      
+      // Créer un FormData pour l'envoi à l'API
+      const formData = new FormData();
+      formData.append('file', audioBlob, 'audio.mp3');
+      formData.append('model', 'whisper-1');
+      formData.append('language', 'fr'); // Langue française
+      
+      // Appeler l'API OpenAI pour la transcription
+      console.log('[TRANSCRIPTION] Envoi à l\'API OpenAI pour transcription');
+      
+      // Utiliser l'API Whisper d'OpenAI pour la transcription
+      const transcriptionResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: formData
+      });
+      
+      if (!transcriptionResponse.ok) {
+        const errorData = await transcriptionResponse.json();
+        console.error('[TRANSCRIPTION] Erreur API OpenAI:', errorData);
+        throw new Error(`Erreur API OpenAI: ${errorData.error?.message || transcriptionResponse.statusText}`);
+      }
+      
+      const transcriptionResult = await transcriptionResponse.json();
+      console.log('[TRANSCRIPTION] Transcription réussie');
+      
+      if (transcriptionResult.text) {
+        return transcriptionResult.text;
+      } else {
+        return `La transcription automatique n'a pas produit de résultat. Veuillez saisir manuellement la transcription.
+
+Lien vers le fichier audio: ${audioUrl}`;
+      }
+      
+    } catch (fetchError) {
+      console.error('[TRANSCRIPTION] Erreur lors du téléchargement du fichier audio:', fetchError);
+      return `Erreur lors du téléchargement du fichier audio. Veuillez saisir manuellement la transcription.
+
+Lien vers le fichier audio: ${audioUrl}`;
+    }
+    
+  } catch (error) {
+    console.error('[TRANSCRIPTION] Erreur lors de la transcription audio:', error);
+    return "Une erreur s'est produite lors de la tentative de transcription audio. Veuillez saisir manuellement la transcription.";
+  }
+}
+
+export { createOpenAIClient };

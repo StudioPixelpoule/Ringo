@@ -14,6 +14,8 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import type { Document } from '../lib/types';
 import { X, File, Folder, Share2, FileText, FileSpreadsheet, File as FilePdf } from 'lucide-react';
+import { AudioIcon } from './AudioIcon';
+import { getDocumentContent } from '../lib/documentProcessor';
 
 interface MindMapModalProps {
   isOpen: boolean;
@@ -46,6 +48,8 @@ const getFileIcon = (fileName: string) => {
     return <FileSpreadsheet className="flex-shrink-0" size={32} />;
   } else if (extension === 'pdf') {
     return <FilePdf className="flex-shrink-0" size={32} />;
+  } else if (['mp3', 'wav', 'ogg', 'm4a'].includes(extension || '')) {
+    return <AudioIcon className="flex-shrink-0" size={32} />;
   } else {
     return <File className="flex-shrink-0" size={32} />;
   }
@@ -128,21 +132,63 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [filteredDocuments, setFilteredDocuments] = useState<Document[]>(documents);
+  const [processedDocuments, setProcessedDocuments] = useState<Document[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  
+  // Vérifier quels documents audio ont été transcrits
+  useEffect(() => {
+    if (isOpen) {
+      setIsLoading(true);
+      
+      const checkDocuments = async () => {
+        const validDocs: Document[] = [];
+        
+        for (const doc of documents) {
+          // Vérifier si c'est un fichier audio
+          const fileExtension = doc.name.split('.').pop()?.toLowerCase();
+          const isAudioFile = ['mp3', 'wav', 'ogg', 'm4a'].includes(fileExtension || '');
+          
+          if (isAudioFile) {
+            // Vérifier si le contenu existe et n'est pas un message d'attente
+            try {
+              const content = await getDocumentContent(doc.id);
+              if (content && 
+                  !content.includes("Pour les fichiers audio, une transcription est en cours") &&
+                  !content.includes("Ce document est un fichier audio") &&
+                  !content.includes("transcription automatique a échoué")) {
+                validDocs.push(doc);
+              }
+            } catch (error) {
+              console.error('[MINDMAP] Erreur lors de la vérification du contenu audio:', error);
+            }
+          } else {
+            // Les documents non-audio sont toujours inclus
+            validDocs.push(doc);
+          }
+        }
+        
+        setProcessedDocuments(validDocs);
+        setIsLoading(false);
+      };
+      
+      checkDocuments();
+    }
+  }, [isOpen, documents]);
   
   // Mettre à jour les documents filtrés lorsque les documents ou le terme de recherche changent
   useEffect(() => {
     if (searchTerm.trim() === '') {
-      setFilteredDocuments(documents);
+      setFilteredDocuments(processedDocuments);
     } else {
       const term = searchTerm.toLowerCase();
       setFilteredDocuments(
-        documents.filter(doc => 
+        processedDocuments.filter(doc => 
           doc.name.toLowerCase().includes(term) || 
           (doc.folder && doc.folder.toLowerCase().includes(term))
         )
       );
     }
-  }, [documents, searchTerm]);
+  }, [processedDocuments, searchTerm]);
   
   // Construire la structure hiérarchique des dossiers
   const buildFolderStructure = (docs: Document[]): FolderStructure => {
@@ -437,25 +483,48 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({
         </div>
 
         <div className="w-full h-full pt-16">
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            nodeTypes={nodeTypes}
-            connectionMode={ConnectionMode.Loose}
-            fitView
-            minZoom={0.1}
-            maxZoom={1.5}
-            defaultViewport={{ x: 0, y: 0, zoom: 0.5 }}
-            fitViewOptions={{
-              padding: 0.2,
-              includeHiddenNodes: false,
-              minZoom: 0.1,
-              maxZoom: 1.2
-            }}
-          >
-            <Background />
-            <Controls />
-          </ReactFlow>
+          {isLoading ? (
+            <div className="h-full flex items-center justify-center">
+              <div className="text-center">
+                <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#f15922]"></div>
+                <p className="mt-4 text-gray-600">Chargement des documents...</p>
+              </div>
+            </div>
+          ) : filteredDocuments.length === 0 ? (
+            <div className="h-full flex items-center justify-center">
+              <div className="text-center max-w-md p-6 bg-white/80 rounded-lg shadow-sm">
+                <File className="mx-auto text-gray-400 mb-4" size={48} />
+                <h3 className="text-xl font-medium text-gray-700 mb-2">
+                  Aucun document disponible
+                </h3>
+                <p className="text-gray-500">
+                  {searchTerm ? 
+                    "Aucun document ne correspond à votre recherche." : 
+                    "Aucun document n'est disponible pour affichage. Les fichiers audio en cours de transcription n'apparaissent pas dans la visualisation."}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <ReactFlow
+              nodes={nodes}
+              edges={edges}
+              nodeTypes={nodeTypes}
+              connectionMode={ConnectionMode.Loose}
+              fitView
+              minZoom={0.1}
+              maxZoom={1.5}
+              defaultViewport={{ x: 0, y: 0, zoom: 0.5 }}
+              fitViewOptions={{
+                padding: 0.2,
+                includeHiddenNodes: false,
+                minZoom: 0.1,
+                maxZoom: 1.2
+              }}
+            >
+              <Background />
+              <Controls />
+            </ReactFlow>
+          )}
         </div>
 
         <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm p-4 rounded-xl shadow-lg">
@@ -485,6 +554,9 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({
           <p className="text-xs text-gray-600 max-w-xs">
             Cliquez sur un document et utilisez le bouton "Envoyer à la conversation" pour partager le document avec Ringo. 
             Il pourra alors analyser son contenu et répondre à vos questions.
+          </p>
+          <p className="text-xs text-gray-600 max-w-xs mt-2">
+            Note: Les fichiers audio en cours de transcription n'apparaissent pas dans la visualisation.
           </p>
         </div>
       </div>

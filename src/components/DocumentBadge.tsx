@@ -1,5 +1,6 @@
 import React from 'react';
 import { File, FileText, FileSpreadsheet, File as FilePdf } from 'lucide-react';
+import { AudioIcon } from './AudioIcon';
 import type { Document } from '../lib/types';
 
 interface DocumentBadgeProps {
@@ -27,6 +28,8 @@ export const DocumentBadge: React.FC<DocumentBadgeProps> = ({
       return <FileSpreadsheet className="flex-shrink-0" size={14} />;
     } else if (extension === 'pdf') {
       return <FilePdf className="flex-shrink-0" size={14} />;
+    } else if (['mp3', 'wav', 'ogg', 'm4a'].includes(extension || '')) {
+      return <AudioIcon className="flex-shrink-0" size={14} />;
     } else {
       return <File className="flex-shrink-0" size={14} />;
     }

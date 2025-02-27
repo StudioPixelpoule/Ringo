@@ -22,9 +22,6 @@ export const Conversation: React.FC<ConversationProps> = ({ messages, isLoading 
       <div className="max-w-4xl mx-auto">
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-6">
-            <div className="bg-[#FFCDB6] rounded-full p-6 mb-6">
-              <RingoLogo size={64} className="text-[#2F4F4F]" />
-            </div>
             <h2 className="text-2xl font-bold text-[#2F4F4F] mb-4">
               Allo, moi c'est <strong>Ringo</strong> ! Envie de mettre du rythme dans l'analyse ?!
             </h2>
