@@ -234,6 +234,7 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
     description: ''
   });
   const [processingStatus, setProcessingStatus] = useState<string>('Préparation...');
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
   // Ajout d'un état local pour la structure des dossiers
   const [localFolderStructure, setLocalFolderStructure] = useState<FolderStructure>(initialFolderStructure);
   const [emptyFolders, setEmptyFolders] = useState<{[path: string]: boolean}>({});
@@ -286,6 +287,8 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
       });
       setUploadError(null);
       setProcessingStatus('Préparation...');
+      setUploadProgress(0);
+      setIsUploading(false);
     }
   }, [isOpen]);
 
@@ -326,6 +329,7 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
     setIsUploading(true);
     setUploadError(null);
     setProcessingStatus('Téléversement du fichier...');
+    setUploadProgress(10);
 
     try {
       const fileExt = selectedFile.name.split('.').pop();
@@ -340,17 +344,47 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
       const filePath = `${userId}/${fileName}`;
 
       setProcessingStatus('Téléversement vers le stockage...');
-      const { error: uploadError, data: uploadData } = await supabase.storage
-        .from('documents')
-        .upload(filePath, selectedFile);
-
+      setUploadProgress(30);
+      
+      // Utiliser une promesse pour suivre l'upload
+      const uploadPromise = new Promise<{error: any, data: any}>((resolve) => {
+        supabase.storage
+          .from('documents')
+          .upload(filePath, selectedFile, {
+            cacheControl: '3600',
+            upsert: false
+          })
+          .then(result => {
+            resolve(result);
+          })
+          .catch(error => {
+            resolve({ error, data: null });
+          });
+      });
+      
+      // Simuler la progression pendant l'upload
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => {
+          if (prev < 60) return prev + 5;
+          return prev;
+        });
+      }, 500);
+      
+      const { error: uploadError, data: uploadData } = await uploadPromise;
+      
+      clearInterval(progressInterval);
+      
       if (uploadError) throw uploadError;
+      
+      setUploadProgress(70);
 
       const { data: { publicUrl } } = supabase.storage
         .from('documents')
         .getPublicUrl(filePath);
 
       setProcessingStatus('Enregistrement des métadonnées...');
+      setUploadProgress(80);
+      
       const { error: dbError, data: documentData } = await supabase
         .from('documents')
         .insert({
@@ -368,15 +402,23 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
 
       // Traiter le document pour extraire son contenu
       setProcessingStatus('Extraction du contenu du document...');
+      setUploadProgress(90);
+      
       await processUploadedDocument(documentData);
 
       setProcessingStatus('Finalisation...');
+      setUploadProgress(100);
+      
+      // Attendre un peu pour montrer la progression à 100%
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
       await onDocumentAdded();
       onClose();
     } catch (err) {
       console.error('Erreur lors de l\'upload:', err);
       setUploadError('Erreur lors de l\'upload du fichier. Assurez-vous que le nom ne contient pas de caractères spéciaux.');
       setIsUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -654,6 +696,7 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
           <button 
             onClick={onClose}
             className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+            disabled={isUploading}
           >
             <X size={20} className="text-gray-500" />
           </button>
@@ -703,6 +746,7 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
                   <button
                     onClick={() => setSelectedFile(null)}
                     className="mt-6 px-4 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors"
+                    disabled={isUploading}
                   >
                     Changer de fichier
                   </button>
@@ -785,7 +829,7 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
                     <div className="w-full bg-[#f15922]/20 rounded-full h-2 overflow-hidden">
                       <div 
                         className="h-full bg-[#f15922] transition-all duration-300"
-                        style={{ width: '50%' }}
+                        style={{ width: `${uploadProgress}%` }}
                       />
                     </div>
                   </div>
@@ -807,6 +851,7 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
                   className={`hover:text-[#f15922] transition-colors ${
                     currentPath.length === 0 ? 'font-medium text-[#f15922]' : ''
                   }`}
+                  disabled={isUploading}
                 >
                   IRSST
                 </button>
@@ -822,6 +867,7 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
                       className={`hover:text-[#f15922] transition-colors ${
                         index === currentPath.length - 1 ? 'font-medium text-[#f15922]' : ''
                       }`}
+                      disabled={isUploading}
                     >
                       {folder}
                     </button>
@@ -852,9 +898,9 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
                           setCurrentPath([folder]);
                           setSelectedFolder(folder);
                         }}
-                        onCreateNew={() => setCreatingInLevel(0)}
-                        onDelete={(folder) => handleDeleteFolder(folder)}
-                        onDeleteFile={handleDeleteDocument}
+                        onCreateNew={() => !isUploading && setCreatingInLevel(0)}
+                        onDelete={(folder) => !isUploading && handleDeleteFolder(folder)}
+                        onDeleteFile={(file) => !isUploading && handleDeleteDocument(file)}
                         isCreating={creatingInLevel === 0}
                         onCancelCreate={() => setCreatingInLevel(null)}
                         onConfirmCreate={(name) => {
@@ -881,9 +927,9 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
                           setCurrentPath(newPath);
                           setSelectedFolder(newPath.join('/'));
                         }}
-                        onCreateNew={() => setCreatingInLevel(1)}
-                        onDelete={(folder) => handleDeleteFolder([...currentPath.slice(0, 1), folder].join('/'))}
-                        onDeleteFile={handleDeleteDocument}
+                        onCreateNew={() => !isUploading && setCreatingInLevel(1)}
+                        onDelete={(folder) => !isUploading && handleDeleteFolder([...currentPath.slice(0, 1), folder].join('/'))}
+                        onDeleteFile={(file) => !isUploading && handleDeleteDocument(file)}
                         isCreating={creatingInLevel === 1}
                         onCancelCreate={() => setCreatingInLevel(null)}
                         onConfirmCreate={(name) => {
@@ -910,9 +956,9 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
                           setCurrentPath(newPath);
                           setSelectedFolder(newPath.join('/'));
                         }}
-                        onCreateNew={() => setCreatingInLevel(2)}
-                        onDelete={(folder) => handleDeleteFolder([...currentPath.slice(0, 2), folder].join('/'))}
-                        onDeleteFile={handleDeleteDocument}
+                        onCreateNew={() => !isUploading && setCreatingInLevel(2)}
+                        onDelete={(folder) => !isUploading && handleDeleteFolder([...currentPath.slice(0, 2), folder].join('/'))}
+                        onDeleteFile={(file) => !isUploading && handleDeleteDocument(file)}
                         isCreating={creatingInLevel === 2}
                         onCancelCreate={() => setCreatingInLevel(null)}
                         onConfirmCreate={(name) => {
@@ -939,9 +985,9 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
                           setCurrentPath(newPath);
                           setSelectedFolder(newPath.join('/'));
                         }}
-                        onCreateNew={() => setCreatingInLevel(3)}
-                        onDelete={(folder) => handleDeleteFolder([...currentPath.slice(0, 3), folder].join('/'))}
-                        onDeleteFile={handleDeleteDocument}
+                        onCreateNew={() => !isUploading && setCreatingInLevel(3)}
+                        onDelete={(folder) => !isUploading && handleDeleteFolder([...currentPath.slice(0, 3), folder].join('/'))}
+                        onDeleteFile={(file) => !isUploading && handleDeleteDocument(file)}
                         isCreating={creatingInLevel === 3}
                         onCancelCreate={() => setCreatingInLevel(null)}
                         onConfirmCreate={(name) => {
@@ -979,7 +1025,7 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
                     value={metadata.type}
                     onChange={(e) => handleMetadataChange('type', e.target.value)}
                     className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-[#f15922] focus:border-transparent transition-all"
-                    disabled={!selectedFile || !selectedFolder}
+                    disabled={!selectedFile || !selectedFolder || isUploading}
                   >
                     <option value="">Sélectionner un type</option>
                     {DOCUMENT_TYPES.map(type => (
@@ -999,7 +1045,7 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
                     value={metadata.group}
                     onChange={(e) => handleMetadataChange('group', e.target.value)}
                     className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-[#f15922] focus:border-transparent transition-all"
-                    disabled={!selectedFile || !selectedFolder}
+                    disabled={!selectedFile || !selectedFolder || isUploading}
                   >
                     <option value="">Sélectionner un groupe</option>
                     {GROUP_TYPES.map(group => (
@@ -1020,7 +1066,7 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
                     onChange={(e) => handleMetadataChange('description', e.target.value)}
                     placeholder="Description du document (utilisez _ au lieu des espaces)"
                     className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-[#f15922] focus:border-transparent transition-all resize-none h-32"
-                    disabled={!selectedFile || !selectedFolder}
+                    disabled={!selectedFile || !selectedFolder || isUploading}
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     Note: Les caractères spéciaux seront remplacés par des underscores (_).
@@ -1036,7 +1082,7 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
                     w-full py-3 px-4 rounded-xl flex items-center justify-center gap-2
                     transition-all duration-300
                     ${selectedFile && selectedFolder && isMetadataValid && !isUploading
-                      ? 'bg-[#f15922] text-white hover:bg-[#d14811]'
+                      ? 'bg-[#f15 922] text-white hover:bg-[#d14811]'
                       : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                     }
                   `}

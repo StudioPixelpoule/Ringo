@@ -53,7 +53,7 @@ const getFileIcon = (fileName: string) => {
 
 // Nœud personnalisé pour le centre (IRSST)
 const RootNode = ({ data }: NodeProps) => (
-  <div className="relative flex items-center justify-center w-40  h-40 rounded-full bg-[#f15922] text-white shadow-lg border-4 border-white">
+  <div className="relative flex items-center justify-center w-40 h-40 rounded-full bg-[#f15922] text-white shadow-lg border-4 border-white">
     <Handle type="source" position={Position.Bottom} className="!bg-[#f15922]" />
     <div className="text-center p-4">
       <div className="text-2xl font-bold mb-2">{data.label}</div>
