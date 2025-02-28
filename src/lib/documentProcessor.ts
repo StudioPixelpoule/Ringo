@@ -174,9 +174,10 @@ async function extractDocxFile(data: Blob): Promise<string> {
     const options = {
       arrayBuffer,
       convertImage: mammoth.images.imgElement((image: any) => {
-        return {
+        // Fix: Return a Promise that resolves to ImageAttributes
+        return Promise.resolve({
           src: image.src
-        };
+        });
       }),
       styleMap: [
         "p[style-name='Heading 1'] => h1:fresh",
@@ -525,7 +526,7 @@ ${truncatedContent}
 
 /**
  * Analyse sémantique du document pour extraire les entités, concepts et thèmes principaux
- * @param content Le contenu du document
+ * @param content Le contenu du  document
  * @param documentName Le nom du document
  * @returns Un objet contenant les entités, concepts et thèmes extraits
  */
@@ -960,7 +961,7 @@ export async function generateDocumentEmbedding(content: string): Promise<number
 /**
  * Transcrit un fichier audio en utilisant l'API Whisper d'OpenAI
  * @param audioUrl URL du fichier audio à transcrire
- * @returns Le tex te transcrit
+ * @returns Le texte transcrit
  */
 export async function transcribeAudio(audioUrl: string): Promise<string> {
   try {

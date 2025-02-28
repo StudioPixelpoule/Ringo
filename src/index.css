@@ -113,32 +113,43 @@
 
 /* Styles spécifiques pour React Flow */
 .react-flow__node {
-  transition: transform 0.2s ease;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
 .react-flow__node:hover {
   transform: scale(1.05);
   z-index: 10;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
 }
 
 .react-flow__edge {
-  transition: stroke-opacity 0.2s ease;
+  transition: stroke-opacity 0.3s ease, stroke-width 0.3s ease;
 }
 
 .react-flow__edge:hover {
   stroke-opacity: 1;
+  stroke-width: 3;
+}
+
+.react-flow__edge-path {
+  stroke-width: 2;
 }
 
 .react-flow__controls {
-  background-color: rgba(255, 255, 255, 0.8);
+  background-color: rgba(255, 255, 255, 0.9);
   border-radius: 8px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  padding: 4px;
 }
 
 .react-flow__controls-button {
   border: none !important;
   background-color: transparent !important;
   color: #2f5c54 !important;
+  width: 24px !important;
+  height: 24px !important;
+  padding: 2px !important;
+  margin: 2px !important;
 }
 
 .react-flow__controls-button:hover {
@@ -147,6 +158,22 @@
 
 .react-flow__background {
   background-color: #f8f7f2;
+}
+
+.react-flow__handle {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: currentColor;
+  border: 2px solid white;
+}
+
+.react-flow__handle-top {
+  top: -4px;
+}
+
+.react-flow__handle-bottom {
+  bottom: -4px;
 }
 
 /* Styles pour le markdown dans les messages */

@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import type { Document } from './types';
-import { getDocumentContent, transcribeAudio } from './documentProcessor';
+import { getDocumentContent } from './documentProcessor';
 
 // Fonction pour obtenir la clé API OpenAI
 const getOpenAIKey = (): string => {
@@ -310,7 +310,7 @@ ${truncatedContent}
 }
 
 // Fonction pour transcrire un fichier audio
-export async function transcribeAudio(audioUrl: string): Promise<string> {
+export async function transcribeAudioFile(audioUrl: string): Promise<string> {
   try {
     console.log('[TRANSCRIPTION] Tentative de transcription audio pour:', audioUrl);
     

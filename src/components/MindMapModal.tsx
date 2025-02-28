@@ -9,11 +9,13 @@ import ReactFlow, {
   NodeProps,
   useNodesState,
   useEdgesState,
-  ConnectionMode
+  ConnectionMode,
+  Panel,
+  useReactFlow
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import type { Document } from '../lib/types';
-import { X, File, Folder, Share2, FileText, FileSpreadsheet, File as FilePdf } from 'lucide-react';
+import { X, File, Folder, Share2, FileText, FileSpreadsheet, File as FilePdf, ZoomIn, ZoomOut, Search, LayoutGrid } from 'lucide-react';
 import { AudioIcon } from './AudioIcon';
 import { getDocumentContent } from '../lib/documentProcessor';
 
@@ -22,6 +24,13 @@ interface MindMapModalProps {
   onClose: () => void;
   documents: Document[];
   onSendToConversation?: (document: Document) => void;
+}
+
+interface FolderStructure {
+  name: string;
+  path: string;
+  documents: Document[];
+  subfolders: FolderStructure[];
 }
 
 const COLORS = {
@@ -57,7 +66,7 @@ const getFileIcon = (fileName: string) => {
 
 // Nœud personnalisé pour le centre (IRSST)
 const RootNode = ({ data }: NodeProps) => (
-  <div className="relative flex items-center justify-center w-40 h-40 rounded-full bg-[#f15922] text-white shadow-lg border-4 border-white">
+  <div className="relative flex items-center justify-center w-40 h-40 rounded-full bg-[#f15922] text-white shadow-xl border-4 border-white transition-transform hover:scale-105">
     <Handle type="source" position={Position.Bottom} className="!bg-[#f15922]" />
     <div className="text-center p-4">
       <div className="text-2xl font-bold mb-2">{data.label}</div>
@@ -68,7 +77,7 @@ const RootNode = ({ data }: NodeProps) => (
 
 // Nœud personnalisé pour les dossiers
 const FolderNode = ({ data }: NodeProps) => (
-  <div className="relative flex flex-col items-center p-4 rounded-xl bg-[#2f5c54] text-white shadow-lg min-w-[200px]">
+  <div className="relative flex flex-col items-center p-4 rounded-xl bg-[#2f5c54] text-white shadow-xl min-w-[200px] transition-transform hover:scale-105">
     <Handle type="target" position={Position.Top} className="!bg-[#2f5c54]" />
     <div className="flex items-center justify-center w-full mb-2">
       <Folder className="flex-shrink-0" size={32} />
@@ -83,7 +92,7 @@ const FolderNode = ({ data }: NodeProps) => (
 
 // Nœud personnalisé pour les documents
 const DocumentNode = ({ data }: NodeProps) => (
-  <div className="relative flex flex-col items-center p-4 rounded-xl bg-[#dba747] text-white shadow-lg min-w-[180px] max-w-[250px]">
+  <div className="relative flex flex-col items-center p-4 rounded-xl bg-[#dba747] text-white shadow-xl min-w-[180px] max-w-[250px] transition-transform hover:scale-105">
     <Handle type="target" position={Position.Top} className="!bg-[#dba747]" />
     <div className="flex items-center justify-center w-full mb-2">
       {getFileIcon(data.label)}
@@ -116,13 +125,6 @@ const nodeTypes = {
   document: DocumentNode
 };
 
-interface FolderStructure {
-  name: string;
-  path: string;
-  documents: Document[];
-  subfolders: FolderStructure[];
-}
-
 export const MindMapModal: React.FC<MindMapModalProps> = ({ 
   isOpen, 
   onClose, 
@@ -134,6 +136,7 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({
   const [filteredDocuments, setFilteredDocuments] = useState<Document[]>(documents);
   const [processedDocuments, setProcessedDocuments] = useState<Document[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [layoutType, setLayoutType] = useState<'radial' | 'hierarchical' | 'force'>('radial');
   
   // Vérifier quels documents audio ont été transcrits
   useEffect(() => {
@@ -252,8 +255,8 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({
     return root;
   };
 
-  // Fonction pour calculer la position optimale des nœuds pour éviter les chevauchements
-  const calculateOptimalLayout = (structure: FolderStructure, documents: Document[]) => {
+  // Fonction pour calculer la position optimale des nœuds en disposition radiale
+  const calculateRadialLayout = (structure: FolderStructure, documents: Document[]) => {
     const nodes: Node[] = [];
     const edges: Edge[] = [];
     
@@ -270,10 +273,7 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({
 
     // Paramètres de mise en page
     const firstLevelCount = structure.subfolders.length;
-    const xSpacing = 600; // Augmenté pour plus d'espace horizontal entre les nœuds
-    const ySpacing = 300; // Augmenté pour plus d'espace vertical
-    const folderRadius = 400; // Rayon pour disposer les dossiers autour de la racine
-    const docSpacing = 250; // Espacement entre les documents
+    const folderRadius = 500; // Rayon pour disposer les dossiers autour de la racine
     
     // Disposition des dossiers de premier niveau en cercle autour de la racine
     structure.subfolders.forEach((folder, index) => {
@@ -281,7 +281,7 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({
       const angle = (2 * Math.PI * index) / firstLevelCount;
       // Calculer les coordonnées x et y basées sur l'angle et le rayon
       const x = Math.cos(angle) * folderRadius;
-      const y = Math.sin(angle) * folderRadius + 200; // Décalage vertical pour éviter de superposer avec la racine
+      const y = Math.sin(angle) * folderRadius;
       
       // Ajouter le nœud du dossier
       nodes.push({
@@ -294,12 +294,18 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({
         }
       });
 
-      // Connecter à la racine
+      // Connecter à la racine avec une ligne courbe
       edges.push({
         id: `edge-root-${folder.path}`,
         source: 'root',
         target: folder.path,
-        type: 'smoothstep'
+        type: 'default', // Utiliser des lignes courbes par défaut
+        animated: false,
+        style: { 
+          stroke: '#2f5c54', 
+          strokeWidth: 2,
+          opacity: 0.8
+        }
       });
 
       // Fonction récursive pour ajouter les sous-dossiers et documents
@@ -311,13 +317,15 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({
         parentAngle: number
       ) => {
         const itemCount = subfolder.subfolders.length + subfolder.documents.length;
+        if (itemCount === 0) return;
+        
         const angleSpread = Math.PI / 3; // Angle de propagation des éléments enfants
         
         // Ajouter les sous-dossiers
         subfolder.subfolders.forEach((sub, subIndex) => {
           // Calculer un nouvel angle basé sur l'angle parent et la position relative
           const subAngle = parentAngle - (angleSpread / 2) + (angleSpread * subIndex / Math.max(1, subfolder.subfolders.length - 1));
-          const distance = 300 + (level * 100); // Distance augmente avec le niveau
+          const distance = 300 + (level * 50); // Distance augmente avec le niveau
           
           const subX = parentX + Math.cos(subAngle) * distance;
           const subY = parentY + Math.sin(subAngle) * distance;
@@ -336,7 +344,13 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({
             id: `edge-${subfolder.path}-${sub.path}`,
             source: subfolder.path,
             target: sub.path,
-            type: 'smoothstep'
+            type: 'default', // Utiliser des courbes par défaut
+            animated: false,
+            style: { 
+              stroke: '#2f5c54', 
+              strokeWidth: 2,
+              opacity: 0.8
+            }
           });
 
           // Traiter récursivement les sous-dossiers
@@ -344,38 +358,47 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({
         });
 
         // Ajouter les documents en arc autour du dossier parent
-        const docAngleSpread = Math.PI / 2; // Plus large pour les documents
-        subfolder.documents.forEach((doc, docIndex) => {
-          const docCount = subfolder.documents.length;
-          // Calculer l'angle pour chaque document
-          const docAngle = parentAngle - (docAngleSpread / 2) + (docAngleSpread * docIndex / Math.max(1, docCount - 1));
-          const docDistance = 250; // Distance fixe pour les documents
+        const docCount = subfolder.documents.length;
+        if (docCount > 0) {
+          const docAngleSpread = Math.PI / 2; // Plus large pour les documents
           
-          const docX = parentX + Math.cos(docAngle) * docDistance;
-          const docY = parentY + Math.sin(docAngle) * docDistance;
+          subfolder.documents.forEach((doc, docIndex) => {
+            // Calculer l'angle pour chaque document
+            const docAngle = parentAngle - (docAngleSpread / 2) + (docAngleSpread * docIndex / Math.max(1, docCount - 1));
+            const docDistance = 200; // Distance fixe pour les documents
+            
+            const docX = parentX + Math.cos(docAngle) * docDistance;
+            const docY = parentY + Math.sin(docAngle) * docDistance;
 
-          const docId = `doc-${doc.id}`;
-          nodes.push({
-            id: docId,
-            type: 'document',
-            position: { x: docX, y: docY },
-            data: {
-              label: doc.name,
-              size: formatFileSize(doc.size),
-              date: new Date(doc.created_at).toLocaleDateString(),
-              originalDocument: doc,
-              onSendToConversation: onSendToConversation,
-              onClose: onClose
-            }
-          });
+            const docId = `doc-${doc.id}`;
+            nodes.push({
+              id: docId,
+              type: 'document',
+              position: { x: docX, y: docY },
+              data: {
+                label: doc.name,
+                size: formatFileSize(doc.size),
+                date: new Date(doc.created_at).toLocaleDateString(),
+                originalDocument: doc,
+                onSendToConversation: onSendToConversation,
+                onClose: onClose
+              }
+            });
 
-          edges.push({
-            id: `edge-${subfolder.path}-${docId}`,
-            source: subfolder.path,
-            target: docId,
-            type: 'smoothstep'
+            edges.push({
+              id: `edge-${subfolder.path}-${docId}`,
+              source: subfolder.path,
+              target: docId,
+              type: 'default', // Utiliser des courbes par défaut
+              animated: false,
+              style: { 
+                stroke: '#dba747', 
+                strokeWidth: 2,
+                opacity: 0.8
+              }
+            });
           });
-        });
+        }
       };
 
       // Traiter les sous-dossiers et documents pour chaque dossier de premier niveau
@@ -386,12 +409,12 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({
     const rootDocs = structure.documents;
     if (rootDocs.length > 0) {
       const docAngleStep = (2 * Math.PI) / rootDocs.length;
-      const docRadius = 250; // Rayon plus petit pour les documents de la racine
+      const docRadius = 250; // Rayon pour les documents de la racine
       
       rootDocs.forEach((doc, index) => {
         const docAngle = docAngleStep * index;
         const docX = Math.cos(docAngle) * docRadius;
-        const docY = Math.sin(docAngle) * docRadius + 200; // Même décalage que pour les dossiers
+        const docY = Math.sin(docAngle) * docRadius;
 
         const docId = `doc-${doc.id}`;
         nodes.push({
@@ -412,7 +435,13 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({
           id: `edge-root-${docId}`,
           source: 'root',
           target: docId,
-          type: 'smoothstep'
+          type: 'default', // Utiliser des courbes par défaut
+          animated: false,
+          style: { 
+            stroke: '#dba747', 
+            strokeWidth: 2,
+            opacity: 0.8
+          }
         });
       });
     }
@@ -420,12 +449,485 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({
     return { nodes, edges };
   };
 
-  // Générer les nœuds et les liens avec le nouvel algorithme de mise en page
+  // Fonction pour calculer la position optimale des nœuds en disposition hiérarchique
+  const calculateHierarchicalLayout = (structure: FolderStructure, documents: Document[]) => {
+    const nodes: Node[] = [];
+    const edges: Edge[] = [];
+    
+    // Ajouter le nœud racine (IRSST)
+    nodes.push({
+      id: 'root',
+      type: 'root',
+      position: { x: 0, y: 0 },
+      data: {
+        label: 'IRSST',
+        documents: documents.length
+      }
+    });
+
+    // Paramètres de mise en page
+    const firstLevelCount = structure.subfolders.length;
+    const xSpacing = 350; // Espacement horizontal entre les nœuds
+    const ySpacing = 200; // Espacement vertical entre les niveaux
+    
+    // Calculer la largeur totale nécessaire
+    const totalWidth = firstLevelCount * xSpacing;
+    const startX = -totalWidth / 2 + xSpacing / 2;
+    
+    // Disposition des dossiers de premier niveau en ligne horizontale
+    structure.subfolders.forEach((folder, index) => {
+      const x = startX + index * xSpacing;
+      const y = ySpacing;
+      
+      // Ajouter le nœud du dossier
+      nodes.push({
+        id: folder.path,
+        type: 'folder',
+        position: { x, y },
+        data: {
+          label: folder.name,
+          count: folder.documents.length + folder.subfolders.length
+        }
+      });
+
+      // Connecter à la racine
+      edges.push({
+        id: `edge-root-${folder.path}`,
+        source: 'root',
+        target: folder.path,
+        type: 'smoothstep', // Utiliser des lignes en escalier lissées
+        animated: false,
+        style: { 
+          stroke: '#2f5c54', 
+          strokeWidth: 2,
+          opacity: 0.8
+        }
+      });
+
+      // Fonction récursive pour ajouter les sous-dossiers et documents
+      const processSubfolder = (
+        subfolder: FolderStructure,
+        parentX: number,
+        parentY: number,
+        level: number,
+        horizontalIndex: number,
+        totalSiblings: number
+      ) => {
+        const subfolderCount = subfolder.subfolders.length;
+        const documentCount = subfolder.documents.length;
+        
+        // Calculer la largeur totale nécessaire pour les sous-dossiers
+        const subfolderWidth = subfolderCount * xSpacing;
+        const subfolderStartX = parentX - subfolderWidth / 2 + xSpacing / 2;
+        
+        // Ajouter les sous-dossiers
+        subfolder.subfolders.forEach((sub, subIndex) => {
+          const subX = subfolderStartX + subIndex * xSpacing;
+          const subY = parentY + ySpacing;
+
+          nodes.push({
+            id: sub.path,
+            type: 'folder',
+            position: { x: subX, y: subY },
+            data: {
+              label: sub.name,
+              count: sub.documents.length + sub.subfolders.length
+            }
+          });
+
+          edges.push({
+            id: `edge-${subfolder.path}-${sub.path}`,
+            source: subfolder.path,
+            target: sub.path,
+            type: 'smoothstep', // Utiliser des lignes en escalier lissées
+            animated: false,
+            style: { 
+              stroke: '#2f5c54', 
+              strokeWidth: 2,
+              opacity: 0.8
+            }
+          });
+
+          // Traiter récursivement les sous-dossiers
+          processSubfolder(sub, subX, subY, level + 1, subIndex, subfolderCount);
+        });
+
+        // Calculer la largeur totale nécessaire pour les documents
+        const documentWidth = documentCount * (xSpacing * 0.8);
+        const documentStartX = parentX - documentWidth / 2 + (xSpacing * 0.4);
+        
+        // Ajouter les documents
+        subfolder.documents.forEach((doc, docIndex) => {
+          const docX = documentStartX + docIndex * (xSpacing * 0.8);
+          const docY = parentY + ySpacing * 0.6;
+
+          const docId = `doc-${doc.id}`;
+          nodes.push({
+            id: docId,
+            type: 'document',
+            position: { x: docX, y: docY },
+            data: {
+              label: doc.name,
+              size: formatFileSize(doc.size),
+              date: new Date(doc.created_at).toLocaleDateString(),
+              originalDocument: doc,
+              onSendToConversation: onSendToConversation,
+              onClose: onClose
+            }
+          });
+
+          edges.push({
+            id: `edge-${subfolder.path}-${docId}`,
+            source: subfolder.path,
+            target: docId,
+            type: 'smoothstep', // Utiliser des lignes en escalier lissées
+            animated: false,
+            style: { 
+              stroke: '#dba747', 
+              strokeWidth: 2,
+              opacity: 0.8
+            }
+          });
+        });
+      };
+
+      // Traiter les sous-dossiers et documents pour chaque dossier de premier niveau
+      processSubfolder(folder, x, y, 1, index, firstLevelCount);
+    });
+
+    // Ajouter les documents à la racine
+    const rootDocs = structure.documents;
+    if (rootDocs.length > 0) {
+      const docWidth = rootDocs.length * (xSpacing * 0.8);
+      const docStartX = -docWidth / 2 + (xSpacing * 0.4);
+      
+      rootDocs.forEach((doc, index) => {
+        const docX = docStartX + index * (xSpacing * 0.8);
+        const docY = -ySpacing * 0.8;
+
+        const docId = `doc-${doc.id}`;
+        nodes.push({
+          id: docId,
+          type: 'document',
+          position: { x: docX, y: docY },
+          data: {
+            label: doc.name,
+            size: formatFileSize(doc.size),
+            date: new Date(doc.created_at).toLocaleDateString(),
+            originalDocument: doc,
+            onSendToConversation: onSendToConversation,
+            onClose: onClose
+          }
+        });
+
+        edges.push({
+          id: `edge-root-${docId}`,
+          source: 'root',
+          target: docId,
+          type: 'smoothstep', // Utiliser des lignes en escalier lissées
+          animated: false,
+          style: { 
+            stroke: '#dba747', 
+            strokeWidth: 2,
+            opacity: 0.8
+          }
+        });
+      });
+    }
+
+    return { nodes, edges };
+  };
+
+  // Fonction pour calculer la position optimale des nœuds en disposition force-directed
+  const calculateForceLayout = (structure: FolderStructure, documents: Document[]) => {
+    const nodes: Node[] = [];
+    const edges: Edge[] = [];
+    
+    // Ajouter le nœud racine (IRSST)
+    nodes.push({
+      id: 'root',
+      type: 'root',
+      position: { x: 0, y: 0 },
+      data: {
+        label: 'IRSST',
+        documents: documents.length
+      }
+    });
+
+    // Paramètres de mise en page
+    const radius = 600; // Rayon global pour la disposition
+    const angleStep = (2 * Math.PI) / structure.subfolders.length;
+    
+    // Fonction pour générer une position avec un décalage aléatoire
+    const getPositionWithJitter = (baseX: number, baseY: number, jitterAmount: number = 50) => {
+      const jitterX = (Math.random() - 0.5) * jitterAmount;
+      const jitterY = (Math.random() - 0.5) * jitterAmount;
+      return { x: baseX + jitterX, y: baseY + jitterY };
+    };
+    
+    // Disposition des dossiers de premier niveau autour de la racine
+    structure.subfolders.forEach((folder, index) => {
+      const angle = angleStep * index;
+      const distance = radius * 0.4;
+      
+      const baseX = Math.cos(angle) * distance;
+      const baseY = Math.sin(angle) * distance;
+      
+      // Ajouter un léger décalage aléatoire pour éviter les chevauchements
+      const { x, y } = getPositionWithJitter(baseX, baseY, 80);
+      
+      // Ajouter le nœud du dossier
+      nodes.push({
+        id: folder.path,
+        type: 'folder',
+        position: { x, y },
+        data: {
+          label: folder.name,
+          count: folder.documents.length + folder.subfolders.length
+        }
+      });
+
+      // Connecter à la racine
+      edges.push({
+        id: `edge-root-${folder.path}`,
+        source: 'root',
+        target: folder.path,
+        type: 'default',
+        animated: false,
+        style: { 
+          stroke: '#2f5c54', 
+          strokeWidth: 2,
+          opacity: 0.8
+        }
+      });
+
+      // Fonction récursive pour ajouter les sous-dossiers et documents
+      const processSubfolder = (
+        subfolder: FolderStructure,
+        parentX: number,
+        parentY: number,
+        level: number
+      ) => {
+        // Paramètres pour ce niveau
+        const subRadius = radius * (0.3 - level * 0.05);
+        const subAngleStep = (2 * Math.PI) / Math.max(subfolder.subfolders.length, 1);
+        
+        // Ajouter les sous-dossiers
+        subfolder.subfolders.forEach((sub, subIndex) => {
+          const subAngle = subAngleStep * subIndex;
+          const subDistance = subRadius;
+          
+          const subBaseX = parentX + Math.cos(subAngle) * subDistance;
+          const subBaseY = parentY + Math.sin(subAngle) * subDistance;
+          
+          // Ajouter un décalage aléatoire plus important pour les niveaux profonds
+          const jitterAmount = 60 + level * 20;
+          const { x: subX, y: subY } = getPositionWithJitter(subBaseX, subBaseY, jitterAmount);
+
+          nodes.push({
+            id: sub.path,
+            type: 'folder',
+            position: { x: subX, y: subY },
+            data: {
+              label: sub.name,
+              count: sub.documents.length + sub.subfolders.length
+            }
+          });
+
+          edges.push({
+            id: `edge-${subfolder.path}-${sub.path}`,
+            source: subfolder.path,
+            target: sub.path,
+            type: 'default',
+            animated: false,
+            style: { 
+              stroke: '#2f5c54', 
+              strokeWidth: 2,
+              opacity: 0.8
+            }
+          });
+
+          // Traiter récursivement les sous-dossiers
+          if (level < 3) { // Limiter la profondeur pour éviter la surcharge
+            processSubfolder(sub, subX, subY, level + 1);
+          }
+        });
+
+        // Ajouter les documents autour du dossier parent
+        const docCount = subfolder.documents.length;
+        if (docCount > 0) {
+          const docAngleStep = (2 * Math.PI) / docCount;
+          const docRadius = subRadius * 0.6;
+          
+          subfolder.documents.forEach((doc, docIndex) => {
+            const docAngle = docAngleStep * docIndex;
+            const docDistance = docRadius;
+            
+            const docBaseX = parentX + Math.cos(docAngle) * docDistance;
+            const docBaseY = parentY + Math.sin(docAngle) * docDistance;
+            
+            // Ajouter un décalage aléatoire pour les documents
+            const { x: docX, y: docY } = getPositionWithJitter(docBaseX, docBaseY, 40);
+
+            const docId = `doc-${doc.id}`;
+            nodes.push({
+              id: docId,
+              type: 'document',
+              position: { x: docX, y: docY },
+              data: {
+                label: doc.name,
+                size: formatFileSize(doc.size),
+                date: new Date(doc.created_at).toLocaleDateString(),
+                originalDocument: doc,
+                onSendToConversation: onSendToConversation,
+                onClose: onClose
+              }
+            });
+
+            edges.push({
+              id: `edge-${subfolder.path}-${docId}`,
+              source: subfolder.path,
+              target: docId,
+              type: 'default',
+              animated: false,
+              style: { 
+                stroke: '#dba747', 
+                strokeWidth: 2,
+                opacity: 0.8
+              }
+            });
+          });
+        }
+      };
+
+      // Traiter les sous-dossiers et documents pour chaque dossier de premier niveau
+      processSubfolder(folder, x, y, 1);
+    });
+
+    // Ajouter les documents directement liés à la racine
+    const rootDocs = structure.documents;
+    if (rootDocs.length > 0) {
+      const docAngleStep = (2 * Math.PI) / rootDocs.length;
+      const docRadius = radius * 0.25;
+      
+      rootDocs.forEach((doc, index) => {
+        const docAngle = docAngleStep * index;
+        const docDistance = docRadius;
+        
+        const docBaseX = Math.cos(docAngle) * docDistance;
+        const docBaseY = Math.sin(docAngle) * docDistance;
+        
+        // Ajouter un décalage aléatoire pour les documents
+        const { x: docX, y: docY } = getPositionWithJitter(docBaseX, docBaseY, 30);
+
+        const docId = `doc-${doc.id}`;
+        nodes.push({
+          id: docId,
+          type: 'document',
+          position: { x: docX, y: docY },
+          data: {
+            label: doc.name,
+            size: formatFileSize(doc.size),
+            date: new Date(doc.created_at).toLocaleDateString(),
+            originalDocument: doc,
+            onSendToConversation: onSendToConversation,
+            onClose: onClose
+          }
+        });
+
+        edges.push({
+          id: `edge-root-${docId}`,
+          source: 'root',
+          target: docId,
+          type: 'default',
+          animated: false,
+          style: { 
+            stroke: '#dba747', 
+            strokeWidth: 2,
+            opacity: 0.8
+          }
+        });
+      });
+    }
+
+    // Fonction pour détecter et résoudre les chevauchements
+    const resolveOverlaps = (nodeList: Node[]) => {
+      const nodeSize = 200; // Taille approximative d'un nœud
+      const minDistance = nodeSize * 1.2; // Distance minimale entre les centres des nœuds
+      
+      // Fonction pour calculer la distance entre deux nœuds
+      const getDistance = (node1: Node, node2: Node) => {
+        const dx = node1.position.x - node2.position.x;
+        const dy = node1.position.y - node2.position.y;
+        return Math.sqrt(dx * dx + dy * dy);
+      };
+      
+      // Itérer plusieurs fois pour résoudre les chevauchements
+      for (let iteration = 0; iteration < 5; iteration++) {
+        let overlapsResolved = 0;
+        
+        // Vérifier chaque paire de nœuds
+        for (let i = 0; i < nodeList.length; i++) {
+          for (let j = i + 1; j < nodeList.length; j++) {
+            const node1 = nodeList[i];
+            const node2 = nodeList[j];
+            
+            // Ignorer le nœud racine
+            if (node1.id === 'root' || node2.id === 'root') continue;
+            
+            const distance = getDistance(node1, node2);
+            
+            // Si les nœuds se chevauchent
+            if (distance < minDistance) {
+              overlapsResolved++;
+              
+              // Calculer le vecteur de déplacement
+              const dx = node2.position.x - node1.position.x;
+              const dy = node2.position.y - node1.position.y;
+              
+              // Normaliser le vecteur
+              const length = Math.sqrt(dx * dx + dy * dy) || 1;
+              const nx = dx / length;
+              const ny = dy / length;
+              
+              // Calculer la distance de déplacement
+              const moveDistance = (minDistance - distance) / 2;
+              
+              // Déplacer les nœuds dans des directions opposées
+              node1.position.x -= nx * moveDistance;
+              node1.position.y -= ny * moveDistance;
+              node2.position.x += nx * moveDistance;
+              node2.position.y += ny * moveDistance;
+            }
+          }
+        }
+        
+        // Si aucun chevauchement n'a été résolu, sortir de la boucle
+        if (overlapsResolved === 0) break;
+      }
+      
+      return nodeList;
+    };
+    
+    // Résoudre les chevauchements
+    const resolvedNodes = resolveOverlaps(nodes);
+    
+    return { nodes: resolvedNodes, edges };
+  };
+
+  // Générer les nœuds et les liens avec l'algorithme de mise en page sélectionné
   const generateNodesAndEdges = useMemo(() => {
     console.log('[MINDMAP] Génération des nœuds et des liens pour', filteredDocuments.length, 'documents');
     const structure = buildFolderStructure(filteredDocuments);
-    return calculateOptimalLayout(structure, filteredDocuments);
-  }, [filteredDocuments, onSendToConversation, onClose]);
+    
+    if (layoutType === 'radial') {
+      return calculateRadialLayout(structure, filteredDocuments);
+    } else if (layoutType === 'hierarchical') {
+      return calculateHierarchicalLayout(structure, filteredDocuments);
+    } else {
+      return calculateForceLayout(structure, filteredDocuments);
+    }
+  }, [filteredDocuments, onSendToConversation, onClose, layoutType]);
 
   const [nodes, setNodes] = useNodesState(generateNodesAndEdges.nodes);
   const [edges, setEdges] = useEdgesState(generateNodesAndEdges.edges);
@@ -460,8 +962,9 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Rechercher un document..."
-                  className="w-64 px-4 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#f15922] focus:border-transparent"
+                  className="w-64 px-4 py-2 pl-10 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#f15922] focus:border-transparent"
                 />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
                 {searchTerm && (
                   <button
                     onClick={() => setSearchTerm('')}
@@ -470,6 +973,40 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({
                     <X size={16} />
                   </button>
                 )}
+              </div>
+              
+              <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-lg">
+                <button
+                  onClick={() => setLayoutType('radial')}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    layoutType === 'radial' 
+                      ? 'bg-white text-[#f15922] shadow-sm' 
+                      : 'text-gray-600 hover:bg-white/50'
+                  }`}
+                >
+                  Radial
+                </button>
+                <button
+                  onClick={() => setLayoutType('hierarchical')}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    layoutType === 'hierarchical' 
+                      ? 'bg-white text-[#f15922] shadow-sm' 
+                      : 'text-gray-600 hover:bg-white/50'
+                  }`}
+                >
+                  Hiérarchique
+                </button>
+                <button
+                  onClick={() => setLayoutType('force')}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    layoutType === 'force' 
+                      ? 'bg-white text-[#f15922] shadow-sm' 
+                      : 'text-gray-600 hover:bg-white/50'
+                  }`}
+                >
+                  <LayoutGrid size={16} className="inline mr-1" />
+                  Organique
+                </button>
               </div>
               
               <button
@@ -520,9 +1057,25 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({
                 minZoom: 0.1,
                 maxZoom: 1.2
               }}
+              proOptions={{ hideAttribution: true }}
             >
-              <Background />
-              <Controls />
+              <Background 
+                color="#2f5c54" 
+                gap={24} 
+                size={1.5} 
+                variant="dots" 
+              />
+              <Controls 
+                position="bottom-right"
+                showInteractive={false}
+                className="bg-white/90 p-2 rounded-lg shadow-lg"
+              />
+              <Panel position="top-right" className="bg-white/80 p-2 rounded-lg shadow-md mt-2 mr-2">
+                <div className="flex items-center gap-2">
+                  <ZoomIn size={16} className="text-gray-600" />
+                  <span className="text-xs text-gray-600">Zoom: molette de souris</span>
+                </div>
+              </Panel>
             </ReactFlow>
           )}
         </div>
