@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { X, Upload, FolderPlus, File, Tag, Users, FileText, Check, AlertCircle, ChevronRight, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { processUploadedDocument } from '../lib/documentProcessor';
@@ -367,7 +367,7 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
       const filePath = `${userId}/${fileName}`;
 
       setProcessingStatus('Téléversement vers le stockage...');
-      const { error: uploadError, data: uploadData } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('documents')
         .upload(filePath, selectedFile);
 
@@ -1117,7 +1117,7 @@ export const ImportWindow: React.FC<ImportWindowProps> = ({
               <div className="mt-6 pt-6 border-t border-gray-100">
                 <button
                   onClick={handleUpload}
-                  disabled={!selectedFile || !selectedFolder || !isMetadataValid || isUploading}
+                  disabled={! selectedFile || !selectedFolder || !isMetadataValid || isUploading}
                   className={`
                     w-full py-3 px-4 rounded-xl flex items-center justify-center gap-2
                     transition-all duration-300

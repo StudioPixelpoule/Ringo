@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, BookAudioIcon as AudioIcon, RefreshCw, Save, AlertCircle, Info } from 'lucide-react';
+import { X, BookAudioIcon as AudioIcon, RefreshCw, Save, Info } from 'lucide-react';
 import { TranscriptionProgress } from './TranscriptionProgress';
 import { supabase } from '../lib/supabase';
 import type { Document } from '../lib/types';

@@ -145,12 +145,12 @@ export const MindMapModal: React.FC<MindMapModalProps> = (props) => {
   );
 };
 
-const MindMapContent = ({ 
+const MindMapContent: React.FC<MindMapModalProps> = ({ 
   isOpen, 
   onClose, 
   documents,
   onSendToConversation
-}: MindMapModalProps) => {
+}) => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);

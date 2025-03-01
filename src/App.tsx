@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Upload, AlertCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import { createChatCompletion, generateContextFromDocuments, summarizeDocument } from './lib/openai';
 import { extractDocumentContent, getDocumentContent } from './lib/documentProcessor';
@@ -8,7 +8,6 @@ import type { Document, Profile, Message, Conversation } from './lib/types';
 import { RingoLogo } from './components/RingoLogo';
 import { LogoutIcon } from './components/LogoutIcon';
 import { DocumentStackIcon } from './components/DocumentStackIcon';
-import { MindMapIcon } from './components/MindMapIcon';
 import { MindMapModal } from './components/MindMapModal';
 import { ImportWindow } from './components/ImportWindow';
 import { ChatInput } from './components/ChatInput';
@@ -524,7 +523,7 @@ function App() {
         .maybeSingle();
       
       if (checkError) {
-        console.error('Erreur lors de la vérification du contenu existant:', checkError);
+        console.error('[DOCUMENT_RETRIEVAL] Erreur lors de la vérification du contenu existant:', checkError);
         logger.error('Erreur lors de la vérification du contenu existant', 
           { documentId, error: checkError }, 
           'DocumentProcessor');
@@ -543,7 +542,7 @@ function App() {
           .eq('document_id', documentId);
         
         if (updateError) {
-          console.error('Erreur lors de la mise à jour du contenu manuel:', updateError);
+          console.error('[DOCUMENT_RETRIEVAL] Erreur lors de la mise à jour du contenu manuel:', updateError);
           logger.error('Erreur lors de la mise à jour du contenu manuel', 
             { documentId, error: updateError }, 
             'DocumentProcessor');
@@ -563,7 +562,7 @@ function App() {
           });
         
         if (insertError) {
-          console.error('Erreur lors du stockage du contenu manuel:', insertError);
+          console.error('[DOCUMENT_RETRIEVAL] Erreur lors du stockage du contenu manuel:', insertError);
           logger.error('Erreur lors du stockage du contenu manuel', 
             { documentId, error: insertError }, 
             'DocumentProcessor');
@@ -574,7 +573,7 @@ function App() {
         }
       }
     } catch (error) {
-      console.error('Erreur lors du stockage du contenu manuel:', error);
+      console.error('[DOCUMENT_RETRIEVAL] Erreur lors du stockage du contenu manuel:', error);
       logger.error('Erreur lors du stockage du contenu manuel', 
         { documentId, error }, 
         'DocumentProcessor');

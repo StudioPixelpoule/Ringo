@@ -25,7 +25,7 @@ export default defineConfig({
         manualChunks: {
           vendor: ['react', 'react-dom'],
           supabase: ['@supabase/supabase-js'],
-          ui: ['lucide-react', 'reactflow'],
+          ui: ['lucide-react', 'reactflow', 'zustand'],
           utils: ['uuid', 'd3'],
           openai: ['openai'],
           document: ['mammoth', 'pdf-parse', 'xlsx']
@@ -72,6 +72,7 @@ export default defineConfig({
       '@supabase/supabase-js',
       'lucide-react',
       'reactflow',
+      'zustand',
       'uuid',
       'marked'
     ],

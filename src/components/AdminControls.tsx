@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Settings, BarChart2, BookAudioIcon as AudioIcon, AlertCircle, Users } from 'lucide-react';
+import { BookAudioIcon as AudioIcon, AlertCircle, Users } from 'lucide-react';
 import { TranscriptionDashboard } from './TranscriptionDashboard';
 import { LogsPanel } from './LogsPanel';
 import { UserManagementPanel } from './UserManagementPanel';

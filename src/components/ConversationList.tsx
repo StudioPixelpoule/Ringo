@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Plus, MessageSquare, Trash2, Edit2 } from 'lucide-react';
 import { Conversation } from '../lib/types';
-import { marked } from 'marked';
 
 interface ConversationListProps {
   conversations: Conversation[];
