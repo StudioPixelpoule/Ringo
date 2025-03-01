@@ -1,6 +1,11 @@
 import OpenAI from 'openai';
 import type { Document } from './types';
 import { getDocumentContent } from './documentProcessor';
+import { logger } from './logger';
+
+// Cache pour les embeddings
+const embeddingCache = new Map<string, number[]>();
+const MAX_CACHE_SIZE = 100;
 
 // Fonction pour obtenir la clé API OpenAI
 const getOpenAIKey = (): string => {
@@ -14,12 +19,23 @@ const getOpenAIKey = (): string => {
   return import.meta.env.VITE_OPENAI_API_KEY || 'dummy-key';
 };
 
+// Instance singleton d'OpenAI
+let openaiInstance: OpenAI | null = null;
+
 // Créer une instance OpenAI avec la clé API
 const createOpenAIClient = () => {
   return new OpenAI({
     apiKey: getOpenAIKey(),
     dangerouslyAllowBrowser: true // Nécessaire pour l'utilisation côté client
   });
+};
+
+// Obtenir l'instance OpenAI (singleton)
+const getOpenAIInstance = (): OpenAI => {
+  if (!openaiInstance) {
+    openaiInstance = createOpenAIClient();
+  }
+  return openaiInstance;
 };
 
 export interface Message {
@@ -50,8 +66,8 @@ export async function createChatCompletion({
       };
     }
     
-    // Créer un client OpenAI avec la clé actuelle
-    const openai = createOpenAIClient();
+    // Obtenir l'instance OpenAI
+    const openai = getOpenAIInstance();
     
     console.log('[OPENAI] Création d\'une complétion de chat avec', messages.length, 'messages');
     
@@ -171,8 +187,8 @@ export async function generateContextFromDocuments(documents: Document[], query:
       return "Contexte simulé: La clé API OpenAI n'est pas configurée. Les documents ne peuvent pas être analysés.";
     }
     
-    // Créer un client OpenAI avec la clé actuelle
-    const openai = createOpenAIClient();
+    // Obtenir l'instance OpenAI
+    const openai = getOpenAIInstance();
     
     // Vérifier si la requête contient une référence à un document
     if (query.includes('**Document partagé:**')) {
@@ -251,8 +267,8 @@ export async function summarizeDocument(content: string, documentName: string, m
       return "Impossible de générer un résumé car la clé API OpenAI n'est pas configurée.";
     }
     
-    // Créer un client OpenAI avec la clé actuelle
-    const openai = createOpenAIClient();
+    // Obtenir l'instance OpenAI
+    const openai = getOpenAIInstance();
     
     // Vérifier si c'est un fichier audio
     const fileExtension = documentName.split('.').pop()?.toLowerCase();
@@ -323,8 +339,8 @@ export async function transcribeAudioFile(audioUrl: string): Promise<string> {
       return "Impossible de transcrire l'audio car la clé API OpenAI n'est pas configurée.";
     }
     
-    // Créer un client OpenAI avec la clé actuelle
-    const openai = createOpenAIClient();
+    // Obtenir l'instance OpenAI
+    const openai = getOpenAIInstance();
     
     // Tenter de télécharger le fichier audio
     console.log('[TRANSCRIPTION] Téléchargement du fichier audio:', audioUrl);
@@ -393,4 +409,61 @@ Lien vers le fichier audio: ${audioUrl}`;
   }
 }
 
-export { createOpenAIClient };
+// Fonction pour générer un embedding pour un texte
+export async function generateEmbedding(text: string, cacheKey?: string): Promise<number[] | null> {
+  try {
+    // Vérifier si l'embedding est en cache
+    if (cacheKey && embeddingCache.has(cacheKey)) {
+      return embeddingCache.get(cacheKey) || null;
+    }
+    
+    // Obtenir la clé API
+    const apiKey = getOpenAIKey();
+    
+    // Vérifier si la clé API est disponible
+    if (apiKey === 'dummy-key' || apiKey === 'your-openai-api-key-here') {
+      console.warn('[EMBEDDING] Clé API OpenAI non configurée. Impossible de générer un embedding.');
+      return null;
+    }
+    
+    // Obtenir l'instance OpenAI
+    const openai = getOpenAIInstance();
+    
+    // Tronquer le texte si nécessaire
+    const maxLength = 8000;
+    const truncatedText = text.length > maxLength 
+      ? text.substring(0, maxLength)
+      : text;
+    
+    // Générer l'embedding
+    const response = await openai.embeddings.create({
+      model: "text-embedding-3-small",
+      input: truncatedText,
+      encoding_format: "float"
+    });
+    
+    if (response.data && response.data.length > 0) {
+      const embedding = response.data[0].embedding;
+      
+      // Mettre en cache l'embedding
+      if (cacheKey) {
+        if (embeddingCache.size >= MAX_CACHE_SIZE) {
+          // Supprimer la première entrée si le cache est plein
+          const firstKey = embeddingCache.keys().next().value;
+          embeddingCache.delete(firstKey);
+        }
+        embeddingCache.set(cacheKey, embedding);
+      }
+      
+      return embedding;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('[EMBEDDING] Erreur lors de la génération de l\'embedding:', error);
+    logger.error('Erreur lors de la génération de l\'embedding', { error }, 'OpenAI');
+    return null;
+  }
+}
+
+export { createOpenAIClient, getOpenAIInstance };

@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, useState } from 'react';
+import React, { useMemo, useEffect, useState, useCallback } from 'react';
 import ReactFlow, {
   Node,
   Edge,
@@ -11,13 +11,16 @@ import ReactFlow, {
   useEdgesState,
   ConnectionMode,
   Panel,
-  useReactFlow
+  useReactFlow,
+  MiniMap,
+  ReactFlowProvider
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import type { Document } from '../lib/types';
-import { X, File, Folder, Share2, FileText, FileSpreadsheet, File as FilePdf, ZoomIn, ZoomOut, Search, LayoutGrid } from 'lucide-react';
+import { X, File, Folder, Share2, FileText, FileSpreadsheet, File as FilePdf, ZoomIn, ZoomOut, Search, Info } from 'lucide-react';
 import { AudioIcon } from './AudioIcon';
-import { getDocumentContent } from '../lib/documentProcessor';
+import { supabase } from '../lib/supabase';
+import { logger } from '../lib/logger';
 
 interface MindMapModalProps {
   isOpen: boolean;
@@ -47,7 +50,6 @@ const formatFileSize = (bytes: number): string => {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
 };
 
-// Fonction pour obtenir l'icône appropriée en fonction du type de fichier
 const getFileIcon = (fileName: string) => {
   const extension = fileName.split('.').pop()?.toLowerCase();
   
@@ -64,7 +66,6 @@ const getFileIcon = (fileName: string) => {
   }
 };
 
-// Nœud personnalisé pour le centre (IRSST)
 const RootNode = ({ data }: NodeProps) => (
   <div className="relative flex items-center justify-center w-40 h-40 rounded-full bg-[#f15922] text-white shadow-xl border-4 border-white transition-transform hover:scale-105">
     <Handle type="source" position={Position.Bottom} className="!bg-[#f15922]" />
@@ -75,7 +76,6 @@ const RootNode = ({ data }: NodeProps) => (
   </div>
 );
 
-// Nœud personnalisé pour les dossiers
 const FolderNode = ({ data }: NodeProps) => (
   <div className="relative flex flex-col items-center p-4 rounded-xl bg-[#2f5c54] text-white shadow-xl min-w-[200px] transition-transform hover:scale-105">
     <Handle type="target" position={Position.Top} className="!bg-[#2f5c54]" />
@@ -90,7 +90,6 @@ const FolderNode = ({ data }: NodeProps) => (
   </div>
 );
 
-// Nœud personnalisé pour les documents
 const DocumentNode = ({ data }: NodeProps) => (
   <div className="relative flex flex-col items-center p-4 rounded-xl bg-[#dba747] text-white shadow-xl min-w-[180px] max-w-[250px] transition-transform hover:scale-105">
     <Handle type="target" position={Position.Top} className="!bg-[#dba747]" />
@@ -108,7 +107,7 @@ const DocumentNode = ({ data }: NodeProps) => (
           e.stopPropagation();
           console.log('[MINDMAP] Envoi du document à la conversation:', data.originalDocument);
           data.onSendToConversation(data.originalDocument);
-          data.onClose(); // Close the modal when sending to conversation
+          data.onClose();
         }}
         className="mt-3 px-3 py-1.5 bg-white text-[#dba747] rounded-lg flex items-center justify-center gap-1.5 mx-auto hover:bg-gray-100 transition-colors"
       >
@@ -125,20 +124,241 @@ const nodeTypes = {
   document: DocumentNode
 };
 
-export const MindMapModal: React.FC<MindMapModalProps> = ({ 
+export const MindMapModal: React.FC<MindMapModalProps> = (props) => {
+  if (!props.isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-[95vw] h-[90vh] overflow-hidden">
+        <button
+          onClick={props.onClose}
+          className="absolute top-4 right-4 p-2 bg-white rounded-full shadow-md hover:bg-gray-100 transition-colors z-10"
+        >
+          <X size={20} className="text-gray-500" />
+        </button>
+        
+        <ReactFlowProvider>
+          <MindMapContent {...props} />
+        </ReactFlowProvider>
+      </div>
+    </div>
+  );
+};
+
+const MindMapContent = ({ 
   isOpen, 
   onClose, 
   documents,
   onSendToConversation
-}) => {
+}: MindMapModalProps) => {
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [filteredDocuments, setFilteredDocuments] = useState<Document[]>(documents);
   const [processedDocuments, setProcessedDocuments] = useState<Document[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [layoutType, setLayoutType] = useState<'radial' | 'hierarchical' | 'force'>('radial');
+  const [highlightedNodes, setHighlightedNodes] = useState<string[]>([]);
+  const [highlightedEdges, setHighlightedEdges] = useState<string[]>([]);
+  const [showMinimap, setShowMinimap] = useState<boolean>(false);
+  const reactFlowInstance = useReactFlow();
   
-  // Vérifier quels documents audio ont été transcrits
+  // Document info for stats
+  const documentInfo = useMemo(() => {
+    const info = {
+      totalCount: filteredDocuments.length,
+      byType: {} as Record<string, number>
+    };
+    
+    filteredDocuments.forEach(doc => {
+      const extension = doc.name.split('.').pop()?.toLowerCase() || 'unknown';
+      info.byType[extension] = (info.byType[extension] || 0) + 1;
+    });
+    
+    return info;
+  }, [filteredDocuments]);
+  
+  // Fonction pour organiser les documents en structure de dossiers
+  const buildFolderStructure = useCallback((docs: Document[]): FolderStructure => {
+    const root: FolderStructure = {
+      name: 'IRSST',
+      path: '',
+      documents: [],
+      subfolders: []
+    };
+    
+    // Créer un map pour stocker les dossiers
+    const folderMap = new Map<string, FolderStructure>();
+    folderMap.set('', root);
+    
+    // Trier les documents par dossier
+    docs.forEach(doc => {
+      if (!doc.folder) {
+        root.documents.push(doc);
+        return;
+      }
+      
+      const folderPath = doc.folder;
+      
+      // Vérifier si le dossier existe déjà
+      if (!folderMap.has(folderPath)) {
+        // Créer le dossier et tous ses parents si nécessaire
+        const parts = folderPath.split('/');
+        let currentPath = '';
+        
+        for (let i = 0; i < parts.length; i++) {
+          const part = parts[i];
+          const parentPath = currentPath;
+          currentPath = currentPath ? `${currentPath}/${part}` : part;
+          
+          if (!folderMap.has(currentPath)) {
+            const newFolder: FolderStructure = {
+              name: part,
+              path: currentPath,
+              documents: [],
+              subfolders: []
+            };
+            
+            folderMap.set(currentPath, newFolder);
+            
+            // Ajouter au parent
+            const parent = folderMap.get(parentPath);
+            if (parent) {
+              parent.subfolders.push(newFolder);
+            }
+          }
+        }
+      }
+      
+      // Ajouter le document au dossier
+      const folder = folderMap.get(folderPath);
+      if (folder) {
+        folder.documents.push(doc);
+      }
+    });
+    
+    return root;
+  }, []);
+  
+  // Fonction pour générer les nœuds et les arêtes à partir de la structure de dossiers
+  const generateGraphFromFolderStructure = useCallback((structure: FolderStructure): { nodes: Node[], edges: Edge[] } => {
+    const nodes: Node[] = [];
+    const edges: Edge[] = [];
+    let nodeId = 0;
+    
+    // Ajouter le nœud racine
+    const rootId = `node-${nodeId++}`;
+    nodes.push({
+      id: rootId,
+      type: 'root',
+      position: { x: 0, y: 0 },
+      data: { 
+        label: structure.name,
+        documents: processedDocuments.length
+      }
+    });
+    
+    // Fonction récursive pour ajouter les dossiers et documents
+    const addNodesAndEdges = (folder: FolderStructure, parentId: string, level: number, angle: number, radius: number) => {
+      const totalItems = folder.subfolders.length + folder.documents.length;
+      if (totalItems === 0) return;
+      
+      const angleStep = (2 * Math.PI) / totalItems;
+      let currentAngle = angle - (angleStep * (totalItems - 1)) / 2;
+      
+      // Ajouter les sous-dossiers
+      folder.subfolders.forEach(subfolder => {
+        const folderId = `node-${nodeId++}`;
+        const x = Math.cos(currentAngle) * radius;
+        const y = Math.sin(currentAngle) * radius;
+        
+        nodes.push({
+          id: folderId,
+          type: 'folder',
+          position: { x, y },
+          data: { 
+            label: subfolder.name,
+            count: subfolder.documents.length + subfolder.subfolders.length
+          }
+        });
+        
+        edges.push({
+          id: `edge-${parentId}-${folderId}`,
+          source: parentId,
+          target: folderId,
+          type: 'smoothstep'
+        });
+        
+        // Ajouter récursivement les sous-dossiers
+        addNodesAndEdges(subfolder, folderId, level + 1, currentAngle, radius + 300);
+        
+        currentAngle += angleStep;
+      });
+      
+      // Ajouter les documents
+      folder.documents.forEach(doc => {
+        const docId = `node-${nodeId++}`;
+        const x = Math.cos(currentAngle) * radius;
+        const y = Math.sin(currentAngle) * radius;
+        
+        nodes.push({
+          id: docId,
+          type: 'document',
+          position: { x, y },
+          data: { 
+            label: doc.name,
+            size: formatFileSize(doc.size),
+            date: new Date(doc.created_at).toLocaleDateString(),
+            originalDocument: doc,
+            onSendToConversation,
+            onClose
+          }
+        });
+        
+        edges.push({
+          id: `edge-${parentId}-${docId}`,
+          source: parentId,
+          target: docId,
+          type: 'smoothstep'
+        });
+        
+        currentAngle += angleStep;
+      });
+    };
+    
+    // Générer le graphe
+    addNodesAndEdges(structure, rootId, 1, Math.PI / 2, 300);
+    
+    return { nodes, edges };
+  }, [processedDocuments, onSendToConversation, onClose]);
+  
+  // Effet pour filtrer les documents en fonction du terme de recherche
+  useEffect(() => {
+    if (searchTerm) {
+      const filtered = processedDocuments.filter(doc => 
+        doc.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (doc.folder && doc.folder.toLowerCase().includes(searchTerm.toLowerCase()))
+      );
+      setFilteredDocuments(filtered);
+    } else {
+      setFilteredDocuments(processedDocuments);
+    }
+  }, [searchTerm, processedDocuments]);
+  
+  // Effet pour générer le graphe lorsque les documents filtrés changent
+  useEffect(() => {
+    if (filteredDocuments.length > 0) {
+      const folderStructure = buildFolderStructure(filteredDocuments);
+      const { nodes: newNodes, edges: newEdges } = generateGraphFromFolderStructure(folderStructure);
+      setNodes(newNodes);
+      setEdges(newEdges);
+    } else {
+      setNodes([]);
+      setEdges([]);
+    }
+  }, [filteredDocuments, buildFolderStructure, generateGraphFromFolderStructure]);
+  
   useEffect(() => {
     if (isOpen) {
       setIsLoading(true);
@@ -147,29 +367,63 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({
         const validDocs: Document[] = [];
         
         for (const doc of documents) {
-          // Vérifier si c'est un fichier audio
           const fileExtension = doc.name.split('.').pop()?.toLowerCase();
           const isAudioFile = ['mp3', 'wav', 'ogg', 'm4a'].includes(fileExtension || '');
           
           if (isAudioFile) {
-            // Vérifier si le contenu existe et n'est pas un message d'attente
             try {
-              const content = await getDocumentContent(doc.id);
-              if (content && 
-                  !content.includes("Pour les fichiers audio, une transcription est en cours") &&
-                  !content.includes("Ce document est un fichier audio") &&
-                  !content.includes("transcription automatique a échoué")) {
-                validDocs.push(doc);
+              const { data, error } = await supabase
+                .from('document_contents')
+                .select('content, extraction_status')
+                .eq('document_id', doc.id)
+                .single();
+              
+              if (error) {
+                console.error('[MINDMAP] Erreur lors de la vérification du contenu audio:', error);
+                logger.error('Erreur lors de la vérification du contenu audio', { documentId: doc.id, error }, 'MindMap');
+                continue;
+              }
+              
+              if (data) {
+                if (data.extraction_status === 'success') {
+                  validDocs.push(doc);
+                  logger.info('Document audio ajouté à la mindmap (statut succès)', 
+                    { documentId: doc.id, documentName: doc.name }, 
+                    'MindMap');
+                  continue;
+                }
+                
+                if (data.content && 
+                    data.content.length > 100 && 
+                    !data.content.includes("Transcription en cours") &&
+                    !data.content.includes("Ce document est un fichier audio") &&
+                    !data.content.includes("transcription automatique a échoué")) {
+                  validDocs.push(doc);
+                  logger.info('Document audio ajouté à la mindmap (contenu valide)', 
+                    { documentId: doc.id, documentName: doc.name }, 
+                    'MindMap');
+                  continue;
+                }
+                
+                logger.info('Document audio non inclus dans la mindmap', 
+                  { 
+                    documentId: doc.id, 
+                    documentName: doc.name, 
+                    status: data.extraction_status,
+                    contentPreview: data.content?.substring(0, 100) 
+                  }, 
+                  'MindMap');
               }
             } catch (error) {
               console.error('[MINDMAP] Erreur lors de la vérification du contenu audio:', error);
+              logger.error('Erreur lors de la vérification du contenu audio', { documentId: doc.id, error }, 'MindMap');
             }
           } else {
-            // Les documents non-audio sont toujours inclus
             validDocs.push(doc);
           }
         }
         
+        setFilteredDocuments(validDocs);
         setProcessedDocuments(validDocs);
         setIsLoading(false);
       };
@@ -178,940 +432,155 @@ export const MindMapModal: React.FC<MindMapModalProps> = ({
     }
   }, [isOpen, documents]);
   
-  // Mettre à jour les documents filtrés lorsque les documents ou le terme de recherche changent
-  useEffect(() => {
-    if (searchTerm.trim() === '') {
-      setFilteredDocuments(processedDocuments);
+  const onNodeClick = (event: React.MouseEvent, node: Node) => {
+    if (node.type === 'document' && node.data.originalDocument) {
+      setSelectedDocument(node.data.originalDocument);
     } else {
-      const term = searchTerm.toLowerCase();
-      setFilteredDocuments(
-        processedDocuments.filter(doc => 
-          doc.name.toLowerCase().includes(term) || 
-          (doc.folder && doc.folder.toLowerCase().includes(term))
-        )
-      );
+      setSelectedDocument(null);
     }
-  }, [processedDocuments, searchTerm]);
+  };
   
-  // Construire la structure hiérarchique des dossiers
-  const buildFolderStructure = (docs: Document[]): FolderStructure => {
-    const root: FolderStructure = {
-      name: 'IRSST',
-      path: '',
-      documents: [],
-      subfolders: []
-    };
-
-    // Créer un dictionnaire des dossiers uniques de premier niveau
-    const topLevelFolders = new Set<string>();
-    docs.forEach(doc => {
-      if (doc.folder) {
-        const firstLevel = doc.folder.split('/')[0];
-        topLevelFolders.add(firstLevel);
-      }
-    });
-
-    // Créer les dossiers de premier niveau
-    topLevelFolders.forEach(folderName => {
-      root.subfolders.push({
-        name: folderName,
-        path: folderName,
-        documents: [],
-        subfolders: []
-      });
-    });
-
-    // Fonction pour obtenir ou créer un dossier dans la structure
-    const getOrCreateFolder = (path: string[], current: FolderStructure): FolderStructure => {
-      if (path.length === 0) return current;
-
-      const [folderName, ...rest] = path;
-      let folder = current.subfolders.find(f => f.name === folderName);
-
-      if (!folder) {
-        folder = {
-          name: folderName,
-          path: current.path ? `${current.path}/${folderName}` : folderName,
-          documents: [],
-          subfolders: []
-        };
-        current.subfolders.push(folder);
-      }
-
-      return getOrCreateFolder(rest, folder);
-    };
-
-    // Organiser les documents dans la structure
-    docs.forEach(doc => {
-      if (!doc.folder) {
-        root.documents.push(doc);
-      } else {
-        const path = doc.folder.split('/');
-        const folder = getOrCreateFolder(path, root);
-        folder.documents.push(doc);
-      }
-    });
-
-    return root;
+  const onPaneClick = () => {
+    setSelectedDocument(null);
   };
-
-  // Fonction pour calculer la position optimale des nœuds en disposition radiale
-  const calculateRadialLayout = (structure: FolderStructure, documents: Document[]) => {
-    const nodes: Node[] = [];
-    const edges: Edge[] = [];
-    
-    // Ajouter le nœud racine (IRSST)
-    nodes.push({
-      id: 'root',
-      type: 'root',
-      position: { x: 0, y: 0 },
-      data: {
-        label: 'IRSST',
-        documents: documents.length
-      }
-    });
-
-    // Paramètres de mise en page
-    const firstLevelCount = structure.subfolders.length;
-    const folderRadius = 500; // Rayon pour disposer les dossiers autour de la racine
-    
-    // Disposition des dossiers de premier niveau en cercle autour de la racine
-    structure.subfolders.forEach((folder, index) => {
-      // Calculer l'angle pour une disposition circulaire
-      const angle = (2 * Math.PI * index) / firstLevelCount;
-      // Calculer les coordonnées x et y basées sur l'angle et le rayon
-      const x = Math.cos(angle) * folderRadius;
-      const y = Math.sin(angle) * folderRadius;
-      
-      // Ajouter le nœud du dossier
-      nodes.push({
-        id: folder.path,
-        type: 'folder',
-        position: { x, y },
-        data: {
-          label: folder.name,
-          count: folder.documents.length + folder.subfolders.length
-        }
-      });
-
-      // Connecter à la racine avec une ligne courbe
-      edges.push({
-        id: `edge-root-${folder.path}`,
-        source: 'root',
-        target: folder.path,
-        type: 'default', // Utiliser des lignes courbes par défaut
-        animated: false,
-        style: { 
-          stroke: '#2f5c54', 
-          strokeWidth: 2,
-          opacity: 0.8
-        }
-      });
-
-      // Fonction récursive pour ajouter les sous-dossiers et documents
-      const processSubfolder = (
-        subfolder: FolderStructure,
-        parentX: number,
-        parentY: number,
-        level: number,
-        parentAngle: number
-      ) => {
-        const itemCount = subfolder.subfolders.length + subfolder.documents.length;
-        if (itemCount === 0) return;
-        
-        const angleSpread = Math.PI / 3; // Angle de propagation des éléments enfants
-        
-        // Ajouter les sous-dossiers
-        subfolder.subfolders.forEach((sub, subIndex) => {
-          // Calculer un nouvel angle basé sur l'angle parent et la position relative
-          const subAngle = parentAngle - (angleSpread / 2) + (angleSpread * subIndex / Math.max(1, subfolder.subfolders.length - 1));
-          const distance = 300 + (level * 50); // Distance augmente avec le niveau
-          
-          const subX = parentX + Math.cos(subAngle) * distance;
-          const subY = parentY + Math.sin(subAngle) * distance;
-
-          nodes.push({
-            id: sub.path,
-            type: 'folder',
-            position: { x: subX, y: subY },
-            data: {
-              label: sub.name,
-              count: sub.documents.length + sub.subfolders.length
-            }
-          });
-
-          edges.push({
-            id: `edge-${subfolder.path}-${sub.path}`,
-            source: subfolder.path,
-            target: sub.path,
-            type: 'default', // Utiliser des courbes par défaut
-            animated: false,
-            style: { 
-              stroke: '#2f5c54', 
-              strokeWidth: 2,
-              opacity: 0.8
-            }
-          });
-
-          // Traiter récursivement les sous-dossiers
-          processSubfolder(sub, subX, subY, level + 1, subAngle);
-        });
-
-        // Ajouter les documents en arc autour du dossier parent
-        const docCount = subfolder.documents.length;
-        if (docCount > 0) {
-          const docAngleSpread = Math.PI / 2; // Plus large pour les documents
-          
-          subfolder.documents.forEach((doc, docIndex) => {
-            // Calculer l'angle pour chaque document
-            const docAngle = parentAngle - (docAngleSpread / 2) + (docAngleSpread * docIndex / Math.max(1, docCount - 1));
-            const docDistance = 200; // Distance fixe pour les documents
-            
-            const docX = parentX + Math.cos(docAngle) * docDistance;
-            const docY = parentY + Math.sin(docAngle) * docDistance;
-
-            const docId = `doc-${doc.id}`;
-            nodes.push({
-              id: docId,
-              type: 'document',
-              position: { x: docX, y: docY },
-              data: {
-                label: doc.name,
-                size: formatFileSize(doc.size),
-                date: new Date(doc.created_at).toLocaleDateString(),
-                originalDocument: doc,
-                onSendToConversation: onSendToConversation,
-                onClose: onClose
-              }
-            });
-
-            edges.push({
-              id: `edge-${subfolder.path}-${docId}`,
-              source: subfolder.path,
-              target: docId,
-              type: 'default', // Utiliser des courbes par défaut
-              animated: false,
-              style: { 
-                stroke: '#dba747', 
-                strokeWidth: 2,
-                opacity: 0.8
-              }
-            });
-          });
-        }
-      };
-
-      // Traiter les sous-dossiers et documents pour chaque dossier de premier niveau
-      processSubfolder(folder, x, y, 1, angle);
-    });
-
-    // Ajouter les documents à la racine en cercle
-    const rootDocs = structure.documents;
-    if (rootDocs.length > 0) {
-      const docAngleStep = (2 * Math.PI) / rootDocs.length;
-      const docRadius = 250; // Rayon pour les documents de la racine
-      
-      rootDocs.forEach((doc, index) => {
-        const docAngle = docAngleStep * index;
-        const docX = Math.cos(docAngle) * docRadius;
-        const docY = Math.sin(docAngle) * docRadius;
-
-        const docId = `doc-${doc.id}`;
-        nodes.push({
-          id: docId,
-          type: 'document',
-          position: { x: docX, y: docY },
-          data: {
-            label: doc.name,
-            size: formatFileSize(doc.size),
-            date: new Date(doc.created_at).toLocaleDateString(),
-            originalDocument: doc,
-            onSendToConversation: onSendToConversation,
-            onClose: onClose
-          }
-        });
-
-        edges.push({
-          id: `edge-root-${docId}`,
-          source: 'root',
-          target: docId,
-          type: 'default', // Utiliser des courbes par défaut
-          animated: false,
-          style: { 
-            stroke: '#dba747', 
-            strokeWidth: 2,
-            opacity: 0.8
-          }
-        });
-      });
+  
+  // Fonction pour centrer la vue sur le graphe
+  const handleFitView = () => {
+    if (reactFlowInstance) {
+      reactFlowInstance.fitView({ padding: 0.2 });
     }
-
-    return { nodes, edges };
   };
-
-  // Fonction pour calculer la position optimale des nœuds en disposition hiérarchique
-  const calculateHierarchicalLayout = (structure: FolderStructure, documents: Document[]) => {
-    const nodes: Node[] = [];
-    const edges: Edge[] = [];
-    
-    // Ajouter le nœud racine (IRSST)
-    nodes.push({
-      id: 'root',
-      type: 'root',
-      position: { x: 0, y: 0 },
-      data: {
-        label: 'IRSST',
-        documents: documents.length
-      }
-    });
-
-    // Paramètres de mise en page
-    const firstLevelCount = structure.subfolders.length;
-    const xSpacing = 350; // Espacement horizontal entre les nœuds
-    const ySpacing = 200; // Espacement vertical entre les niveaux
-    
-    // Calculer la largeur totale nécessaire
-    const totalWidth = firstLevelCount * xSpacing;
-    const startX = -totalWidth / 2 + xSpacing / 2;
-    
-    // Disposition des dossiers de premier niveau en ligne horizontale
-    structure.subfolders.forEach((folder, index) => {
-      const x = startX + index * xSpacing;
-      const y = ySpacing;
-      
-      // Ajouter le nœud du dossier
-      nodes.push({
-        id: folder.path,
-        type: 'folder',
-        position: { x, y },
-        data: {
-          label: folder.name,
-          count: folder.documents.length + folder.subfolders.length
-        }
-      });
-
-      // Connecter à la racine
-      edges.push({
-        id: `edge-root-${folder.path}`,
-        source: 'root',
-        target: folder.path,
-        type: 'smoothstep', // Utiliser des lignes en escalier lissées
-        animated: false,
-        style: { 
-          stroke: '#2f5c54', 
-          strokeWidth: 2,
-          opacity: 0.8
-        }
-      });
-
-      // Fonction récursive pour ajouter les sous-dossiers et documents
-      const processSubfolder = (
-        subfolder: FolderStructure,
-        parentX: number,
-        parentY: number,
-        level: number,
-        horizontalIndex: number,
-        totalSiblings: number
-      ) => {
-        const subfolderCount = subfolder.subfolders.length;
-        const documentCount = subfolder.documents.length;
-        
-        // Calculer la largeur totale nécessaire pour les sous-dossiers
-        const subfolderWidth = subfolderCount * xSpacing;
-        const subfolderStartX = parentX - subfolderWidth / 2 + xSpacing / 2;
-        
-        // Ajouter les sous-dossiers
-        subfolder.subfolders.forEach((sub, subIndex) => {
-          const subX = subfolderStartX + subIndex * xSpacing;
-          const subY = parentY + ySpacing;
-
-          nodes.push({
-            id: sub.path,
-            type: 'folder',
-            position: { x: subX, y: subY },
-            data: {
-              label: sub.name,
-              count: sub.documents.length + sub.subfolders.length
-            }
-          });
-
-          edges.push({
-            id: `edge-${subfolder.path}-${sub.path}`,
-            source: subfolder.path,
-            target: sub.path,
-            type: 'smoothstep', // Utiliser des lignes en escalier lissées
-            animated: false,
-            style: { 
-              stroke: '#2f5c54', 
-              strokeWidth: 2,
-              opacity: 0.8
-            }
-          });
-
-          // Traiter récursivement les sous-dossiers
-          processSubfolder(sub, subX, subY, level + 1, subIndex, subfolderCount);
-        });
-
-        // Calculer la largeur totale nécessaire pour les documents
-        const documentWidth = documentCount * (xSpacing * 0.8);
-        const documentStartX = parentX - documentWidth / 2 + (xSpacing * 0.4);
-        
-        // Ajouter les documents
-        subfolder.documents.forEach((doc, docIndex) => {
-          const docX = documentStartX + docIndex * (xSpacing * 0.8);
-          const docY = parentY + ySpacing * 0.6;
-
-          const docId = `doc-${doc.id}`;
-          nodes.push({
-            id: docId,
-            type: 'document',
-            position: { x: docX, y: docY },
-            data: {
-              label: doc.name,
-              size: formatFileSize(doc.size),
-              date: new Date(doc.created_at).toLocaleDateString(),
-              originalDocument: doc,
-              onSendToConversation: onSendToConversation,
-              onClose: onClose
-            }
-          });
-
-          edges.push({
-            id: `edge-${subfolder.path}-${docId}`,
-            source: subfolder.path,
-            target: docId,
-            type: 'smoothstep', // Utiliser des lignes en escalier lissées
-            animated: false,
-            style: { 
-              stroke: '#dba747', 
-              strokeWidth: 2,
-              opacity: 0.8
-            }
-          });
-        });
-      };
-
-      // Traiter les sous-dossiers et documents pour chaque dossier de premier niveau
-      processSubfolder(folder, x, y, 1, index, firstLevelCount);
-    });
-
-    // Ajouter les documents à la racine
-    const rootDocs = structure.documents;
-    if (rootDocs.length > 0) {
-      const docWidth = rootDocs.length * (xSpacing * 0.8);
-      const docStartX = -docWidth / 2 + (xSpacing * 0.4);
-      
-      rootDocs.forEach((doc, index) => {
-        const docX = docStartX + index * (xSpacing * 0.8);
-        const docY = -ySpacing * 0.8;
-
-        const docId = `doc-${doc.id}`;
-        nodes.push({
-          id: docId,
-          type: 'document',
-          position: { x: docX, y: docY },
-          data: {
-            label: doc.name,
-            size: formatFileSize(doc.size),
-            date: new Date(doc.created_at).toLocaleDateString(),
-            originalDocument: doc,
-            onSendToConversation: onSendToConversation,
-            onClose: onClose
-          }
-        });
-
-        edges.push({
-          id: `edge-root-${docId}`,
-          source: 'root',
-          target: docId,
-          type: 'smoothstep', // Utiliser des lignes en escalier lissées
-          animated: false,
-          style: { 
-            stroke: '#dba747', 
-            strokeWidth: 2,
-            opacity: 0.8
-          }
-        });
-      });
-    }
-
-    return { nodes, edges };
-  };
-
-  // Fonction pour calculer la position optimale des nœuds en disposition force-directed
-  const calculateForceLayout = (structure: FolderStructure, documents: Document[]) => {
-    const nodes: Node[] = [];
-    const edges: Edge[] = [];
-    
-    // Ajouter le nœud racine (IRSST)
-    nodes.push({
-      id: 'root',
-      type: 'root',
-      position: { x: 0, y: 0 },
-      data: {
-        label: 'IRSST',
-        documents: documents.length
-      }
-    });
-
-    // Paramètres de mise en page
-    const radius = 600; // Rayon global pour la disposition
-    const angleStep = (2 * Math.PI) / structure.subfolders.length;
-    
-    // Fonction pour générer une position avec un décalage aléatoire
-    const getPositionWithJitter = (baseX: number, baseY: number, jitterAmount: number = 50) => {
-      const jitterX = (Math.random() - 0.5) * jitterAmount;
-      const jitterY = (Math.random() - 0.5) * jitterAmount;
-      return { x: baseX + jitterX, y: baseY + jitterY };
-    };
-    
-    // Disposition des dossiers de premier niveau autour de la racine
-    structure.subfolders.forEach((folder, index) => {
-      const angle = angleStep * index;
-      const distance = radius * 0.4;
-      
-      const baseX = Math.cos(angle) * distance;
-      const baseY = Math.sin(angle) * distance;
-      
-      // Ajouter un léger décalage aléatoire pour éviter les chevauchements
-      const { x, y } = getPositionWithJitter(baseX, baseY, 80);
-      
-      // Ajouter le nœud du dossier
-      nodes.push({
-        id: folder.path,
-        type: 'folder',
-        position: { x, y },
-        data: {
-          label: folder.name,
-          count: folder.documents.length + folder.subfolders.length
-        }
-      });
-
-      // Connecter à la racine
-      edges.push({
-        id: `edge-root-${folder.path}`,
-        source: 'root',
-        target: folder.path,
-        type: 'default',
-        animated: false,
-        style: { 
-          stroke: '#2f5c54', 
-          strokeWidth: 2,
-          opacity: 0.8
-        }
-      });
-
-      // Fonction récursive pour ajouter les sous-dossiers et documents
-      const processSubfolder = (
-        subfolder: FolderStructure,
-        parentX: number,
-        parentY: number,
-        level: number
-      ) => {
-        // Paramètres pour ce niveau
-        const subRadius = radius * (0.3 - level * 0.05);
-        const subAngleStep = (2 * Math.PI) / Math.max(subfolder.subfolders.length, 1);
-        
-        // Ajouter les sous-dossiers
-        subfolder.subfolders.forEach((sub, subIndex) => {
-          const subAngle = subAngleStep * subIndex;
-          const subDistance = subRadius;
-          
-          const subBaseX = parentX + Math.cos(subAngle) * subDistance;
-          const subBaseY = parentY + Math.sin(subAngle) * subDistance;
-          
-          // Ajouter un décalage aléatoire plus important pour les niveaux profonds
-          const jitterAmount = 60 + level * 20;
-          const { x: subX, y: subY } = getPositionWithJitter(subBaseX, subBaseY, jitterAmount);
-
-          nodes.push({
-            id: sub.path,
-            type: 'folder',
-            position: { x: subX, y: subY },
-            data: {
-              label: sub.name,
-              count: sub.documents.length + sub.subfolders.length
-            }
-          });
-
-          edges.push({
-            id: `edge-${subfolder.path}-${sub.path}`,
-            source: subfolder.path,
-            target: sub.path,
-            type: 'default',
-            animated: false,
-            style: { 
-              stroke: '#2f5c54', 
-              strokeWidth: 2,
-              opacity: 0.8
-            }
-          });
-
-          // Traiter récursivement les sous-dossiers
-          if (level < 3) { // Limiter la profondeur pour éviter la surcharge
-            processSubfolder(sub, subX, subY, level + 1);
-          }
-        });
-
-        // Ajouter les documents autour du dossier parent
-        const docCount = subfolder.documents.length;
-        if (docCount > 0) {
-          const docAngleStep = (2 * Math.PI) / docCount;
-          const docRadius = subRadius * 0.6;
-          
-          subfolder.documents.forEach((doc, docIndex) => {
-            const docAngle = docAngleStep * docIndex;
-            const docDistance = docRadius;
-            
-            const docBaseX = parentX + Math.cos(docAngle) * docDistance;
-            const docBaseY = parentY + Math.sin(docAngle) * docDistance;
-            
-            // Ajouter un décalage aléatoire pour les documents
-            const { x: docX, y: docY } = getPositionWithJitter(docBaseX, docBaseY, 40);
-
-            const docId = `doc-${doc.id}`;
-            nodes.push({
-              id: docId,
-              type: 'document',
-              position: { x: docX, y: docY },
-              data: {
-                label: doc.name,
-                size: formatFileSize(doc.size),
-                date: new Date(doc.created_at).toLocaleDateString(),
-                originalDocument: doc,
-                onSendToConversation: onSendToConversation,
-                onClose: onClose
-              }
-            });
-
-            edges.push({
-              id: `edge-${subfolder.path}-${docId}`,
-              source: subfolder.path,
-              target: docId,
-              type: 'default',
-              animated: false,
-              style: { 
-                stroke: '#dba747', 
-                strokeWidth: 2,
-                opacity: 0.8
-              }
-            });
-          });
-        }
-      };
-
-      // Traiter les sous-dossiers et documents pour chaque dossier de premier niveau
-      processSubfolder(folder, x, y, 1);
-    });
-
-    // Ajouter les documents directement liés à la racine
-    const rootDocs = structure.documents;
-    if (rootDocs.length > 0) {
-      const docAngleStep = (2 * Math.PI) / rootDocs.length;
-      const docRadius = radius * 0.25;
-      
-      rootDocs.forEach((doc, index) => {
-        const docAngle = docAngleStep * index;
-        const docDistance = docRadius;
-        
-        const docBaseX = Math.cos(docAngle) * docDistance;
-        const docBaseY = Math.sin(docAngle) * docDistance;
-        
-        // Ajouter un décalage aléatoire pour les documents
-        const { x: docX, y: docY } = getPositionWithJitter(docBaseX, docBaseY, 30);
-
-        const docId = `doc-${doc.id}`;
-        nodes.push({
-          id: docId,
-          type: 'document',
-          position: { x: docX, y: docY },
-          data: {
-            label: doc.name,
-            size: formatFileSize(doc.size),
-            date: new Date(doc.created_at).toLocaleDateString(),
-            originalDocument: doc,
-            onSendToConversation: onSendToConversation,
-            onClose: onClose
-          }
-        });
-
-        edges.push({
-          id: `edge-root-${docId}`,
-          source: 'root',
-          target: docId,
-          type: 'default',
-          animated: false,
-          style: { 
-            stroke: '#dba747', 
-            strokeWidth: 2,
-            opacity: 0.8
-          }
-        });
-      });
-    }
-
-    // Fonction pour détecter et résoudre les chevauchements
-    const resolveOverlaps = (nodeList: Node[]) => {
-      const nodeSize = 200; // Taille approximative d'un nœud
-      const minDistance = nodeSize * 1.2; // Distance minimale entre les centres des nœuds
-      
-      // Fonction pour calculer la distance entre deux nœuds
-      const getDistance = (node1: Node, node2: Node) => {
-        const dx = node1.position.x - node2.position.x;
-        const dy = node1.position.y - node2.position.y;
-        return Math.sqrt(dx * dx + dy * dy);
-      };
-      
-      // Itérer plusieurs fois pour résoudre les chevauchements
-      for (let iteration = 0; iteration < 5; iteration++) {
-        let overlapsResolved = 0;
-        
-        // Vérifier chaque paire de nœuds
-        for (let i = 0; i < nodeList.length; i++) {
-          for (let j = i + 1; j < nodeList.length; j++) {
-            const node1 = nodeList[i];
-            const node2 = nodeList[j];
-            
-            // Ignorer le nœud racine
-            if (node1.id === 'root' || node2.id === 'root') continue;
-            
-            const distance = getDistance(node1, node2);
-            
-            // Si les nœuds se chevauchent
-            if (distance < minDistance) {
-              overlapsResolved++;
-              
-              // Calculer le vecteur de déplacement
-              const dx = node2.position.x - node1.position.x;
-              const dy = node2.position.y - node1.position.y;
-              
-              // Normaliser le vecteur
-              const length = Math.sqrt(dx * dx + dy * dy) || 1;
-              const nx = dx / length;
-              const ny = dy / length;
-              
-              // Calculer la distance de déplacement
-              const moveDistance = (minDistance - distance) / 2;
-              
-              // Déplacer les nœuds dans des directions opposées
-              node1.position.x -= nx * moveDistance;
-              node1.position.y -= ny * moveDistance;
-              node2.position.x += nx * moveDistance;
-              node2.position.y += ny * moveDistance;
-            }
-          }
-        }
-        
-        // Si aucun chevauchement n'a été résolu, sortir de la boucle
-        if (overlapsResolved === 0) break;
-      }
-      
-      return nodeList;
-    };
-    
-    // Résoudre les chevauchements
-    const resolvedNodes = resolveOverlaps(nodes);
-    
-    return { nodes: resolvedNodes, edges };
-  };
-
-  // Générer les nœuds et les liens avec l'algorithme de mise en page sélectionné
-  const generateNodesAndEdges = useMemo(() => {
-    console.log('[MINDMAP] Génération des nœuds et des liens pour', filteredDocuments.length, 'documents');
-    const structure = buildFolderStructure(filteredDocuments);
-    
-    if (layoutType === 'radial') {
-      return calculateRadialLayout(structure, filteredDocuments);
-    } else if (layoutType === 'hierarchical') {
-      return calculateHierarchicalLayout(structure, filteredDocuments);
-    } else {
-      return calculateForceLayout(structure, filteredDocuments);
-    }
-  }, [filteredDocuments, onSendToConversation, onClose, layoutType]);
-
-  const [nodes, setNodes] = useNodesState(generateNodesAndEdges.nodes);
-  const [edges, setEdges] = useEdgesState(generateNodesAndEdges.edges);
-
-  // Mettre à jour les nœuds et les liens lorsque les documents changent
+  
+  // Effet pour centrer la vue lorsque le graphe est généré
   useEffect(() => {
-    setNodes(generateNodesAndEdges.nodes);
-    setEdges(generateNodesAndEdges.edges);
-  }, [filteredDocuments, setNodes, setEdges, generateNodesAndEdges]);
-
-  if (!isOpen) return null;
-
+    if (nodes.length > 0 && !isLoading) {
+      setTimeout(() => {
+        handleFitView();
+      }, 100);
+    }
+  }, [nodes, isLoading]);
+  
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div
-        className="fixed inset-0 bg-black/20 backdrop-blur-sm"
-        onClick={onClose}
-      />
-      <div className="relative z-50 bg-[#f8f7f2] rounded-2xl shadow-2xl w-[95vw] h-[90vh] overflow-hidden">
-        <div className="absolute top-0 left-0 right-0 z-10 bg-white/90 backdrop-blur-sm p-4 border-b border-gray-100">
-          <div className="max-w-screen-xl mx-auto flex items-center justify-between">
-            <h2 className="text-xl font-medium text-gray-800 flex items-center gap-2">
-              <span className="text-[#f15922]">IRSST</span>
-              <span className="text-gray-400">/</span>
-              <span>Base de données visuelle</span>
-            </h2>
-            
-            <div className="flex items-center gap-4">
-              <div className="relative">
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Rechercher un document..."
-                  className="w-64 px-4 py-2 pl-10 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#f15922] focus:border-transparent"
-                />
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
-                {searchTerm && (
-                  <button
-                    onClick={() => setSearchTerm('')}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
-                    <X size={16} />
-                  </button>
-                )}
-              </div>
-              
-              <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-lg">
-                <button
-                  onClick={() => setLayoutType('radial')}
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                    layoutType === 'radial' 
-                      ? 'bg-white text-[#f15922] shadow-sm' 
-                      : 'text-gray-600 hover:bg-white/50'
-                  }`}
-                >
-                  Radial
-                </button>
-                <button
-                  onClick={() => setLayoutType('hierarchical')}
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                    layoutType === 'hierarchical' 
-                      ? 'bg-white text-[#f15922] shadow-sm' 
-                      : 'text-gray-600 hover:bg-white/50'
-                  }`}
-                >
-                  Hiérarchique
-                </button>
-                <button
-                  onClick={() => setLayoutType('force')}
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                    layoutType === 'force' 
-                      ? 'bg-white text-[#f15922] shadow-sm' 
-                      : 'text-gray-600 hover:bg-white/50'
-                  }`}
-                >
-                  <LayoutGrid size={16} className="inline mr-1" />
-                  Organique
-                </button>
-              </div>
-              
-              <button
-                onClick={onClose}
-                className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-50 rounded-full"
-              >
-                <X size={20} />
-              </button>
-            </div>
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="flex items-center justify-between p-4 border-b border-gray-100">
+        <h2 className="text-xl font-semibold text-[#2F4F4F]">Base de données visuelle</h2>
+        
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+            <input
+              type="text"
+              placeholder="Rechercher un document..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#f15922] focus:border-transparent"
+            />
           </div>
+          <button
+            onClick={() => setShowMinimap(!showMinimap)}
+            className="p-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+            title={showMinimap ? "Masquer la minimap" : "Afficher la minimap"}
+          >
+            <Info size={20} className="text-gray-600" />
+          </button>
+          <button
+            onClick={handleFitView}
+            className="p-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+            title="Ajuster la vue"
+          >
+            <ZoomIn size={20} className="text-gray-600" />
+          </button>
         </div>
+      </div>
 
-        <div className="w-full h-full pt-16">
-          {isLoading ? (
-            <div className="h-full flex items-center justify-center">
-              <div className="text-center">
-                <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#f15922]"></div>
+      {/* ReactFlow */}
+      <div className="w-full h-full">
+        <ReactFlow
+          nodes={nodes.map(node => ({
+            ...node,
+            className: highlightedNodes.includes(node.id) ? 'highlighted-node' : ''
+          }))}
+          edges={edges.map(edge => ({
+            ...edge,
+            className: highlightedEdges.includes(edge.id) ? 'highlighted-edge' : '',
+            animated: highlightedEdges.includes(edge.id)
+          }))}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          nodeTypes={nodeTypes}
+          onNodeClick={onNodeClick}
+          onPaneClick={onPaneClick}
+          connectionMode={ConnectionMode.Loose}
+          minZoom={0.1}
+          maxZoom={2}
+          defaultViewport={{ x: 0, y: 0, zoom: 0.5 }}
+          fitView
+        >
+          <Background color="#f0f0f0" gap={16} />
+          <Controls className="mindmap-toolbar" />
+          {showMinimap && <MiniMap />}
+          
+          {/* Document info panel */}
+          {selectedDocument && (
+            <Panel position="bottom-right" className="bg-white p-4 rounded-lg shadow-lg max-w-md">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 mt-1">
+                  {getFileIcon(selectedDocument.name)}
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-medium text-gray-800 mb-1">{selectedDocument.name}</h3>
+                  <div className="text-sm text-gray-600 mb-2">
+                    <p>Taille: {formatFileSize(selectedDocument.size)}</p>
+                    <p>Date: {new Date(selectedDocument.created_at).toLocaleString()}</p>
+                    {selectedDocument.folder && <p>Dossier: {selectedDocument.folder}</p>}
+                  </div>
+                  {onSendToConversation && (
+                    <button
+                      onClick={() => {
+                        onSendToConversation(selectedDocument);
+                        onClose();
+                      }}
+                      className="px-4 py-2 bg-[#f15922] text-white rounded-lg hover:bg-[#d14811] transition-colors flex items-center gap-2"
+                    >
+                      <Share2 size={16} />
+                      <span>Envoyer à la conversation</span>
+                    </button>
+                  )}
+                </div>
+                <button
+                  onClick={() => setSelectedDocument(null)}
+                  className="p-1 text-gray-400 hover:text-gray-600"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </Panel>
+          )}
+          
+          {/* Loading indicator */}
+          {isLoading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-70 z-50">
+              <div className="flex flex-col items-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#f15922]"></div>
                 <p className="mt-4 text-gray-600">Chargement des documents...</p>
               </div>
             </div>
-          ) : filteredDocuments.length === 0 ? (
-            <div className="h-full flex items-center justify-center">
-              <div className="text-center max-w-md p-6 bg-white/80 rounded-lg shadow-sm">
-                <File className="mx-auto text-gray-400 mb-4" size={48} />
-                <h3 className="text-xl font-medium text-gray-700 mb-2">
-                  Aucun document disponible
-                </h3>
-                <p className="text-gray-500">
-                  {searchTerm ? 
-                    "Aucun document ne correspond à votre recherche." : 
-                    "Aucun document n'est disponible pour affichage. Les fichiers audio en cours de transcription n'apparaissent pas dans la visualisation."}
+          )}
+          
+          {/* Empty state */}
+          {!isLoading && filteredDocuments.length === 0 && (
+            <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-70 z-50">
+              <div className="bg-white p-6 rounded-lg shadow-md max-w-md text-center">
+                <Info className="mx-auto text-gray-400 mb-3" size={32} />
+                <p className="text-gray-700 font-medium">Aucun document trouvé</p>
+                <p className="text-gray-500 mt-2">
+                  {searchTerm ? `Aucun résultat pour "${searchTerm}"` : 'Aucun document disponible.'}
                 </p>
               </div>
             </div>
-          ) : (
-            <ReactFlow
-              nodes={nodes}
-              edges={edges}
-              nodeTypes={nodeTypes}
-              connectionMode={ConnectionMode.Loose}
-              fitView
-              minZoom={0.1}
-              maxZoom={1.5}
-              defaultViewport={{ x: 0, y: 0, zoom: 0.5 }}
-              fitViewOptions={{
-                padding: 0.2,
-                includeHiddenNodes: false,
-                minZoom: 0.1,
-                maxZoom: 1.2
-              }}
-              proOptions={{ hideAttribution: true }}
-            >
-              <Background 
-                color="#2f5c54" 
-                gap={24} 
-                size={1.5} 
-                variant="dots" 
-              />
-              <Controls 
-                position="bottom-right"
-                showInteractive={false}
-                className="bg-white/90 p-2 rounded-lg shadow-lg"
-              />
-              <Panel position="top-right" className="bg-white/80 p-2 rounded-lg shadow-md mt-2 mr-2">
-                <div className="flex items-center gap-2">
-                  <ZoomIn size={16} className="text-gray-600" />
-                  <span className="text-xs text-gray-600">Zoom: molette de souris</span>
-                </div>
-              </Panel>
-            </ReactFlow>
           )}
-        </div>
-
-        <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm p-4 rounded-xl shadow-lg">
-          <h3 className="text-xs font-medium text-gray-600 mb-3 uppercase tracking-wider">
-            Légende
-          </h3>
-          <div className="space-y-2.5">
-            <div className="flex items-center gap-2">
-              <div className="w-2.5 h-2.5 rounded-full bg-[#f15922]" />
-              <span className="text-xs text-gray-600">IRSST</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-2.5 h-2.5 rounded-full bg-[#2f5c54]" />
-              <span className="text-xs text-gray-600">Dossiers</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-2.5 h-2.5 rounded-full bg-[#dba747]" />
-              <span className="text-xs text-gray-600">Documents</span>
-            </div>
-          </div>
-        </div>
-        
-        <div className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-sm p-4 rounded-xl shadow-lg">
-          <h3 className="text-xs font-medium text-gray-600 mb-3 uppercase tracking-wider">
-            Aide
-          </h3>
-          <p className="text-xs text-gray-600 max-w-xs">
-            Cliquez sur un document et utilisez le bouton "Envoyer à la conversation" pour partager le document avec Ringo. 
-            Il pourra alors analyser son contenu et répondre à vos questions.
-          </p>
-          <p className="text-xs text-gray-600 max-w-xs mt-2">
-            Note: Les fichiers audio en cours de transcription n'apparaissent pas dans la visualisation.
-          </p>
-        </div>
+        </ReactFlow>
       </div>
     </div>
   );

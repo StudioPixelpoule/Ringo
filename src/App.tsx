@@ -19,6 +19,8 @@ import { DocumentsPanel } from './components/DocumentsPanel';
 import { AdminControls } from './components/AdminControls';
 import { AudioTranscriptionModal } from './components/AudioTranscriptionModal';
 import { v4 as uuidv4 } from 'uuid';
+import { ErrorBoundary } from './lib/errorBoundary';
+import { logger } from './lib/logger';
 
 interface FolderStructure {
   [key: string]: {
@@ -72,10 +74,22 @@ function App() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
+      
+      // Log l'événement de connexion
+      if (session?.user) {
+        logger.info('Utilisateur connecté', { userId: session.user.id, email: session.user.email }, 'Auth');
+      }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
+      
+      // Log les événements d'authentification
+      if (_event === 'SIGNED_IN' && session?.user) {
+        logger.info('Utilisateur connecté', { userId: session.user.id, email: session.user.email }, 'Auth');
+      } else if (_event === 'SIGNED_OUT') {
+        logger.info('Utilisateur déconnecté', null, 'Auth');
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -108,6 +122,10 @@ function App() {
           
           if (existingContent) {
             console.log('Contenu du document trouvé dans la base de données');
+            logger.info('Contenu du document récupéré depuis la base de données', 
+              { documentId: currentSharedDocument.id, documentName: currentSharedDocument.name }, 
+              'DocumentProcessor');
+            
             setDocumentContent(existingContent);
             setDocumentProcessingStatus('completed');
             
@@ -132,6 +150,11 @@ function App() {
             setIsAudioTranscriptionModalOpen(true);
             setDocumentContent("Ce document est un fichier audio. Une transcription est nécessaire.");
             setDocumentProcessingStatus('processing');
+            
+            logger.info('Modal de transcription audio ouvert', 
+              { documentId: currentSharedDocument.id, documentName: currentSharedDocument.name }, 
+              'AudioTranscription');
+            
             return;
           }
           
@@ -142,10 +165,18 @@ function App() {
               content.includes("Ce format nécessite une conversion") ||
               content.includes("n'est pas pris en charge")) {
             console.log('Échec de l\'extraction automatique, demande de saisie manuelle');
+            logger.warning('Échec de l\'extraction automatique du document', 
+              { documentId: currentSharedDocument.id, documentName: currentSharedDocument.name, error: content }, 
+              'DocumentProcessor');
+            
             setDocumentContent("");
             setDocumentProcessingStatus('error');
             setManualDocumentInput(true);
           } else {
+            logger.info('Document extrait avec succès', 
+              { documentId: currentSharedDocument.id, documentName: currentSharedDocument.name, contentLength: content.length }, 
+              'DocumentProcessor');
+            
             setDocumentContent(content);
             setDocumentProcessingStatus('completed');
             
@@ -160,6 +191,10 @@ function App() {
           }
         } catch (error) {
           console.error("Erreur lors de l'extraction du contenu:", error);
+          logger.error("Erreur lors de l'extraction du contenu du document", 
+            { documentId: currentSharedDocument.id, documentName: currentSharedDocument.name, error }, 
+            'DocumentProcessor');
+          
           setDocumentProcessingStatus('error');
           setDocumentContent("Une erreur s'est produite lors de l'extraction du contenu du document.");
           setManualDocumentInput(true);
@@ -195,11 +230,15 @@ function App() {
 
         if (insertError) throw insertError;
         setProfile(newProfile);
+        
+        logger.info('Nouveau profil utilisateur créé', { userId: user.id, role: 'user' }, 'UserProfile');
       } else {
         setProfile(data);
+        logger.info('Profil utilisateur chargé', { userId: user.id, role: data.role }, 'UserProfile');
       }
     } catch (err) {
       console.error('Erreur lors du chargement du profil:', err);
+      logger.error('Erreur lors du chargement du profil utilisateur', { userId: user.id, error: err }, 'UserProfile');
     }
   };
 
@@ -251,8 +290,11 @@ function App() {
       const structure = buildFolderStructure(data || []);
       setFolderStructure(structure);
       setDocuments(data || []);
+      
+      logger.info('Documents chargés', { count: data?.length || 0 }, 'Documents');
     } catch (err) {
       console.error('Erreur lors du chargement des documents:', err);
+      logger.error('Erreur lors du chargement des documents', { error: err }, 'Documents');
     }
   };
 
@@ -274,8 +316,11 @@ function App() {
       if (!activeConversationId && data && data.length > 0) {
         setActiveConversationId(data[0].id);
       }
+      
+      logger.info('Conversations chargées', { count: data?.length || 0, userId: user.id }, 'Conversations');
     } catch (err) {
       console.error('Erreur lors du chargement des conversations:', err);
+      logger.error('Erreur lors du chargement des conversations', { userId: user.id, error: err }, 'Conversations');
     }
   };
 
@@ -290,8 +335,10 @@ function App() {
       if (error) throw error;
 
       setMessages(data || []);
+      logger.info('Messages chargés', { conversationId, count: data?.length || 0 }, 'Messages');
     } catch (err) {
       console.error('Erreur lors du chargement des messages:', err);
+      logger.error('Erreur lors du chargement des messages', { conversationId, error: err }, 'Messages');
     }
   };
 
@@ -314,8 +361,11 @@ function App() {
       // Recharger les conversations et sélectionner la nouvelle
       await loadConversations();
       setActiveConversationId(newConversation.id as string);
+      
+      logger.info('Nouvelle conversation créée', { conversationId: newConversation.id, userId: user.id }, 'Conversations');
     } catch (err) {
       console.error('Erreur lors de la création d\'une conversation:', err);
+      logger.error('Erreur lors de la création d\'une conversation', { userId: user.id, error: err }, 'Conversations');
     }
   };
 
@@ -345,8 +395,11 @@ function App() {
         const remainingConversations = conversations.filter(conv => conv.id !== conversationId);
         setActiveConversationId(remainingConversations.length > 0 ? remainingConversations[0].id : null);
       }
+      
+      logger.info('Conversation supprimée', { conversationId }, 'Conversations');
     } catch (err) {
       console.error('Erreur lors de la suppression de la conversation:', err);
+      logger.error('Erreur lors de la suppression de la conversation', { conversationId, error: err }, 'Conversations');
     }
   };
 
@@ -365,8 +418,11 @@ function App() {
           conv.id === conversationId ? { ...conv, title } : conv
         )
       );
+      
+      logger.info('Titre de conversation mis à jour', { conversationId, title }, 'Conversations');
     } catch (err) {
       console.error('Erreur lors de la mise à jour du titre:', err);
+      logger.error('Erreur lors de la mise à jour du titre de conversation', { conversationId, title, error: err }, 'Conversations');
     }
   };
 
@@ -385,6 +441,10 @@ function App() {
     // Simplifier l'affichage pour montrer uniquement le nom du fichier
     const message = `**Document partagé:** ${document.name}`;
     handleSendMessage(message);
+    
+    logger.info('Document partagé dans la conversation', 
+      { documentId: document.id, documentName: document.name, conversationId: activeConversationId }, 
+      'Conversation');
   };
 
   const removeSharedDocument = (document: Document) => {
@@ -392,6 +452,10 @@ function App() {
     if (currentSharedDocument?.id === document.id) {
       setCurrentSharedDocument(null);
     }
+    
+    logger.info('Document retiré de la conversation', 
+      { documentId: document.id, documentName: document.name }, 
+      'Conversation');
   };
 
   const handleManualDocumentContent = (content: string) => {
@@ -418,6 +482,10 @@ function App() {
         }
         return [...prev, {document: currentSharedDocument, content}];
       });
+      
+      logger.info('Contenu de document saisi manuellement', 
+        { documentId: currentSharedDocument.id, documentName: currentSharedDocument.name, contentLength: content.length }, 
+        'DocumentProcessor');
     }
   };
 
@@ -439,6 +507,10 @@ function App() {
         }
         return [...prev, {document: currentSharedDocument, content: transcription}];
       });
+      
+      logger.info('Transcription audio complétée', 
+        { documentId: currentSharedDocument.id, documentName: currentSharedDocument.name, transcriptionLength: transcription.length }, 
+        'AudioTranscription');
     }
   };
 
@@ -453,6 +525,9 @@ function App() {
       
       if (checkError) {
         console.error('Erreur lors de la vérification du contenu existant:', checkError);
+        logger.error('Erreur lors de la vérification du contenu existant', 
+          { documentId, error: checkError }, 
+          'DocumentProcessor');
         return;
       }
       
@@ -469,6 +544,13 @@ function App() {
         
         if (updateError) {
           console.error('Erreur lors de la mise à jour du contenu manuel:', updateError);
+          logger.error('Erreur lors de la mise à jour du contenu manuel', 
+            { documentId, error: updateError }, 
+            'DocumentProcessor');
+        } else {
+          logger.info('Contenu de document mis à jour manuellement', 
+            { documentId, contentLength: content.length }, 
+            'DocumentProcessor');
         }
       } else {
         // Créer un nouvel enregistrement
@@ -482,10 +564,20 @@ function App() {
         
         if (insertError) {
           console.error('Erreur lors du stockage du contenu manuel:', insertError);
+          logger.error('Erreur lors du stockage du contenu manuel', 
+            { documentId, error: insertError }, 
+            'DocumentProcessor');
+        } else {
+          logger.info('Nouveau contenu de document stocké manuellement', 
+            { documentId, contentLength: content.length }, 
+            'DocumentProcessor');
         }
       }
     } catch (error) {
       console.error('Erreur lors du stockage du contenu manuel:', error);
+      logger.error('Erreur lors du stockage du contenu manuel', 
+        { documentId, error }, 
+        'DocumentProcessor');
     }
   };
 
@@ -591,10 +683,18 @@ Réponds de manière concise, précise et professionnelle. Si tu ne connais pas 
       
       if (isAskingForSummary && documentContent && currentSharedDocument) {
         // Générer un résumé du document
+        logger.info('Génération d\'un résumé de document', 
+          { documentId: currentSharedDocument.id, documentName: currentSharedDocument.name }, 
+          'OpenAI');
+        
         const summary = await summarizeDocument(documentContent, currentSharedDocument.name);
         response = { content: summary };
       } else {
         // Réponse normale via l'API OpenAI
+        logger.info('Envoi de requête à l\'API OpenAI', 
+          { messageCount: fullMessages.length, conversationId: activeConversationId }, 
+          'OpenAI');
+        
         response = await createChatCompletion({
           messages: fullMessages,
           temperature: 0.7
@@ -619,9 +719,16 @@ Réponds de manière concise, précise et professionnelle. Si tu ne connais pas 
         .insert([assistantMessage]);
 
       if (assistantMessageError) throw assistantMessageError;
+      
+      logger.info('Message assistant ajouté', 
+        { conversationId: activeConversationId, messageLength: assistantMessage.content.length }, 
+        'Conversation');
 
     } catch (err) {
       console.error('Erreur lors de l\'envoi du message:', err);
+      logger.error('Erreur lors de l\'envoi du message', 
+        { conversationId: activeConversationId, error: err }, 
+        'Conversation');
       
       // Ajouter un message d'erreur
       const errorMessage: Message = {
@@ -668,8 +775,11 @@ Réponds de manière concise, précise et professionnelle. Si tu ne connais pas 
       });
 
       if (error) throw error;
+      
+      logger.info('Tentative de connexion réussie', { email }, 'Auth');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur de connexion');
+      logger.error('Échec de connexion', { email, error: err }, 'Auth');
     } finally {
       setLoading(false);
     }
@@ -679,8 +789,11 @@ Réponds de manière concise, précise et professionnelle. Si tu ne connais pas 
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
+      
+      logger.info('Déconnexion réussie', { userId: user?.id }, 'Auth');
     } catch (err) {
       console.error('Erreur lors de la déconnexion:', err);
+      logger.error('Erreur lors de la déconnexion', { userId: user?.id, error: err }, 'Auth');
     }
   };
 
@@ -694,9 +807,12 @@ Réponds de manière concise, précise et professionnelle. Si tu ne connais pas 
       // Mettre à jour l'état
       setOpenAIConfigured(true);
       
+      logger.info('Clé API OpenAI configurée', null, 'Config');
+      
       return true;
     } catch (error) {
       console.error('[OPENAI] Erreur lors de la sauvegarde de la clé API:', error);
+      logger.error('Erreur lors de la sauvegarde de la clé API OpenAI', { error }, 'Config');
       return false;
     }
   };
@@ -707,7 +823,10 @@ Réponds de manière concise, précise et professionnelle. Si tu ne connais pas 
         <div className="w-full max-w-md">
           <div className="text-center mb-16">
             <RingoLogo className="text-white mx-auto mb-6" size={120} />
-            <h1 className="text-5xl font-bold text-white">RINGO</h1>
+            <h1 className="text-5xl font-bold text-white relative">
+              RINGO
+              <span className="text-white text-xs absolute top-0 ml-1" style={{ fontSize: '0.3em', verticalAlign: 'super' }}>By AI</span>
+            </h1>
           </div>
 
           <form onSubmit={handleLogin} className="bg-white bg-opacity-10 backdrop-blur-lg rounded-2xl shadow-xl p-8 space-y-6">
@@ -759,182 +878,184 @@ Réponds de manière concise, précise et professionnelle. Si tu ne connais pas 
   }
 
   return (
-    <div className="flex h-screen">
-      {/* Left Sidebar */}
-      <div className="flex flex-col w-[300px]">
-        {/* Conversations Section */}
-        <ConversationList 
-          conversations={conversations}
-          activeConversationId={activeConversationId}
-          onSelectConversation={setActiveConversationId}
-          onCreateConversation={createNewConversation}
-          onDeleteConversation={deleteConversation}
-          onUpdateConversationTitle={updateConversationTitle}
-        />
-      </div>
+    <ErrorBoundary userId={user.id}>
+      <div className="flex h-screen">
+        {/* Left Sidebar */}
+        <div className="flex flex-col w-[300px]">
+          {/* Conversations Section */}
+          <ConversationList 
+            conversations={conversations}
+            activeConversationId={activeConversationId}
+            onSelectConversation={setActiveConversationId}
+            onCreateConversation={createNewConversation}
+            onDeleteConversation={deleteConversation}
+            onUpdateConversationTitle={updateConversationTitle}
+          />
+        </div>
 
-      {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col">
-        {/* Header */}
-        <div className="bg-[#f15922] p-4 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <RingoLogo className="text-white" size={64} />
-            <div className="flex items-start">
-              <h1 className="text-2xl font-bold text-white">RINGO</h1>
-              <span className="text-white text-xs ml-1" style={{ verticalAlign: 'super' }}>by AI</span>
+        {/* Main Chat Area */}
+        <div className="flex-1 flex flex-col">
+          {/* Header */}
+          <div className="bg-[#f15922] p-4 flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              <RingoLogo className="text-white" size={64} />
+              <div className="flex items-start">
+                <h1 className="text-2xl font-bold text-white">RINGO</h1>
+                <span className="text-white text-xs ml-1" style={{ verticalAlign: 'super' }}>by AI</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              {profile?.role === 'admin' && (
+                <button 
+                  onClick={() => setIsImportOpen(true)}
+                  className="btn-neumorphic bg-[#f15922] text-white p-3 rounded-full hover:text-white focus:outline-none"
+                  title="Importer un document"
+                >
+                  <DocumentStackIcon className="text-white" size={24} />
+                </button>
+              )}
+              <span className="text-white">{user.email}</span>
+              <button
+                onClick={handleLogout} 
+                className="btn-neumorphic bg-[#f15922] text-white p-3 rounded-full hover:text-white focus:outline-none"
+                title="Déconnexion"
+              >
+                <LogoutIcon className="text-white" size={24} />
+              </button>
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            {profile?.role === 'admin' && (
-              <button 
-                onClick={() => setIsImportOpen(true)}
-                className="btn-neumorphic bg-[#f15922] text-white p-3 rounded-full hover:text-white focus:outline-none"
-                title="Importer un document"
-              >
-                <DocumentStackIcon className="text-white" size={24} />
-              </button>
-            )}
-            <span className="text-white">{user.email}</span>
-            <button
-              onClick={handleLogout} 
-              className="btn-neumorphic bg-[#f15922] text-white p-3 rounded-full hover:text-white focus:outline-none"
-              title="Déconnexion"
-            >
-              <LogoutIcon className="text-white" size={24} />
-            </button>
+
+          {/* Chat Content */}
+          <ConversationComponent 
+            messages={messages}
+            isLoading={isProcessing || documentProcessingStatus === 'processing'}
+          />
+
+          {/* Documents Panel */}
+          {sharedDocuments.length > 0 && (
+            <DocumentsPanel
+              documents={sharedDocuments}
+              currentDocument={currentSharedDocument}
+              onSelectDocument={setCurrentSharedDocument}
+              onRemoveDocument={removeSharedDocument}
+            />
+          )}
+
+          {/* Manual Document Input */}
+          {manualDocumentInput && (
+            <div className="bg-[#f8f7f2] p-4 border-t border-gray-200">
+              <div className="max-w-4xl mx-auto">
+                <h3 className="text-lg font-medium text-[#2F4F4F] mb-2">
+                  Saisie manuelle du contenu du document
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  L'extraction automatique du contenu a échoué. Veuillez copier-coller le contenu du document ci-dessous.
+                </p>
+                <textarea
+                  className="w-full h-32 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#f15922] focus:border-transparent"
+                  placeholder="Collez ici le contenu du document..."
+                  onChange={(e) => setDocumentContent(e.target.value)}
+                  value={documentContent}
+                ></textarea>
+                <div className="flex justify-end mt-2 space-x-2">
+                  <button
+                    onClick={() => setManualDocumentInput(false)}
+                    className="px-4 py-2 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    onClick={() => handleManualDocumentContent(documentContent)}
+                    className="px-4 py-2 text-white bg-[#f15922] rounded-lg hover:bg-[#d14811] transition-colors"
+                    disabled={!documentContent.trim()}
+                  >
+                    Envoyer
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Chat Input */}
+          <ChatInput 
+            onSendMessage={handleSendMessage}
+            onOpenMindMap={() => setIsMindMapOpen(true)}
+            isLoading={isProcessing || documentProcessingStatus === 'processing'}
+          />
+        </div>
+
+        {/* Right Sidebar */}
+        <div className="w-[300px] bg-[#dba747]">
+          <div className="p-4">
+            <h2 className="text-white text-lg font-medium mb-4">Rapports</h2>
+            <div className="bg-white rounded-lg p-4">
+              <h3 className="text-[#2F4F4F] font-medium mb-2">Modèles</h3>
+              <p className="text-[#2F4F4F] text-center mt-4">Aucun modèle disponible</p>
+            </div>
           </div>
         </div>
 
-        {/* Chat Content */}
-        <ConversationComponent 
-          messages={messages}
-          isLoading={isProcessing || documentProcessingStatus === 'processing'}
+        {/* MindMap Modal */}
+        <MindMapModal
+          isOpen={isMindMapOpen}
+          onClose={() => setIsMindMapOpen(false)}
+          documents={documents}
+          onSendToConversation={handleSendDocumentToConversation}
         />
 
-        {/* Documents Panel */}
-        {sharedDocuments.length > 0 && (
-          <DocumentsPanel
-            documents={sharedDocuments}
-            currentDocument={currentSharedDocument}
-            onSelectDocument={setCurrentSharedDocument}
-            onRemoveDocument={removeSharedDocument}
+        {/* Import Window */}
+        {profile?.role === 'admin' && (
+          <ImportWindow
+            isOpen={isImportOpen}
+            onClose={() => setIsImportOpen(false)}
+            userId={user.id}
+            onDocumentAdded={loadDocuments}
+            folderStructure={folderStructure}
           />
         )}
 
-        {/* Manual Document Input */}
-        {manualDocumentInput && (
-          <div className="bg-[#f8f7f2] p-4 border-t border-gray-200">
-            <div className="max-w-4xl mx-auto">
-              <h3 className="text-lg font-medium text-[#2F4F4F] mb-2">
-                Saisie manuelle du contenu du document
-              </h3>
-              <p className="text-sm text-gray-600 mb-4">
-                L'extraction automatique du contenu a échoué. Veuillez copier-coller le contenu du document ci-dessous.
-              </p>
-              <textarea
-                className="w-full h-32 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#f15922] focus:border-transparent"
-                placeholder="Collez ici le contenu du document..."
-                onChange={(e) => setDocumentContent(e.target.value)}
-                value={documentContent}
-              ></textarea>
-              <div className="flex justify-end mt-2 space-x-2">
-                <button
-                  onClick={() => setManualDocumentInput(false)}
-                  className="px-4 py-2 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                >
-                  Annuler
-                </button>
-                <button
-                  onClick={() => handleManualDocumentContent(documentContent)}
-                  className="px-4 py-2 text-white bg-[#f15922] rounded-lg hover:bg-[#d14811] transition-colors"
-                  disabled={!documentContent.trim()}
-                >
-                  Envoyer
-                </button>
-              </div>
-            </div>
-          </div>
+        {/* OpenAI Key Modal */}
+        <OpenAIKeyModal
+          isOpen={isOpenAIKeyModalOpen}
+          onClose={() => setIsOpenAIKeyModalOpen(false)}
+          onSave={handleSaveOpenAIKey}
+        />
+
+        {/* Audio Transcription Modal */}
+        {isAudioTranscriptionModalOpen && currentSharedDocument && (
+          <AudioTranscriptionModal
+            isOpen={isAudioTranscriptionModalOpen}
+            onClose={() => setIsAudioTranscriptionModalOpen(false)}
+            document={currentSharedDocument}
+            onTranscriptionComplete={handleAudioTranscriptionComplete}
+          />
         )}
 
-        {/* Chat Input */}
-        <ChatInput 
-          onSendMessage={handleSendMessage}
-          onOpenMindMap={() => setIsMindMapOpen(true)}
-          isLoading={isProcessing || documentProcessingStatus === 'processing'}
-        />
-      </div>
+        {/* Admin Controls */}
+        {profile?.role === 'admin' && (
+          <AdminControls userId={user.id} />
+        )}
 
-      {/* Right Sidebar */}
-      <div className="w-[300px] bg-[#dba747]">
-        <div className="p-4">
-          <h2 className="text-white text-lg font-medium mb-4">Rapports</h2>
-          <div className="bg-white rounded-lg p-4">
-            <h3 className="text-[#2F4F4F] font-medium mb-2">Modèles</h3>
-            <p className="text-[#2F4F4F] text-center mt-4">Aucun modèle disponible</p>
-          </div>
-        </div>
-      </div>
-
-      {/* MindMap Modal */}
-      <MindMapModal
-        isOpen={isMindMapOpen}
-        onClose={() => setIsMindMapOpen(false)}
-        documents={documents}
-        onSendToConversation={handleSendDocumentToConversation}
-      />
-
-      {/* Import Window */}
-      {profile?.role === 'admin' && (
-        <ImportWindow
-          isOpen={isImportOpen}
-          onClose={() => setIsImportOpen(false)}
-          userId={user.id}
-          onDocumentAdded={loadDocuments}
-          folderStructure={folderStructure}
-        />
-      )}
-
-      {/* OpenAI Key Modal */}
-      <OpenAIKeyModal
-        isOpen={isOpenAIKeyModalOpen}
-        onClose={() => setIsOpenAIKeyModalOpen(false)}
-        onSave={handleSaveOpenAIKey}
-      />
-
-      {/* Audio Transcription Modal */}
-      {isAudioTranscriptionModalOpen && currentSharedDocument && (
-        <AudioTranscriptionModal
-          isOpen={isAudioTranscriptionModalOpen}
-          onClose={() => setIsAudioTranscriptionModalOpen(false)}
-          document={currentSharedDocument}
-          onTranscriptionComplete={handleAudioTranscriptionComplete}
-        />
-      )}
-
-      {/* Admin Controls */}
-      {profile?.role === 'admin' && (
-        <AdminControls userId={user.id} />
-      )}
-
-      {/* OpenAI Configuration Banner */}
-      {!openAIConfigured && (
-        <div className="fixed bottom-0 left-0 right-0 bg-yellow-100 p-4 border-t border-yellow-200 flex items-center justify-between">
-          <div className="flex items-center">
-            <AlertCircle className="text-yellow-600 mr-3" size={24} />
-            <div>
-              <p className="font-medium text-yellow-800">Clé API OpenAI non configurée</p>
-              <p className="text-yellow-700 text-sm">Les fonctionnalités d'IA ne sont pas disponibles. Configurez votre clé API pour activer toutes les fonctionnalités.</p>
+        {/* OpenAI Configuration Banner */}
+        {!openAIConfigured && (
+          <div className="fixed bottom-0 left-0 right-0 bg-yellow-100 p-4 border-t border-yellow-200 flex items-center justify-between">
+            <div className="flex items-center">
+              <AlertCircle className="text-yellow-600 mr-3" size={24} />
+              <div>
+                <p className="font-medium text-yellow-800">Clé API OpenAI non configurée</p>
+                <p className="text-yellow-700 text-sm">Les fonctionnalités d'IA ne sont pas disponibles. Configurez votre clé API pour activer toutes les fonctionnalités.</p>
+              </div>
             </div>
+            <button
+              onClick={() => setIsOpenAIKeyModalOpen(true)} 
+              className="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors"
+            >
+              Configurer
+            </button>
           </div>
-          <button
-            onClick={() => setIsOpenAIKeyModalOpen(true)} 
-            className="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors"
-          >
-            Configurer
-          </button>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </ErrorBoundary>
   );
 }
 

@@ -45,12 +45,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   return (
-    <div className="bg-[#f15922] p-4">
+    <div className="bg-[#106f69] p-4">
       <form onSubmit={handleSubmit} className="flex gap-2">
         <button 
           type="button"
           onClick={onOpenMindMap}
-          className="btn-neumorphic bg-[#3C584E] p-3 rounded-full transition-all duration-300"
+          className="btn-neumorphic bg-[#f15922] p-3 rounded-full transition-all duration-300 text-white hover:bg-[#d14811]"
           title="Voir la mind map"
         >
           <MindMapIcon className="text-white" size={20} />
@@ -72,7 +72,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         <button 
           type="submit" 
           className={`
-            btn-neumorphic bg-[#3C584E] p-3 rounded-full transition-all duration-300
+            btn-neumorphic bg-[#f15922] p-3 rounded-full transition-all duration-300 text-white hover:bg-[#d14811]
             ${isLoading || !message.trim() ? 'opacity-50 cursor-not-allowed' : 'opacity-100'}
           `}
           disabled={isLoading || !message.trim()}

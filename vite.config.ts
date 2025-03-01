@@ -12,11 +12,11 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
-    sourcemap: false,
+    sourcemap: process.env.NODE_ENV !== 'production',
     minify: 'terser',
     terserOptions: {
       compress: {
-        drop_console: true,
+        drop_console: process.env.NODE_ENV === 'production',
         drop_debugger: true
       }
     },
@@ -26,7 +26,9 @@ export default defineConfig({
           vendor: ['react', 'react-dom'],
           supabase: ['@supabase/supabase-js'],
           ui: ['lucide-react', 'reactflow'],
-          utils: ['uuid', 'd3']
+          utils: ['uuid', 'd3'],
+          openai: ['openai'],
+          document: ['mammoth', 'pdf-parse', 'xlsx']
         }
       }
     }
@@ -49,6 +51,17 @@ export default defineConfig({
             console.log('Received Response from the Target:', proxyRes.statusCode, req.url);
           });
         },
+        // Augmenter les timeouts du proxy
+        timeout: 600000, // 10 minutes
+        proxyTimeout: 600000, // 10 minutes
+        // Ajouter des options pour éviter les erreurs de socket hang up
+        ws: true,
+        secure: false,
+        onProxyReq: (proxyReq) => {
+          // Augmenter le timeout de la requête
+          proxyReq.setHeader('Connection', 'keep-alive');
+          proxyReq.setHeader('Keep-Alive', 'timeout=600');
+        }
       }
     }
   },
@@ -59,7 +72,11 @@ export default defineConfig({
       '@supabase/supabase-js',
       'lucide-react',
       'reactflow',
-      'uuid'
+      'uuid',
+      'marked'
+    ],
+    exclude: [
+      'fluent-ffmpeg'
     ]
   }
 });

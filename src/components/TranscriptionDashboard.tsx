@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { AlertCircle, CheckCircle, Clock, RefreshCw, XCircle, Play, Pause, Download } from 'lucide-react';
 import { AudioIcon } from './AudioIcon';
 import type { Document } from '../lib/types';
+import { processAudioForTranscription } from '../lib/audioProcessor';
 
 interface TranscriptionStatus {
   id: string;
@@ -74,7 +75,18 @@ export const TranscriptionDashboard: React.FC<TranscriptionDashboardProps> = ({
         if (content) {
           if (content.extraction_status === 'processing') {
             status = 'processing';
-            progress = 50; // Estimation
+            
+            // Extraire le pourcentage de progression du message de statut
+            if (content.content) {
+              const progressMatch = content.content.match(/\((\d+)%\)/);
+              if (progressMatch && progressMatch[1]) {
+                progress = parseInt(progressMatch[1], 10);
+              } else {
+                progress = 50; // Estimation par défaut
+              }
+            } else {
+              progress = 50; // Estimation par défaut
+            }
           } else if (content.extraction_status === 'success') {
             status = 'completed';
             progress = 100;
@@ -197,7 +209,7 @@ export const TranscriptionDashboard: React.FC<TranscriptionDashboardProps> = ({
       const { error: updateError } = await supabase
         .from('document_contents')
         .update({
-          content: "Pour les fichiers audio, une transcription est en cours. Veuillez patienter...",
+          content: "Transcription en cours: Préparation du fichier audio... (0%)",
           extraction_status: 'processing',
           updated_at: new Date().toISOString()
         })
@@ -208,36 +220,22 @@ export const TranscriptionDashboard: React.FC<TranscriptionDashboardProps> = ({
       // Rafraîchir les données
       loadTranscriptions();
 
-      // Lancer la transcription via l'API
-      const response = await fetch('/api/transcribe-audio', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ audioUrl: document.url })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Erreur lors de la transcription');
-      }
-
-      const result = await response.json();
-      
-      if (result.success && result.transcription) {
-        // Mettre à jour le contenu avec la transcription
-        const { error: contentError } = await supabase
+      // Importer le processeur audio et lancer la transcription
+      try {
+        await processAudioForTranscription(document.url, documentId);
+        // La mise à jour du statut est gérée par processAudioForTranscription
+      } catch (transcriptionError) {
+        console.error('Erreur lors de la transcription:', transcriptionError);
+        
+        // Mettre à jour le statut en échec
+        await supabase
           .from('document_contents')
           .update({
-            content: result.transcription,
-            extraction_status: 'success',
+            content: "Ce document est un fichier audio. La transcription automatique a échoué. Veuillez saisir manuellement la transcription.",
+            extraction_status: 'failed',
             updated_at: new Date().toISOString()
           })
           .eq('document_id', documentId);
-
-        if (contentError) throw contentError;
-      } else {
-        throw new Error('Aucune transcription retournée');
       }
 
       // Rafraîchir les données

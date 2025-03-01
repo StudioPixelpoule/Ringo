@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import type { Document } from './types';
 import OpenAI from 'openai';
+import { processAudioForTranscription } from './audioProcessor';
 
 // Créer une instance OpenAI avec la clé API
 const openai = new OpenAI({
@@ -35,12 +36,30 @@ export async function extractDocumentContent(document: Document): Promise<string
     // Vérifier si c'est un fichier audio
     if (['mp3', 'wav', 'ogg', 'm4a'].includes(fileExtension || '')) {
       console.log('[DOCUMENT_EXTRACTION] Fichier audio détecté, lancement de la transcription');
-      const transcription = await transcribeAudio(document.url);
       
-      // Stocker la transcription dans la base de données
-      await storeDocumentContent(document.id, transcription, 'success');
+      // Stocker un message temporaire pendant la transcription
+      await storeDocumentContent(
+        document.id,
+        "Pour les fichiers audio, une transcription est en cours. Veuillez patienter...",
+        'processing'
+      );
       
-      return transcription;
+      // Lancer le processus de transcription audio avancé
+      try {
+        const transcription = await processAudioForTranscription(document.url, document.id);
+        
+        // Stocker la transcription dans la base de données
+        await storeDocumentContent(document.id, transcription, 'success');
+        
+        return transcription;
+      } catch (transcriptionError) {
+        console.error('[DOCUMENT_EXTRACTION] Erreur lors de la transcription audio:', transcriptionError);
+        
+        const errorMessage = "Ce document est un fichier audio. La transcription automatique a échoué. Veuillez saisir manuellement la transcription.";
+        await storeDocumentContent(document.id, errorMessage, 'failed');
+        
+        return errorMessage;
+      }
     }
     
     // Extraire le chemin du fichier depuis l'URL
@@ -838,7 +857,7 @@ export async function processUploadedDocument(document: Document): Promise<boole
       
       // Lancer la transcription
       try {
-        const transcription = await transcribeAudio(document.url);
+        const transcription = await processAudioForTranscription(document.url, document.id);
         
         // Stocker la transcription dans la base de données
         await storeDocumentContent(document.id, transcription, 'success');
@@ -920,8 +939,7 @@ export async function generateDocumentEmbedding(content: string): Promise<number
   // Si le contenu est vide ou trop court, retourner null
   if (!content || content.length < 100) {
     console.log('[EMBEDDING] Contenu trop court pour générer un embedding:', content.length);
-    return null;
-  }
+    return null; }
   
   // Vérifier si la clé API est disponible
   if (!import.meta.env.VITE_OPENAI_API_KEY || import.meta.env.VITE_OPENAI_API_KEY === 'your-openai-api-key-here') {
@@ -955,97 +973,5 @@ export async function generateDocumentEmbedding(content: string): Promise<number
   } catch (error) {
     console.error('[EMBEDDING] Erreur lors de la génération de l\'embedding:', error);
     return null;
-  }
-}
-
-/**
- * Transcrit un fichier audio en utilisant l'API Whisper d'OpenAI
- * @param audioUrl URL du fichier audio à transcrire
- * @returns Le texte transcrit
- */
-export async function transcribeAudio(audioUrl: string): Promise<string> {
-  try {
-    console.log('[AUDIO_TRANSCRIPTION] Début de la transcription pour:', audioUrl);
-    
-    // Essayer d'abord la transcription côté serveur
-    try {
-      console.log('[AUDIO_TRANSCRIPTION] Tentative de transcription côté serveur');
-      
-      const response = await fetch('/api/transcribe-audio', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ audioUrl })
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error('[AUDIO_TRANSCRIPTION] Erreur lors de la transcription côté serveur:', errorData);
-        throw new Error(errorData.message || 'Erreur lors de la transcription côté serveur');
-      }
-      
-      const result = await response.json();
-      
-      if (result.success && result.transcription) {
-        console.log('[AUDIO_TRANSCRIPTION] Transcription côté serveur réussie');
-        return result.transcription;
-      }
-      
-      throw new Error('Aucune transcription retournée par le serveur');
-      
-    } catch (serverError) {
-      console.warn('[AUDIO_TRANSCRIPTION] Échec de la transcription côté serveur, tentative côté client:', serverError);
-      
-      // Si la transcription côté serveur échoue, essayer côté client
-      try {
-        console.log('[AUDIO_TRANSCRIPTION] Téléchargement du fichier audio côté client');
-        
-        const audioResponse = await fetch(audioUrl);
-        if (!audioResponse.ok) {
-          throw new Error("Erreur HTTP: " + audioResponse.status);
-        }
-        
-        const audioBlob = await audioResponse.blob();
-        console.log('[AUDIO_TRANSCRIPTION] Fichier audio téléchargé, taille:', audioBlob.size);
-        
-        // Vérifier la taille du fichier
-        const maxSizeInBytes = 25 * 1024 * 1024; // 25 MB
-        if (audioBlob.size > maxSizeInBytes) {
-          return "Ce fichier audio est trop volumineux pour être transcrit automatiquement (limite de 25 Mo). Veuillez saisir manuellement la transcription.";
-        }
-        
-        // Créer un FormData pour l'envoi à l'API
-        const formData = new FormData();
-        formData.append('file', audioBlob, 'audio.mp3');
-        formData.append('model', 'whisper-1');
-        formData.append('language', 'fr'); // Langue française
-        
-        console.log('[AUDIO_TRANSCRIPTION] Envoi à l\'API OpenAI pour transcription');
-        
-        // Appeler l'API OpenAI pour la transcription
-        const openaiClient = new OpenAI({
-          apiKey: import.meta.env.VITE_OPENAI_API_KEY || localStorage.getItem('openai-api-key') || 'dummy-key',
-          dangerouslyAllowBrowser: true
-        });
-        
-        const transcriptionResponse = await openaiClient.audio.transcriptions.create({
-          file: new File([audioBlob], 'audio.mp3', { type: audioBlob.type }),
-          model: 'whisper-1',
-          language: 'fr'
-        });
-        
-        console.log('[AUDIO_TRANSCRIPTION] Transcription côté client réussie');
-        return transcriptionResponse.text;
-        
-      } catch (clientError) {
-        console.error('[AUDIO_TRANSCRIPTION] Échec de la transcription côté client:', clientError);
-        return "Ce document est un fichier audio. La transcription automatique a échoué. Veuillez saisir manuellement la transcription.";
-      }
-    }
-    
-  } catch (error) {
-    console.error('[AUDIO_TRANSCRIPTION] Erreur lors de la transcription audio:', error);
-    return "Ce document est un fichier audio. Une erreur s'est produite lors de la tentative de transcription. Veuillez saisir manuellement la transcription.";
   }
 }

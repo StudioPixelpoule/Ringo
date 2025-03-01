@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { X, BookAudioIcon as AudioIcon, RefreshCw, Save } from 'lucide-react';
+import { X, BookAudioIcon as AudioIcon, RefreshCw, Save, AlertCircle, Info } from 'lucide-react';
 import { TranscriptionProgress } from './TranscriptionProgress';
 import { supabase } from '../lib/supabase';
 import type { Document } from '../lib/types';
+import { processAudioForTranscription } from '../lib/audioProcessor';
+import { logger } from '../lib/logger';
 
 interface AudioTranscriptionModalProps {
   isOpen: boolean;
@@ -23,13 +25,49 @@ export const AudioTranscriptionModal: React.FC<AudioTranscriptionModalProps> = (
   const [error, setError] = useState<string | null>(null);
   const [isManualInput, setIsManualInput] = useState(false);
   const [manualTranscription, setManualTranscription] = useState('');
+  const [fileSize, setFileSize] = useState<number>(0);
+  const [isLargeFile, setIsLargeFile] = useState<boolean>(false);
+  const [transcriptionAttempts, setTranscriptionAttempts] = useState<number>(0);
+  const [showTips, setShowTips] = useState<boolean>(false);
 
   // Charger le contenu actuel
   useEffect(() => {
     if (isOpen && document) {
       loadTranscription();
+      checkFileSize();
     }
   }, [isOpen, document]);
+
+  const checkFileSize = async () => {
+    try {
+      // Utiliser la taille du document si disponible
+      if (document.size) {
+        setFileSize(document.size);
+        setIsLargeFile(document.size > 25 * 1024 * 1024); // 25MB
+        return;
+      }
+      
+      // Sinon, essayer de récupérer la taille via une requête HEAD
+      try {
+        const response = await fetch(document.url, { method: 'HEAD' });
+        const contentLength = response.headers.get('content-length');
+        if (contentLength) {
+          const size = parseInt(contentLength, 10);
+          setFileSize(size);
+          setIsLargeFile(size > 25 * 1024 * 1024); // 25MB
+        }
+      } catch (fetchError) {
+        console.error('[AUDIO_MODAL] Erreur lors de la requête HEAD:', fetchError);
+        // Si la requête HEAD échoue, on suppose que c'est un fichier volumineux
+        setIsLargeFile(true);
+      }
+    } catch (error) {
+      console.error('[AUDIO_MODAL] Erreur lors de la vérification de la taille du fichier:', error);
+      logger.error('Erreur lors de la vérification de la taille du fichier audio', 
+        { documentId: document.id, documentName: document.name, error }, 
+        'AudioTranscriptionModal');
+    }
+  };
 
   const loadTranscription = async () => {
     try {
@@ -48,7 +86,7 @@ export const AudioTranscriptionModal: React.FC<AudioTranscriptionModalProps> = (
         setTranscription(data.content);
         
         // Vérifier si c'est un message d'attente ou d'erreur
-        if (data.content.includes("Pour les fichiers audio, une transcription est en cours")) {
+        if (data.content.includes("Transcription en cours")) {
           setIsTranscribing(true);
         } else if (data.content.includes("transcription automatique a échoué") || 
                   data.content.includes("erreur s'est produite") ||
@@ -56,13 +94,18 @@ export const AudioTranscriptionModal: React.FC<AudioTranscriptionModalProps> = (
                   data.extraction_status === 'manual') {
           setIsManualInput(true);
           setManualTranscription('');
-        } else {
+        } else if (data.extraction_status === 'success') {
           setIsTranscribing(false);
           setIsManualInput(false);
+        } else {
+          setIsTranscribing(true);
         }
       }
     } catch (err) {
       console.error('Erreur lors du chargement de la transcription:', err);
+      logger.error('Erreur lors du chargement de la transcription', 
+        { documentId: document.id, documentName: document.name, error: err }, 
+        'AudioTranscriptionModal');
       setError('Erreur lors du chargement de la transcription');
       setIsManualInput(true);
     } finally {
@@ -81,6 +124,7 @@ export const AudioTranscriptionModal: React.FC<AudioTranscriptionModalProps> = (
 
   const handleRetryTranscription = async () => {
     try {
+      setTranscriptionAttempts(prev => prev + 1);
       setIsTranscribing(true);
       setIsManualInput(false);
       setError(null);
@@ -89,7 +133,7 @@ export const AudioTranscriptionModal: React.FC<AudioTranscriptionModalProps> = (
       const { error: updateError } = await supabase
         .from('document_contents')
         .update({
-          content: "Pour les fichiers audio, une transcription est en cours. Veuillez patienter...",
+          content: "Transcription en cours: Préparation du fichier audio... (0%)",
           extraction_status: 'processing',
           updated_at: new Date().toISOString()
         })
@@ -97,43 +141,31 @@ export const AudioTranscriptionModal: React.FC<AudioTranscriptionModalProps> = (
 
       if (updateError) throw updateError;
 
-      // Lancer la transcription via l'API
-      const response = await fetch('/api/transcribe-audio', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ audioUrl: document.url })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Erreur lors de la transcription');
-      }
-
-      const result = await response.json();
-      
-      if (result.success && result.transcription) {
-        // Mettre à jour le contenu avec la transcription
-        const { error: contentError } = await supabase
-          .from('document_contents')
-          .update({
-            content: result.transcription,
-            extraction_status: 'success',
-            updated_at: new Date().toISOString()
-          })
-          .eq('document_id', document.id);
-
-        if (contentError) throw contentError;
+      // Lancer la transcription avec le nouveau processeur audio
+      try {
+        logger.info('Lancement de la transcription audio', 
+          { documentId: document.id, documentName: document.name, attempt: transcriptionAttempts + 1 }, 
+          'AudioTranscriptionModal');
         
-        setTranscription(result.transcription);
+        const transcription = await processAudioForTranscription(document.url, document.id);
+        
+        // La mise à jour du contenu est déjà gérée par processAudioForTranscription
+        setTranscription(transcription);
         setIsTranscribing(false);
-        onTranscriptionComplete(result.transcription);
-      } else {
-        throw new Error('Aucune transcription retournée');
+        onTranscriptionComplete(transcription);
+        
+        logger.info('Transcription audio réussie', 
+          { documentId: document.id, documentName: document.name, transcriptionLength: transcription.length }, 
+          'AudioTranscriptionModal');
+      } catch (transcriptionError) {
+        console.error('[AUDIO_MODAL] Erreur lors de la transcription:', transcriptionError);
+        logger.error('Erreur lors de la transcription audio', 
+          { documentId: document.id, documentName: document.name, error: transcriptionError, attempt: transcriptionAttempts + 1 }, 
+          'AudioTranscriptionModal');
+        throw transcriptionError;
       }
     } catch (error) {
-      console.error('Erreur lors de la relance de la transcription:', error);
+      console.error('[AUDIO_MODAL] Erreur lors de la relance de la transcription:', error);
       setError('Erreur lors de la transcription. Veuillez réessayer ou saisir manuellement la transcription.');
       setIsTranscribing(false);
       setIsManualInput(true);
@@ -149,7 +181,7 @@ export const AudioTranscriptionModal: React.FC<AudioTranscriptionModalProps> = (
           })
           .eq('document_id', document.id);
       } catch (updateError) {
-        console.error('Erreur lors de la mise à jour du statut:', updateError);
+        console.error('[AUDIO_MODAL] Erreur lors de la mise à jour du statut:', updateError);
       }
     }
   };
@@ -166,7 +198,7 @@ export const AudioTranscriptionModal: React.FC<AudioTranscriptionModalProps> = (
         .from('document_contents')
         .update({
           content: manualTranscription,
-          extraction_status: 'manual',
+          extraction_status: 'success', // Marquer comme succès pour qu'il apparaisse dans la mindmap
           updated_at: new Date().toISOString()
         })
         .eq('document_id', document.id);
@@ -176,8 +208,15 @@ export const AudioTranscriptionModal: React.FC<AudioTranscriptionModalProps> = (
       setTranscription(manualTranscription);
       setIsManualInput(false);
       onTranscriptionComplete(manualTranscription);
+      
+      logger.info('Transcription manuelle enregistrée', 
+        { documentId: document.id, documentName: document.name, transcriptionLength: manualTranscription.length }, 
+        'AudioTranscriptionModal');
     } catch (err) {
       console.error('Erreur lors de l\'enregistrement de la transcription manuelle:', err);
+      logger.error('Erreur lors de l\'enregistrement de la transcription manuelle', 
+        { documentId: document.id, documentName: document.name, error: err }, 
+        'AudioTranscriptionModal');
       setError('Erreur lors de l\'enregistrement de la transcription');
     } finally {
       setIsLoading(false);
@@ -227,11 +266,21 @@ export const AudioTranscriptionModal: React.FC<AudioTranscriptionModalProps> = (
                     <span className="text-sm font-medium text-gray-700">{document.name}</span>
                   </div>
                   <p className="text-sm text-gray-600">
-                    Taille: {(document.size / 1024 / 1024).toFixed(2)} MB
+                    Taille: {(fileSize / 1024 / 1024).toFixed(2)} MB
                   </p>
                   <p className="text-sm text-gray-600">
                     Date: {new Date(document.created_at).toLocaleString()}
                   </p>
+                  
+                  {isLargeFile && (
+                    <div className="mt-3 p-3 bg-blue-50 rounded-lg text-blue-700 text-sm">
+                      <p className="font-medium">Fichier volumineux détecté</p>
+                      <p className="mt-1">
+                        Ce fichier audio est volumineux ({(fileSize / 1024 / 1024).toFixed(2)} MB). 
+                        La transcription sera effectuée par segments pour optimiser le traitement.
+                      </p>
+                    </div>
+                  )}
                   
                   <div className="mt-4">
                     <a 
@@ -256,6 +305,30 @@ export const AudioTranscriptionModal: React.FC<AudioTranscriptionModalProps> = (
                 >
                   Saisir manuellement
                 </button>
+              </div>
+              
+              {/* Conseils pour améliorer la transcription */}
+              <div className="mt-8">
+                <button 
+                  onClick={() => setShowTips(!showTips)}
+                  className="flex items-center gap-2 text-blue-600 hover:text-blue-800 transition-colors"
+                >
+                  <Info size={16} />
+                  <span>{showTips ? "Masquer les conseils" : "Conseils pour améliorer la transcription"}</span>
+                </button>
+                
+                {showTips && (
+                  <div className="mt-3 p-4 bg-blue-50 rounded-lg text-blue-700 text-sm">
+                    <h4 className="font-medium mb-2">Conseils pour une meilleure transcription</h4>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>Assurez-vous que le fichier audio est de bonne qualité, sans bruits de fond excessifs</li>
+                      <li>Les fichiers plus courts (moins de 10 minutes) sont généralement transcrits plus rapidement</li>
+                      <li>Si la transcription échoue, essayez de découper le fichier audio en segments plus courts</li>
+                      <li>Les formats MP3 et WAV sont généralement mieux pris en charge</li>
+                      <li>Si la transcription automatique échoue après plusieurs tentatives, la saisie manuelle reste une option fiable</li>
+                    </ul>
+                  </div>
+                )}
               </div>
             </div>
           ) : isManualInput ? (
@@ -300,6 +373,17 @@ export const AudioTranscriptionModal: React.FC<AudioTranscriptionModalProps> = (
                   Enregistrer la transcription
                 </button>
               </div>
+              
+              {/* Conseils pour la saisie manuelle */}
+              <div className="mt-8 p-4 bg-gray-50 rounded-lg">
+                <h4 className="font-medium text-gray-700 mb-2">Conseils pour la saisie manuelle</h4>
+                <ul className="list-disc pl-5 text-sm text-gray-600 space-y-1">
+                  <li>Utilisez la ponctuation pour améliorer la lisibilité</li>
+                  <li>Séparez les paragraphes pour structurer le texte</li>
+                  <li>Indiquez les changements de locuteurs si nécessaire (ex: "Interviewer:", "Répondant:")</li>
+                  <li>Vous pouvez écouter le fichier audio en parallèle en l'ouvrant dans un nouvel onglet</li>
+                </ul>
+              </div>
             </div>
           ) : (
             <div className="max-w-3xl mx-auto">
@@ -318,7 +402,7 @@ export const AudioTranscriptionModal: React.FC<AudioTranscriptionModalProps> = (
                     <span className="text-sm font-medium text-gray-700">{document.name}</span>
                   </div>
                   <p className="text-sm text-gray-600">
-                    Taille: {(document.size / 1024 / 1024).toFixed(2)} MB
+                    Taille: {(fileSize / 1024 / 1024).toFixed(2)} MB
                   </p>
                   <p className="text-sm text-gray-600">
                     Date: {new Date(document.created_at).toLocaleString()}
@@ -337,19 +421,13 @@ export const AudioTranscriptionModal: React.FC<AudioTranscriptionModalProps> = (
                 </div>
               </div>
               
-              <div className="mt-8 flex items-center justify-between">
+              <div className="mt-8 flex justify-center">
                 <button
-                  onClick={() => setIsManualInput(true)}
-                  className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                  onClick={handleRetryTranscription}
+                  className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-2"
                 >
-                  Modifier la transcription
-                </button>
-                
-                <button
-                  onClick={onClose}
-                  className="px-4 py-2 bg-[#f15922] text-white rounded-lg hover:bg-[#d14811] transition-colors"
-                >
-                  Fermer
+                  <RefreshCw size={16} />
+                  Relancer la transcription
                 </button>
               </div>
             </div>

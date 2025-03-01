@@ -5,12 +5,18 @@ export default {
     extend: {
       colors: {
         ringo: {
-          orange: '#E86A45',
-          green: '#3C584E',
-          gold: '#C9A959',
-          beige: '#D9DDD1',
+          orange: '#f15922',
+          green: '#2f5c54',
+          gold: '#dba747',
+          beige: '#cfd3bd',
           peach: '#FFCDB6',
         },
+      },
+      animation: {
+        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+      },
+      transitionProperty: {
+        'size': 'width, height, transform',
       },
     },
   },
