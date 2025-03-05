@@ -10,11 +10,20 @@ export default defineConfig({
     target: 'esnext',
     outDir: 'dist',
     sourcemap: false,
+    chunkSizeWarningLimit: 2000,
     rollupOptions: {
       output: {
         manualChunks: {
           pdfjs: ['pdfjs-dist'],
-          tesseract: ['tesseract.js']
+          tesseract: ['tesseract.js'],
+          vendor: [
+            'react',
+            'react-dom',
+            'react-router-dom',
+            'framer-motion',
+            'd3',
+            'zustand'
+          ]
         }
       }
     }
