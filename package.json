@@ -14,10 +14,16 @@
     "d3": "^7.8.5",
     "framer-motion": "^11.0.8",
     "lucide-react": "^0.344.0",
+    "mammoth": "^1.7.0",
+    "openai": "^4.28.0",
+    "pdfjs-dist": "^3.11.174",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-dropzone": "^14.2.3",
+    "react-markdown": "^9.0.1",
     "react-router-dom": "^6.22.2",
+    "tesseract.js": "^5.0.5",
+    "web-streams-polyfill": "^3.3.3",
     "zustand": "^4.5.2"
   },
   "devDependencies": {

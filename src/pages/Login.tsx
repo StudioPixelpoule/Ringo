@@ -34,8 +34,10 @@ export function Login() {
     <div className="min-h-screen bg-[#f15922] flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center mb-8">
-          <Logo />
-          <h1 className="text-white text-4xl font-bold mt-4 flex items-baseline">
+          <div className="w-24 h-24 flex items-center justify-center -mb-2">
+            <Logo />
+          </div>
+          <h1 className="text-white text-4xl font-bold flex items-baseline">
             RINGO
             <sup className="text-sm ml-1">By AI</sup>
           </h1>

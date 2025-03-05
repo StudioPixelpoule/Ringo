@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import * as d3 from 'd3';
 import { X, ZoomIn, ZoomOut } from 'lucide-react';
 import { useDocumentStore, Document, Folder as FolderType } from '../lib/documentStore';
+import { useConversationStore } from '../lib/conversationStore';
 
 interface Node {
   id: string;
@@ -17,6 +18,8 @@ interface Node {
   color?: string;
   fx?: number | null;
   fy?: number | null;
+  processed?: boolean;
+  content?: string;
 }
 
 interface Link {
@@ -37,8 +40,13 @@ const COLORS = {
     secondary: '#dba747',
     tertiary: '#cfd3bd',
   },
-  document: '#FFFFFF',
-  link: '#106f69',
+  document: {
+    unprocessed: '#FFFFFF',
+    processed: '#E8F5E9',
+  },
+  link: {
+    default: '#106f69',
+  },
   text: {
     light: '#FFFFFF',
     dark: '#333333',
@@ -49,11 +57,14 @@ const COLORS = {
   }
 };
 
-export function MindmapModal({ isOpen, onClose, onSelectDocument }: MindmapModalProps) {
+export function MindmapModal({ isOpen, onClose }: MindmapModalProps) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const containerRef = useRef<SVGGElement | null>(null);
   const { folders, documents, fetchFolders, fetchAllDocuments } = useDocumentStore();
+  const { currentConversation, createConversationWithDocument } = useConversationStore();
   const [zoom, setZoom] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
+  const [transform, setTransform] = useState<d3.ZoomTransform>(d3.zoomIdentity);
 
   useEffect(() => {
     if (isOpen) {
@@ -70,87 +81,74 @@ export function MindmapModal({ isOpen, onClose, onSelectDocument }: MindmapModal
 
     const width = svgRef.current.clientWidth;
     const height = svgRef.current.clientHeight;
+    const centerX = width / 2;
+    const centerY = height / 2;
 
     // Create SVG
     const svg = d3.select(svgRef.current)
       .attr('width', width)
       .attr('height', height);
 
-    // Create definitions for filters and markers
-    const defs = svg.append('defs');
-    
-    // Add shadow filter
-    const filter = defs.append('filter')
-      .attr('id', 'shadow')
-      .attr('x', '-50%')
-      .attr('y', '-50%')
-      .attr('width', '200%')
-      .attr('height', '200%');
+    // Create container for zoom
+    const container = svg.append('g');
+    containerRef.current = container.node();
 
-    filter.append('feGaussianBlur')
-      .attr('in', 'SourceAlpha')
-      .attr('stdDeviation', 4)
-      .attr('result', 'blur');
+    // Create zoom behavior
+    const zoomBehavior = d3.zoom<SVGSVGElement, unknown>()
+      .scaleExtent([0.1, 4])
+      .on('zoom', (event: d3.D3ZoomEvent<SVGSVGElement, unknown>) => {
+        container.attr('transform', event.transform.toString());
+        setZoom(event.transform.k);
+        setTransform(event.transform);
+      });
 
-    filter.append('feOffset')
-      .attr('in', 'blur')
-      .attr('dx', 3)
-      .attr('dy', 3)
-      .attr('result', 'offsetBlur');
+    svg.call(zoomBehavior);
 
-    const feMerge = filter.append('feMerge');
-    feMerge.append('feMergeNode')
-      .attr('in', 'offsetBlur');
-    feMerge.append('feMergeNode')
-      .attr('in', 'SourceGraphic');
+    // Center the view initially
+    const initialTransform = d3.zoomIdentity
+      .translate(centerX, centerY)
+      .scale(0.8);
+    svg.call(zoomBehavior.transform, initialTransform);
 
-    // Create nodes data
+    // Create nodes and links data
     const nodes: Node[] = [];
     const links: Link[] = [];
 
-    // Add root node
+    // Add root node at center
     const rootNode: Node = {
       id: 'root',
       name: 'IRSST',
       type: 'folder',
       level: 0,
       color: COLORS.root,
+      x: 0,
+      y: 0,
+      fx: 0,
+      fy: 0
     };
     nodes.push(rootNode);
 
     // Add folder nodes
-    folders.forEach(folder => {
+    folders.forEach((folder) => {
       const node: Node = {
         id: folder.id,
         name: folder.name,
         type: 'folder',
         level: folder.parent_id ? 1 : 0,
         parentId: folder.parent_id || 'root',
-        color: COLORS.folder.primary,
+        color: COLORS.folder.primary
       };
       nodes.push(node);
-      
-      // Only create link if parent exists
-      const parentExists = folder.parent_id ? 
-        folders.some(f => f.id === folder.parent_id) : 
-        true; // Root parent always exists
-      
-      if (parentExists) {
-        links.push({
-          source: folder.parent_id || 'root',
-          target: folder.id,
-        });
-      }
+      links.push({
+        source: folder.parent_id || 'root',
+        target: folder.id
+      });
     });
 
     // Add document nodes
-    documents.forEach(doc => {
-      if (!doc.folder_id) return; // Skip documents without folder
+    documents.forEach((doc) => {
+      if (!doc.folder_id) return;
       
-      // Only add document if its folder exists
-      const folderExists = folders.some(f => f.id === doc.folder_id);
-      if (!folderExists) return;
-
       const node: Node = {
         id: doc.id,
         name: doc.name,
@@ -158,45 +156,49 @@ export function MindmapModal({ isOpen, onClose, onSelectDocument }: MindmapModal
         docType: doc.type,
         level: 2,
         parentId: doc.folder_id,
-        color: COLORS.document,
+        color: doc.processed ? COLORS.document.processed : COLORS.document.unprocessed,
+        processed: doc.processed
       };
       nodes.push(node);
       links.push({
         source: doc.folder_id,
-        target: doc.id,
+        target: doc.id
       });
     });
 
     // Create force simulation
     const simulation = d3.forceSimulation(nodes)
-      .force('link', d3.forceLink(links).id((d: any) => d.id).distance(150))
-      .force('charge', d3.forceManyBody().strength(-1500))
-      .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide().radius(60));
+      .force('link', d3.forceLink(links)
+        .id((d: any) => d.id)
+        .distance(d => {
+          const source = d.source as Node;
+          const target = d.target as Node;
+          return source.type === 'folder' && target.type === 'folder' ? 200 : 150;
+        })
+        .strength(0.3))
+      .force('charge', d3.forceManyBody()
+        .strength(d => d.type === 'folder' ? -800 : -400)
+        .distanceMax(350))
+      .force('collide', d3.forceCollide()
+        .radius(d => d.type === 'folder' ? 60 : 50)
+        .strength(0.7))
+      .force('radial', d3.forceRadial(
+        d => d.type === 'folder' ? (d.parentId === 'root' ? 200 : 300) : 400,
+        0,
+        0
+      ).strength(0.3))
+      .velocityDecay(0.6);
 
-    // Create container for zoom
-    const container = svg.append('g');
-
-    // Create zoom behavior
-    const zoomBehavior = d3.zoom()
-      .scaleExtent([0.1, 4])
-      .on('zoom', (event) => {
-        container.attr('transform', event.transform);
-        setZoom(event.transform.k);
-      });
-
-    svg.call(zoomBehavior as any);
-
-    // Draw links first (to be behind nodes)
+    // Create links
     const link = container.append('g')
       .selectAll('line')
       .data(links)
       .join('line')
-      .attr('stroke', COLORS.link)
-      .attr('stroke-width', 3)
-      .attr('stroke-opacity', 0.8);
+      .attr('stroke', COLORS.link.default)
+      .attr('stroke-width', 2)
+      .attr('stroke-opacity', 0.6);
 
-    // Create node groups
+    // Create nodes
     const node = container.append('g')
       .selectAll('g')
       .data(nodes)
@@ -210,11 +212,11 @@ export function MindmapModal({ isOpen, onClose, onSelectDocument }: MindmapModal
     node.append('circle')
       .attr('r', d => d.type === 'folder' ? 50 : 40)
       .attr('fill', d => d.color!)
-      .attr('stroke', d => d.type === 'document' ? COLORS.link : 'none')
+      .attr('stroke', d => d.type === 'document' ? COLORS.link.default : 'none')
       .attr('stroke-width', 2)
-      .attr('filter', 'url(#shadow)');
+      .style('filter', 'drop-shadow(3px 3px 2px rgba(0,0,0,0.2))');
 
-    // Add text directly in circles
+    // Add text to nodes
     node.append('text')
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'central')
@@ -223,53 +225,53 @@ export function MindmapModal({ isOpen, onClose, onSelectDocument }: MindmapModal
         const nameLength = d.name.length;
         return nameLength > 20 ? '10px' : nameLength > 15 ? '12px' : '14px';
       })
-      .each(function(d) {
-        const text = d3.select(this);
-        const words = d.name.split(/\s+/);
-        const lines: string[] = [];
-        let line: string[] = [];
-        
-        words.forEach(word => {
-          const testLine = [...line, word];
-          if (testLine.join(' ').length > 15) {
-            if (line.length > 0) lines.push(line.join(' '));
-            line = [word];
-          } else {
-            line = testLine;
-          }
-        });
-        if (line.length > 0) lines.push(line.join(' '));
-        
-        lines.forEach((l, i) => {
-          text.append('tspan')
-            .attr('x', 0)
-            .attr('dy', i === 0 ? -((lines.length - 1) * 12) / 2 : 12)
-            .text(l);
-        });
-      });
+      .text(d => d.name);
 
     // Add click handlers
-    node.on('click', (event, d: Node) => {
-      if (d.type === 'document' && onSelectDocument) {
+    node.on('click', async (event, d: Node) => {
+      if (d.type === 'document' && d.processed) {
         const doc = documents.find(doc => doc.id === d.id);
-        if (doc) onSelectDocument(doc);
+        if (doc) {
+          if (!currentConversation) {
+            await createConversationWithDocument(doc);
+          }
+          onClose();
+        }
       }
     });
 
     // Update positions on simulation tick
     simulation.on('tick', () => {
-      // Update link positions
       link
         .attr('x1', (d: any) => d.source.x)
         .attr('y1', (d: any) => d.source.y)
         .attr('x2', (d: any) => d.target.x)
         .attr('y2', (d: any) => d.target.y);
 
-      // Update node positions
-      node.attr('transform', d => `translate(${d.x || 0},${d.y || 0})`);
+      node.attr('transform', d => `translate(${d.x},${d.y})`);
     });
 
-    // Drag functions
+    // Handle wheel zoom
+    svg.on('wheel.zoom', (event: WheelEvent) => {
+      event.preventDefault();
+      const delta = -event.deltaY * 0.002;
+      const newScale = Math.max(0.1, Math.min(4, transform.k * (1 + delta)));
+      
+      const mouseX = event.offsetX - centerX;
+      const mouseY = event.offsetY - centerY;
+      
+      const newTransform = d3.zoomIdentity
+        .translate(
+          centerX - (mouseX * newScale - mouseX * transform.k) / transform.k,
+          centerY - (mouseY * newScale - mouseY * transform.k) / transform.k
+        )
+        .scale(newScale);
+      
+      svg.transition()
+        .duration(50)
+        .call(zoomBehavior.transform, newTransform);
+    });
+
     function dragstarted(event: any) {
       if (!event.active) simulation.alphaTarget(0.3).restart();
       event.subject.fx = event.subject.x;
@@ -278,21 +280,49 @@ export function MindmapModal({ isOpen, onClose, onSelectDocument }: MindmapModal
     }
 
     function dragged(event: any) {
+      if (event.subject.id === 'root') return;
       event.subject.fx = event.x;
       event.subject.fy = event.y;
     }
 
     function dragended(event: any) {
       if (!event.active) simulation.alphaTarget(0);
-      event.subject.fx = null;
-      event.subject.fy = null;
+      if (event.subject.id !== 'root') {
+        event.subject.fx = null;
+        event.subject.fy = null;
+      }
       setIsDragging(false);
     }
 
     return () => {
       simulation.stop();
+      svg.on('wheel.zoom', null);
     };
-  }, [isOpen, folders, documents, onSelectDocument]);
+  }, [isOpen, folders, documents, currentConversation, onClose, createConversationWithDocument]);
+
+  const handleZoom = (delta: number) => {
+    if (!svgRef.current) return;
+
+    const svg = d3.select(svgRef.current);
+    const width = svgRef.current.clientWidth;
+    const height = svgRef.current.clientHeight;
+    const centerX = width / 2;
+    const centerY = height / 2;
+
+    const newScale = Math.max(0.1, Math.min(4, transform.k * (1 + delta)));
+    
+    const newTransform = d3.zoomIdentity
+      .translate(centerX, centerY)
+      .scale(newScale)
+      .translate(-centerX, -centerY);
+
+    const zoomBehavior = d3.zoom<SVGSVGElement, unknown>()
+      .scaleExtent([0.1, 4]);
+
+    svg.transition()
+      .duration(250)
+      .call(zoomBehavior.transform, newTransform);
+  };
 
   if (!isOpen) return null;
 
@@ -303,13 +333,13 @@ export function MindmapModal({ isOpen, onClose, onSelectDocument }: MindmapModal
           <h2 className="text-xl font-medium text-gray-900">Mindmap des documents</h2>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setZoom(z => Math.max(0.1, z - 0.1))}
+              onClick={() => handleZoom(-0.1)}
               className="p-2 text-gray-600 hover:bg-gray-100 rounded-full"
             >
               <ZoomOut size={20} />
             </button>
             <button
-              onClick={() => setZoom(z => Math.min(4, z + 0.1))}
+              onClick={() => handleZoom(0.1)}
               className="p-2 text-gray-600 hover:bg-gray-100 rounded-full"
             >
               <ZoomIn size={20} />

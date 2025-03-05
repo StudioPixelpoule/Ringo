@@ -41,6 +41,40 @@
   border-color: transparent;
 }
 
+/* Message formatting styles */
+.prose h2 {
+  color: #1a1a1a;
+  margin-top: 1.5em;
+  margin-bottom: 0.75em;
+}
+
+.prose h3 {
+  color: #333333;
+  margin-top: 1.25em;
+  margin-bottom: 0.5em;
+}
+
+.prose strong {
+  color: #f15922;
+  font-weight: 600;
+}
+
+.prose p {
+  margin-bottom: 0.75em;
+  line-height: 1.6;
+}
+
+.prose ul {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+  padding-left: 1.5em;
+  list-style-type: disc;
+}
+
+.prose li {
+  margin-bottom: 0.25em;
+}
+
 .send-button {
   width: 32px;
   height: 32px;
@@ -128,4 +162,34 @@
     inset 4px 4px 8px #d1d1d1,
     inset -4px -4px 8px #ffffff;
   transform: translateY(2px);
+}
+
+.document-tag {
+  background-color: rgba(241, 89, 34, 0.05);
+  color: #f15922;
+  padding: 0.375rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  transition: all 0.2s ease;
+}
+
+.document-tag:hover {
+  background-color: rgba(241, 89, 34, 0.1);
+}
+
+.document-tag button {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.document-tag:hover button {
+  opacity: 1;
+}
+
+.document-tag button:hover {
+  background-color: rgba(241, 89, 34, 0.2);
+  border-radius: 9999px;
 }

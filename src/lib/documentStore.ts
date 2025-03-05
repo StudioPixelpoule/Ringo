@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from './supabase';
+import { processDocument } from './documentProcessor';
 
 export interface Folder {
   id: string;
@@ -16,6 +17,8 @@ export interface Document {
   group_name: string;
   description: string;
   url: string;
+  content?: string;
+  processed: boolean;
   created_at: string;
 }
 
@@ -28,10 +31,9 @@ interface DocumentStore {
   error: string | null;
   uploadProgress: number;
   
-  // Actions
   setModalOpen: (isOpen: boolean) => void;
   createFolder: (name: string, parentId: string | null) => Promise<void>;
-  uploadDocument: (file: File, folderId: string, metadata: Partial<Document>) => Promise<void>;
+  uploadDocument: (file: File, folderId: string, metadata: Partial<Document>) => Promise<Document>;
   fetchFolders: () => Promise<void>;
   fetchDocuments: (folderId: string) => Promise<void>;
   fetchAllDocuments: () => Promise<void>;
@@ -63,11 +65,12 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
       if (error) throw error;
       
-      // Update local folders state
       const folders = get().folders;
       set({ folders: [...folders, data] });
     } catch (error) {
-      set({ error: (error as Error).message });
+      const message = error instanceof Error ? error.message : 'Failed to create folder';
+      set({ error: message });
+      throw new Error(message);
     } finally {
       set({ loading: false });
     }
@@ -75,40 +78,78 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
   uploadDocument: async (file, folderId, metadata) => {
     set({ loading: true, error: null, uploadProgress: 0 });
+    let uploadedPath: string | null = null;
+
     try {
+      // Process document content first
+      const content = await processDocument(file);
+      if (!content) {
+        throw new Error('Failed to process document content');
+      }
+
       // Upload file to storage
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+      const fileExt = file.name.split('.').pop()?.toLowerCase() || '';
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
       const filePath = `documents/${fileName}`;
 
       const { error: uploadError, data } = await supabase.storage
         .from('documents')
         .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: file.type,
           onUploadProgress: (progress) => {
             const percentage = (progress.loaded / progress.total) * 100;
             set({ uploadProgress: percentage });
           },
         });
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        throw new Error(`Upload failed: ${uploadError.message}`);
+      }
+
+      if (!data?.path) {
+        throw new Error('Upload failed: No path returned');
+      }
+
+      uploadedPath = data.path;
 
       // Create document record
-      const { error: dbError } = await supabase
+      const { data: doc, error: dbError } = await supabase
         .from('documents')
         .insert([{
           folder_id: folderId,
           name: file.name,
           type: fileExt,
-          url: data?.path,
+          url: data.path,
+          content,
+          processed: true,
           ...metadata,
-        }]);
+        }])
+        .select()
+        .single();
 
-      if (dbError) throw dbError;
+      if (dbError) {
+        throw dbError;
+      }
 
-      // Refresh documents list
-      await get().fetchDocuments(folderId);
+      // Update local state
+      const documents = get().documents;
+      set({ documents: [...documents, doc] });
+
+      return doc;
     } catch (error) {
-      set({ error: (error as Error).message });
+      // Clean up uploaded file if it exists and database insert failed
+      if (uploadedPath) {
+        await supabase.storage
+          .from('documents')
+          .remove([uploadedPath])
+          .catch(console.error);
+      }
+
+      const message = error instanceof Error ? error.message : 'Failed to upload document';
+      set({ error: message });
+      throw new Error(message);
     } finally {
       set({ loading: false, uploadProgress: 0 });
     }
@@ -125,7 +166,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       if (error) throw error;
       set({ folders: data || [] });
     } catch (error) {
-      set({ error: (error as Error).message });
+      const message = error instanceof Error ? error.message : 'Failed to fetch folders';
+      set({ error: message });
     } finally {
       set({ loading: false });
     }
@@ -143,7 +185,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       if (error) throw error;
       set({ documents: data || [] });
     } catch (error) {
-      set({ error: (error as Error).message });
+      const message = error instanceof Error ? error.message : 'Failed to fetch documents';
+      set({ error: message });
     } finally {
       set({ loading: false });
     }
@@ -160,7 +203,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       if (error) throw error;
       set({ documents: data || [] });
     } catch (error) {
-      set({ error: (error as Error).message });
+      const message = error instanceof Error ? error.message : 'Failed to fetch documents';
+      set({ error: message });
     } finally {
       set({ loading: false });
     }
@@ -178,11 +222,11 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
       if (error) throw error;
       
-      // Update local folders state
       const folders = get().folders;
       set({ folders: folders.filter((f) => f.id !== id) });
     } catch (error) {
-      set({ error: (error as Error).message });
+      const message = error instanceof Error ? error.message : 'Failed to delete folder';
+      set({ error: message });
     } finally {
       set({ loading: false });
     }
@@ -198,7 +242,6 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
       if (error) throw error;
       
-      // Update local folders state
       const folders = get().folders;
       set({
         folders: folders.map((f) =>
@@ -206,7 +249,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         ),
       });
     } catch (error) {
-      set({ error: (error as Error).message });
+      const message = error instanceof Error ? error.message : 'Failed to rename folder';
+      set({ error: message });
     } finally {
       set({ loading: false });
     }

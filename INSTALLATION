@@ -1,179 +1,147 @@
-# Guide d'Installation et de Développement RINGO
+# Historique du Projet RINGO
 
-## 1. Configuration Initiale
+## Mars 2025
 
-### Création du Projet
-```bash
-npm create vite@latest . -- --template react-ts
-```
+### 05/03/2025 - Initialisation du Projet
+- Création du projet avec Vite et React TypeScript
+- Configuration initiale de l'environnement de développement
+- Installation des dépendances de base :
+  - React 18.3.1
+  - TypeScript 5.5.3
+  - Vite 5.4.2
+  - ESLint 9.9.1
 
-### Dépendances Installées
+### 05/03/2025 - Configuration de Tailwind CSS
+- Installation et configuration de Tailwind CSS
+- Mise en place des styles de base
+- Configuration du fichier `tailwind.config.js`
+- Ajout des directives Tailwind dans `index.css`
+
+### 05/03/2025 - Intégration de Supabase
+- Installation de `@supabase/supabase-js`
+- Configuration des variables d'environnement
+- Création du client Supabase
+- Mise en place de l'authentification par email
+
+### 05/03/2025 - Structure de la Base de Données
+- Création des tables principales :
+  - `profiles` : Gestion des utilisateurs
+  - `folders` : Organisation des documents
+  - `documents` : Stockage des documents
+  - `conversations` : Gestion des conversations
+  - `messages` : Stockage des messages
+  - `conversation_documents` : Liaison documents-conversations
+- Configuration des politiques RLS
+- Mise en place des triggers et fonctions
+
+### 05/03/2025 - Interface Utilisateur
+- Création des composants principaux :
+  - Layout à trois colonnes
+  - Header avec navigation
+  - Zone de chat
+  - Panneau des conversations
+  - Panneau des rapports
+- Implémentation du design neumorphique
+- Configuration des animations avec Framer Motion
+
+### 05/03/2025 - Gestion des Documents
+- Intégration de PDF.js pour le traitement des PDF
+- Configuration de Mammoth.js pour les documents Word
+- Mise en place du système de téléversement
+- Création de la visualisation mindmap avec D3.js
+
+### 05/03/2025 - Intégration OpenAI
+- Configuration du client OpenAI
+- Mise en place du système de chat
+- Optimisation du traitement des messages
+- Gestion du contexte des conversations
+
+### 05/03/2025 - Gestion des Utilisateurs
+- Système de rôles (admin/user)
+- Interface d'administration des utilisateurs
+- Gestion des permissions
+- Système de création de comptes
+
+### 05/03/2025 - Améliorations du Traitement des Documents
+- Optimisation de l'extraction de texte des PDF
+- Amélioration de la détection de structure
+- Préservation de la mise en forme
+- Gestion des métadonnées
+
+### 05/03/2025 - Amélioration de l'Interface
+- Ajout des indicateurs de progression
+- Amélioration du formatage des messages
+- Optimisation de la visualisation mindmap
+- Ajout de confirmations de suppression
+
+### 05/03/2025 - Optimisations Techniques
+- Amélioration des performances de chargement
+- Optimisation du traitement des documents
+- Gestion améliorée des erreurs
+- Logging détaillé des opérations
+
+## Dépendances Principales
+
 ```json
 {
   "dependencies": {
     "@supabase/supabase-js": "^2.39.7",
+    "d3": "^7.8.5",
+    "framer-motion": "^11.0.8",
     "lucide-react": "^0.344.0",
+    "mammoth": "^1.7.0",
+    "openai": "^4.28.0",
+    "pdfjs-dist": "3.11.174",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.22.2"
-  },
-  "devDependencies": {
-    "@eslint/js": "^9.9.1",
-    "@types/react": "^18.3.5",
-    "@types/react-dom": "^18.3.0",
-    "@vitejs/plugin-react": "^4.3.1",
-    "autoprefixer": "^10.4.18",
-    "eslint": "^9.9.1",
-    "eslint-plugin-react-hooks": "^5.1.0-rc.0",
-    "eslint-plugin-react-refresh": "^0.4.11",
-    "globals": "^15.9.0",
-    "postcss": "^8.4.35",
-    "tailwindcss": "^3.4.1",
-    "typescript": "^5.5.3",
-    "typescript-eslint": "^8.3.0",
-    "vite": "^5.4.2"
+    "react-dropzone": "^14.2.3",
+    "react-markdown": "^9.0.1",
+    "react-router-dom": "^6.22.2",
+    "zustand": "^4.5.2"
   }
 }
 ```
 
-### Configuration de Tailwind CSS
-1. Installation des dépendances
-```bash
-npm install -D tailwindcss postcss autoprefixer
+## Variables d'Environnement
+
+```env
+VITE_SUPABASE_URL=url_de_votre_projet_supabase
+VITE_SUPABASE_ANON_KEY=cle_anon_supabase
+VITE_OPENAI_API_KEY=cle_api_openai
 ```
 
-2. Initialisation de Tailwind
-```bash
-npx tailwindcss init -p
-```
+## Structure du Projet
 
-3. Configuration du fichier `tailwind.config.js`
-```js
-export default {
-  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
-  theme: {
-    extend: {},
-  },
-  plugins: [],
-};
-```
-
-4. Ajout des directives Tailwind dans `src/index.css`
-```css
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-```
-
-## 2. Configuration de Supabase
-
-### Installation et Configuration
-1. Installation de Supabase
-```bash
-npm install @supabase/supabase-js
-```
-
-2. Configuration des variables d'environnement dans `.env`
-```
-VITE_SUPABASE_ANON_KEY=votre_clé_anon
-VITE_SUPABASE_URL=votre_url_projet
-```
-
-3. Création du client Supabase (`src/lib/supabase.ts`)
-```typescript
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-```
-
-### Structure de la Base de Données
-1. Table `profiles`
-   - `id` (uuid, clé primaire)
-   - `email` (text, unique)
-   - `role` (text, 'admin' ou 'user')
-   - `created_at` (timestamp)
-   - `updated_at` (timestamp)
-
-2. Politiques de Sécurité (RLS)
-   - Lecture limitée au profil de l'utilisateur
-   - Mise à jour limitée au profil de l'utilisateur
-
-## 3. Structure de l'Application
-
-### Organisation des Fichiers
 ```
 src/
-├── components/
+├── components/    # Composants React
 │   ├── Logo.tsx
 │   ├── DocumentIcon.tsx
 │   ├── DocumentListIcon.tsx
-│   └── DatabaseIcon.tsx
-├── lib/
-│   └── supabase.ts
-├── pages/
+│   └── ...
+├── lib/          # Logique métier
+│   ├── supabase.ts
+│   ├── store.ts
+│   ├── documentStore.ts
+│   └── ...
+├── pages/        # Pages de l'application
 │   ├── Login.tsx
 │   └── Chat.tsx
-├── App.tsx
-├── main.tsx
-└── index.css
+└── ...
 ```
 
-### Fonctionnalités Implémentées
-1. Authentification
-   - Connexion par email/mot de passe
-   - Gestion des sessions
-   - Déconnexion
+## Commandes Disponibles
 
-2. Interface Utilisateur
-   - Header avec logo et contrôles
-   - Zone de chat principale
-   - Panneau latéral des conversations
-   - Panneau latéral des rapports
-   - Boutons neumorphiques
-   - Gestion des rôles (admin/user)
-
-3. Styles
-   - Design neumorphique
-   - Palette de couleurs personnalisée
-   - Animations fluides
-   - Interface responsive
-
-## 4. Commandes de Développement
-
-### Démarrage du Projet
 ```bash
+# Installation des dépendances
+npm install
+
+# Développement
 npm run dev
-```
 
-### Construction pour Production
-```bash
+# Construction
 npm run build
-```
 
-### Vérification du Code
-```bash
+# Vérification du code
 npm run lint
 ```
-
-## 5. État Actuel
-
-### Fonctionnalités Complétées ✅
-- Configuration initiale du projet
-- Installation des dépendances
-- Configuration de Tailwind CSS
-- Configuration de Supabase
-- Authentification des utilisateurs
-- Interface de base
-- Gestion des rôles
-- Design neumorphique
-- Animations
-
-### Prochaines Étapes 🔲
-- Implémentation de la persistance des conversations
-- Gestion des rapports
-- Tests unitaires
-- Documentation utilisateur
-- Optimisations de performance

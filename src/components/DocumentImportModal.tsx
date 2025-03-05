@@ -1,7 +1,14 @@
 import React, { useCallback, useState, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { X, Upload, FileText, FolderPlus, ChevronRight, Edit2, Trash2, CheckCircle } from 'lucide-react';
+import { X, Upload, FileText, FolderPlus, ChevronRight, Edit2, Trash2, CheckCircle, Loader2 } from 'lucide-react';
 import { useDocumentStore, Folder } from '../lib/documentStore';
+
+interface ProcessingStatus {
+  isProcessing: boolean;
+  progress: number;
+  stage: 'upload' | 'processing' | 'complete';
+  message: string;
+}
 
 interface FolderColumnProps {
   folders: Folder[];
@@ -109,13 +116,23 @@ export function DocumentImportModal() {
   const [groupName, setGroupName] = useState('');
   const [description, setDescription] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [processingStatus, setProcessingStatus] = useState<ProcessingStatus>({
+    isProcessing: false,
+    progress: 0,
+    stage: 'upload',
+    message: ''
+  });
 
   useEffect(() => {
     if (isModalOpen) {
       fetchFolders();
       // Reset states when modal opens
-      setUploadSuccess(false);
+      setProcessingStatus({
+        isProcessing: false,
+        progress: 0,
+        stage: 'upload',
+        message: ''
+      });
       setSelectedFile(null);
       setDocumentType('');
       setGroupName('');
@@ -126,13 +143,13 @@ export function DocumentImportModal() {
   // Auto-close modal after successful upload
   useEffect(() => {
     let timeout: NodeJS.Timeout;
-    if (uploadSuccess) {
+    if (processingStatus.stage === 'complete') {
       timeout = setTimeout(() => {
         setModalOpen(false);
       }, 2000);
     }
     return () => clearTimeout(timeout);
-  }, [uploadSuccess, setModalOpen]);
+  }, [processingStatus.stage, setModalOpen]);
 
   const getFolderPath = () => {
     if (!currentFolder) return 'Aucun dossier sélectionné';
@@ -179,7 +196,12 @@ export function DocumentImportModal() {
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {
       setSelectedFile(acceptedFiles[0]);
-      setUploadSuccess(false);
+      setProcessingStatus({
+        isProcessing: false,
+        progress: 0,
+        stage: 'upload',
+        message: ''
+      });
     }
   }, []);
 
@@ -187,14 +209,72 @@ export function DocumentImportModal() {
     if (!currentFolder || !selectedFile) return;
     
     try {
-      await uploadDocument(selectedFile, currentFolder.id, {
+      setProcessingStatus({
+        isProcessing: true,
+        progress: 0,
+        stage: 'upload',
+        message: 'Téléversement du fichier...'
+      });
+
+      const doc = await uploadDocument(selectedFile, currentFolder.id, {
         type: documentType,
         group_name: groupName,
         description: description.replace(/\s+/g, '_'),
       });
-      
-      // Show success message
-      setUploadSuccess(true);
+
+      // Update progress based on uploadProgress from store
+      setProcessingStatus(prev => ({
+        ...prev,
+        progress: uploadProgress,
+      }));
+
+      if (doc.processed) {
+        setProcessingStatus({
+          isProcessing: false,
+          progress: 100,
+          stage: 'complete',
+          message: 'Document traité avec succès !'
+        });
+      } else {
+        setProcessingStatus({
+          isProcessing: true,
+          progress: 100,
+          stage: 'processing',
+          message: 'Traitement du document en cours...'
+        });
+
+        // Poll for document processing status
+        const checkProcessing = setInterval(async () => {
+          const { data } = await supabase
+            .from('documents')
+            .select('processed')
+            .eq('id', doc.id)
+            .single();
+
+          if (data?.processed) {
+            clearInterval(checkProcessing);
+            setProcessingStatus({
+              isProcessing: false,
+              progress: 100,
+              stage: 'complete',
+              message: 'Document traité avec succès !'
+            });
+          }
+        }, 2000);
+
+        // Clear interval after 2 minutes (timeout)
+        setTimeout(() => {
+          clearInterval(checkProcessing);
+          if (processingStatus.stage !== 'complete') {
+            setProcessingStatus({
+              isProcessing: false,
+              progress: 100,
+              stage: 'complete',
+              message: 'Document téléversé. Le traitement continue en arrière-plan.'
+            });
+          }
+        }, 120000);
+      }
       
       // Reset form
       setSelectedFile(null);
@@ -203,7 +283,12 @@ export function DocumentImportModal() {
       setDescription('');
     } catch (error) {
       console.error('Upload failed:', error);
-      setUploadSuccess(false);
+      setProcessingStatus({
+        isProcessing: false,
+        progress: 0,
+        stage: 'upload',
+        message: ''
+      });
     }
   };
 
@@ -236,13 +321,13 @@ export function DocumentImportModal() {
           </button>
         </div>
 
-        {uploadSuccess ? (
+        {processingStatus.stage === 'complete' ? (
           <div className="p-8 text-center">
             <div className="flex items-center justify-center mb-4">
               <CheckCircle size={48} className="text-green-500" />
             </div>
             <h3 className="text-xl font-medium text-gray-900 mb-2">
-              Document téléversé avec succès !
+              {processingStatus.message}
             </h3>
             <p className="text-gray-500">
               La fenêtre va se fermer automatiquement...
@@ -382,30 +467,44 @@ export function DocumentImportModal() {
 
                 <button
                   onClick={handleUpload}
-                  disabled={!selectedFile || !currentFolder || !documentType || !groupName || loading}
+                  disabled={!selectedFile || !currentFolder || !documentType || !groupName || processingStatus.isProcessing}
                   className={`w-full mt-6 px-4 py-2 rounded-md flex items-center justify-center gap-2 ${
-                    !selectedFile || !currentFolder || !documentType || !groupName || loading
+                    !selectedFile || !currentFolder || !documentType || !groupName || processingStatus.isProcessing
                       ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                       : 'bg-[#f15922] text-white hover:bg-[#f15922]/90'
                   }`}
                 >
-                  <Upload size={20} />
-                  {loading ? 'Téléversement en cours...' : 'Téléverser le document'}
+                  {processingStatus.isProcessing ? (
+                    <>
+                      <Loader2 size={20} className="animate-spin" />
+                      {processingStatus.stage === 'upload' ? 'Téléversement en cours...' : 'Traitement en cours...'}
+                    </>
+                  ) : (
+                    <>
+                      <Upload size={20} />
+                      Téléverser le document
+                    </>
+                  )}
                 </button>
               </div>
             </div>
 
-            {loading && uploadProgress > 0 && (
+            {processingStatus.isProcessing && (
               <div className="px-6 pb-6">
                 <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-[#f15922] transition-all duration-300"
-                    style={{ width: `${uploadProgress}%` }}
+                    style={{ width: `${processingStatus.progress}%` }}
                   />
                 </div>
-                <p className="text-sm text-gray-600 mt-1">
-                  Téléversement: {Math.round(uploadProgress)}%
-                </p>
+                <div className="flex items-center justify-between mt-2">
+                  <p className="text-sm text-gray-600">
+                    {processingStatus.message}
+                  </p>
+                  <p className="text-sm font-medium text-gray-700">
+                    {Math.round(processingStatus.progress)}%
+                  </p>
+                </div>
               </div>
             )}
 
