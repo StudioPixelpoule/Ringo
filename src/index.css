@@ -2,357 +2,130 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Import de la police Inter */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
-
-/* Styles de boutons */
-.btn-neumorphic {
-  transition: all 0.3s ease;
-  box-shadow: 5px 5px 10px rgba(0, 0, 0, 0.2),
-              -5px -5px 10px rgba(255, 255, 255, 0.1);
-}
-
-.btn-neumorphic:hover {
-  box-shadow: inset 4px 4px 8px rgba(0, 0, 0, 0.2),
-              inset -4px -4px 8px rgba(255, 255, 255, 0.1);
-  transform: scale(0.95);
-}
-
-.btn-neumorphic:active {
-  box-shadow: inset 6px 6px 12px rgba(0, 0, 0, 0.3),
-              inset -6px -6px 12px rgba(255, 255, 255, 0.1);
-  transform: scale(0.9);
-}
-
-.btn-neumorphic-light {
-  transition: all 0.2s ease;
-  background: #f8f9fa;
-  box-shadow: 3px 3px 6px rgba(0, 0, 0, 0.1),
-              -3px -3px 6px rgba(255, 255, 255, 0.8);
-}
-
-.btn-neumorphic-light:hover {
-  box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1),
-              -2px -2px 4px rgba(255, 255, 255, 0.8);
-}
-
-.btn-neumorphic-light:active {
-  box-shadow: inset 2px 2px 4px rgba(0, 0, 0, 0.1),
-              inset -2px -2px 4px rgba(255, 255, 255, 0.8);
-  transform: scale(0.95);
-}
-
-/* Styles pour la mindmap */
-.mindmap-link {
-  stroke: #2f5c54;
-  stroke-width: 1;
-  fill: none;
-  opacity: 0.2;
-}
-
-.mindmap-node text {
-  user-select: none;
-}
-
-.mindmap-node circle {
-  transition: r 0.2s ease;
-}
-
-.mindmap-node:hover circle {
-  r: 8;
-}
-
-/* Position de la barre d'outils de la mindmap */
-.mindmap-toolbar {
-  position: absolute;
-  top: 1rem;
-  left: 1rem; /* Décale vers la gauche */
-  z-index: 10;
-}
-
-/* Animation pour les points de réflexion */
-@keyframes pulse {
-  0% { transform: scale(0.8); opacity: 0.5; }
-  50% { transform: scale(1.2); opacity: 1; }
-  100% { transform: scale(0.8); opacity: 0.5; }
-}
-
-.thinking-dot {
-  animation: pulse 1.5s infinite ease-in-out;
-}
-
-.thinking-dot:nth-child(1) {
-  animation-delay: 0s;
-}
-
-.thinking-dot:nth-child(2) {
-  animation-delay: 0.3s;
-}
-
-.thinking-dot:nth-child(3) {
-  animation-delay: 0.6s;
-}
-
-/* Effet de transition pour les messages */
-.message-enter {
+.message-appear {
   opacity: 0;
-  transform: translateY(20px);
+  animation: appear 0.3s ease forwards;
 }
 
-.message-enter-active {
-  opacity: 1;
-  transform: translateY(0);
-  transition: opacity 300ms, transform 300ms;
+@keyframes appear {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
-/* Effet de clignotement du curseur pour l'effet typewriter */
-@keyframes blink {
+.typing-cursor::after {
+  content: '▋';
+  animation: cursor 1s infinite;
+  color: #666;
+}
+
+@keyframes cursor {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
 }
 
-.typewriter-cursor {
-  display: inline-block;
-  width: 2px;
-  height: 1em;
-  background-color: currentColor;
-  margin-left: 2px;
-  animation: blink 1s infinite;
+.chat-input {
+  border-radius: 0.75rem;
+  box-shadow: 0 0 15px rgba(0,0,0,0.1);
+  border: 1px solid #e5e5e5;
+  min-height: 48px;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
 }
 
-/* Styles spécifiques pour React Flow */
-.react-flow__node {
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
+.chat-input:focus-within {
+  box-shadow: 0 0 15px rgba(0,0,0,0.1), 0 0 0 1px #666;
+  border-color: transparent;
 }
 
-.react-flow__node:hover {
-  transform: scale(1.05);
-  z-index: 10;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-}
-
-.react-flow__edge {
-  transition: stroke-opacity 0.3s ease, stroke-width 0.3s ease;
-}
-
-.react-flow__edge:hover {
-  stroke-opacity: 1;
-  stroke-width: 3;
-}
-
-.react-flow__edge-path {
-  stroke-width: 2;
-}
-
-.react-flow__controls {
-  background-color: rgba(255, 255, 255, 0.9);
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  padding: 4px;
-}
-
-.react-flow__controls-button {
-  border: none !important;
-  background-color: transparent !important;
-  color: #2f5c54 !important;
-  width: 24px !important;
-  height: 24px !important;
-  padding: 2px !important;
-  margin: 2px !important;
-}
-
-.react-flow__controls-button:hover {
-  background-color: rgba(47, 92, 84, 0.1) !important;
-}
-
-.react-flow__background {
-  background-color: #f8f7f2;
-}
-
-.react-flow__handle {
-  width: 8px;
-  height: 8px;
+.send-button {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 50%;
-  background-color: currentColor;
-  border: 2px solid white;
+  transition: all 0.3s ease;
 }
 
-.react-flow__handle-top {
-  top: -4px;
+.send-button:not(:disabled):hover {
+  transform: translateX(2px) scale(1.05);
 }
 
-.react-flow__handle-bottom {
-  bottom: -4px;
+.send-button:not(:disabled):active {
+  transform: translateX(0) scale(0.95);
 }
 
-/* Styles pour le markdown dans les messages */
-.markdown-message h1,
-.markdown-message h2,
-.markdown-message h3,
-.markdown-message h4,
-.markdown-message h5,
-.markdown-message h6 {
-  font-weight: 600;
-  margin-top: 1.5em;
-  margin-bottom: 0.5em;
-  line-height: 1.25;
+.neumorphic-button {
+  background: #dba747;
+  box-shadow: 
+    6px 6px 12px #b88d3c,
+    -6px -6px 12px #fcc152;
+  transition: all 0.3s ease;
 }
 
-.markdown-message h1 {
-  font-size: 1.5rem;
-  color: #2F4F4F;
-  border-bottom: 1px solid #eaeaea;
-  padding-bottom: 0.3em;
+.neumorphic-button:hover {
+  box-shadow: 
+    4px 4px 8px #b88d3c,
+    -4px -4px 8px #fcc152;
+  transform: translateY(1px);
 }
 
-.markdown-message h2 {
-  font-size: 1.3rem;
-  color: #2F4F4F;
-  border-bottom: 1px solid #eaeaea;
-  padding-bottom: 0.3em;
+.neumorphic-button:active {
+  box-shadow: 
+    inset 4px 4px 8px #b88d3c,
+    inset -4px -4px 8px #fcc152;
+  transform: translateY(2px);
 }
 
-.markdown-message h3 {
-  font-size: 1.15rem;
-  color: #2F4F4F;
+.header-neumorphic-button {
+  background: #f15922;
+  box-shadow: 
+    4px 4px 8px #cc4b1d,
+    -4px -4px 8px #ff6727;
+  transition: all 0.3s ease;
 }
 
-.markdown-message h4 {
-  font-size: 1rem;
-  color: #2F4F4F;
+.header-neumorphic-button:hover {
+  box-shadow: 
+    3px 3px 6px #cc4b1d,
+    -3px -3px 6px #ff6727;
+  transform: translateY(1px);
 }
 
-.markdown-message p {
-  margin-bottom: 1em;
-  line-height: 1.6;
+.header-neumorphic-button:active {
+  box-shadow: 
+    inset 3px 3px 6px #cc4b1d,
+    inset -3px -3px 6px #ff6727;
+  transform: translateY(2px);
 }
 
-.markdown-message ul,
-.markdown-message ol {
-  margin-bottom: 1em;
-  padding-left: 1.5em;
+.chat-neumorphic-button {
+  background: white;
+  box-shadow: 
+    4px 4px 8px #d1d1d1,
+    -4px -4px 8px #ffffff,
+    inset 1px 1px 2px #ffffff,
+    inset -1px -1px 2px #d1d1d1;
+  transition: all 0.3s ease;
+  margin-top: -4px;
 }
 
-.markdown-message ul {
-  list-style-type: disc;
+.chat-neumorphic-button:hover {
+  box-shadow: 
+    3px 3px 6px #d1d1d1,
+    -3px -3px 6px #ffffff,
+    inset 1px 1px 2px #ffffff,
+    inset -1px -1px 2px #d1d1d1;
+  transform: translateY(1px);
 }
 
-.markdown-message ol {
-  list-style-type: decimal;
-}
-
-.markdown-message li {
-  margin-bottom: 0.5em;
-}
-
-.markdown-message a {
-  color: #f15922;
-  text-decoration: underline;
-}
-
-.markdown-message a:hover {
-  text-decoration: none;
-}
-
-.markdown-message blockquote {
-  border-left: 4px solid #f15922;
-  padding-left: 1em;
-  margin-left: 0;
-  margin-right: 0;
-  font-style: italic;
-  color: #555;
-  background-color: #f9f9f9;
-  padding: 0.5em 1em;
-  margin-bottom: 1em;
-}
-
-.markdown-message code {
-  font-family: monospace;
-  background-color: #f0f0f0;
-  padding: 0.2em 0.4em;
-  border-radius: 3px;
-  font-size: 0.9em;
-}
-
-.markdown-message pre {
-  background-color: #f0f0f0;
-  padding: 1em;
-  border-radius: 5px;
-  overflow-x: auto;
-  margin-bottom: 1em;
-}
-
-.markdown-message pre code {
-  background-color: transparent;
-  padding: 0;
-  border-radius: 0;
-}
-
-.markdown-message table {
-  border-collapse: collapse;
-  width: 100%;
-  margin-bottom: 1em;
-}
-
-.markdown-message table th,
-.markdown-message table td {
-  border: 1px solid #ddd;
-  padding: 0.5em;
-  text-align: left;
-}
-
-.markdown-message table th {
-  background-color: #f0f0f0;
-  font-weight: 600;
-}
-
-.markdown-message table tr:nth-child(even) {
-  background-color: #f9f9f9;
-}
-
-.markdown-message hr {
-  border: 0;
-  border-top: 1px solid #eaeaea;
-  margin: 1.5em 0;
-}
-
-.markdown-message img {
-  max-width: 100%;
-  height: auto;
-  border-radius: 5px;
-  margin: 1em 0;
-}
-
-.markdown-message strong {
-  font-weight: 600;
-}
-
-.markdown-message em {
-  font-style: italic;
-}
-
-/* Animations pour la mindmap */
-@keyframes pulse-slow {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.05); }
-  100% { transform: scale(1); }
-}
-
-.animate-pulse-slow {
-  animation: pulse-slow 3s infinite ease-in-out;
-}
-
-/* Styles pour les nœuds en surbrillance */
-.highlighted-node {
-  filter: drop-shadow(0 0 8px rgba(241, 89, 34, 0.8));
-  transform: scale(1.1) !important;
-  z-index: 1000 !important;
-}
-
-/* Styles pour la minimap */
-.react-flow__minimap {
-  background-color: rgba(255, 255, 255, 0.9) !important;
-  border-radius: 8px !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
-  margin: 10px !important;
+.chat-neumorphic-button:active {
+  box-shadow: 
+    inset 4px 4px 8px #d1d1d1,
+    inset -4px -4px 8px #ffffff;
+  transform: translateY(2px);
 }

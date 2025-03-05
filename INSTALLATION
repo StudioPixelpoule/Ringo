@@ -1,0 +1,179 @@
+# Guide d'Installation et de Développement RINGO
+
+## 1. Configuration Initiale
+
+### Création du Projet
+```bash
+npm create vite@latest . -- --template react-ts
+```
+
+### Dépendances Installées
+```json
+{
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.7",
+    "lucide-react": "^0.344.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.22.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.9.1",
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.18",
+    "eslint": "^9.9.1",
+    "eslint-plugin-react-hooks": "^5.1.0-rc.0",
+    "eslint-plugin-react-refresh": "^0.4.11",
+    "globals": "^15.9.0",
+    "postcss": "^8.4.35",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.5.3",
+    "typescript-eslint": "^8.3.0",
+    "vite": "^5.4.2"
+  }
+}
+```
+
+### Configuration de Tailwind CSS
+1. Installation des dépendances
+```bash
+npm install -D tailwindcss postcss autoprefixer
+```
+
+2. Initialisation de Tailwind
+```bash
+npx tailwindcss init -p
+```
+
+3. Configuration du fichier `tailwind.config.js`
+```js
+export default {
+  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+};
+```
+
+4. Ajout des directives Tailwind dans `src/index.css`
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+```
+
+## 2. Configuration de Supabase
+
+### Installation et Configuration
+1. Installation de Supabase
+```bash
+npm install @supabase/supabase-js
+```
+
+2. Configuration des variables d'environnement dans `.env`
+```
+VITE_SUPABASE_ANON_KEY=votre_clé_anon
+VITE_SUPABASE_URL=votre_url_projet
+```
+
+3. Création du client Supabase (`src/lib/supabase.ts`)
+```typescript
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+```
+
+### Structure de la Base de Données
+1. Table `profiles`
+   - `id` (uuid, clé primaire)
+   - `email` (text, unique)
+   - `role` (text, 'admin' ou 'user')
+   - `created_at` (timestamp)
+   - `updated_at` (timestamp)
+
+2. Politiques de Sécurité (RLS)
+   - Lecture limitée au profil de l'utilisateur
+   - Mise à jour limitée au profil de l'utilisateur
+
+## 3. Structure de l'Application
+
+### Organisation des Fichiers
+```
+src/
+├── components/
+│   ├── Logo.tsx
+│   ├── DocumentIcon.tsx
+│   ├── DocumentListIcon.tsx
+│   └── DatabaseIcon.tsx
+├── lib/
+│   └── supabase.ts
+├── pages/
+│   ├── Login.tsx
+│   └── Chat.tsx
+├── App.tsx
+├── main.tsx
+└── index.css
+```
+
+### Fonctionnalités Implémentées
+1. Authentification
+   - Connexion par email/mot de passe
+   - Gestion des sessions
+   - Déconnexion
+
+2. Interface Utilisateur
+   - Header avec logo et contrôles
+   - Zone de chat principale
+   - Panneau latéral des conversations
+   - Panneau latéral des rapports
+   - Boutons neumorphiques
+   - Gestion des rôles (admin/user)
+
+3. Styles
+   - Design neumorphique
+   - Palette de couleurs personnalisée
+   - Animations fluides
+   - Interface responsive
+
+## 4. Commandes de Développement
+
+### Démarrage du Projet
+```bash
+npm run dev
+```
+
+### Construction pour Production
+```bash
+npm run build
+```
+
+### Vérification du Code
+```bash
+npm run lint
+```
+
+## 5. État Actuel
+
+### Fonctionnalités Complétées ✅
+- Configuration initiale du projet
+- Installation des dépendances
+- Configuration de Tailwind CSS
+- Configuration de Supabase
+- Authentification des utilisateurs
+- Interface de base
+- Gestion des rôles
+- Design neumorphique
+- Animations
+
+### Prochaines Étapes 🔲
+- Implémentation de la persistance des conversations
+- Gestion des rapports
+- Tests unitaires
+- Documentation utilisateur
+- Optimisations de performance
