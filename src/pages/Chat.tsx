@@ -7,7 +7,7 @@ import { DocumentListIcon } from '../components/DocumentListIcon';
 import { UserManagementModal } from '../components/UserManagementModal';
 import { DocumentImportModal } from '../components/DocumentImportModal';
 import { FileManagementModal } from '../components/FileManagementModal';
-import { MindmapModal } from '../components/MindmapModal.tsx';
+import { MindmapModal } from '../components/MindmapModal';
 import { ConversationList } from '../components/ConversationList';
 import { DocumentList } from '../components/DocumentList';
 import { TypingIndicator } from '../components/TypingIndicator';

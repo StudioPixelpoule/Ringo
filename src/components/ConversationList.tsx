@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Edit2, Trash2, MessageSquare } from 'lucide-react';
 import { useConversationStore, Conversation } from '../lib/conversationStore';
 import { DeleteConfirmationModal } from './DeleteConfirmationModal';
