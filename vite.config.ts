@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   optimizeDeps: {
-    exclude: ['lucide-react']
+    include: ['xlsx']
   },
   build: {
     target: 'esnext',
@@ -12,7 +12,8 @@ export default defineConfig({
       output: {
         manualChunks: {
           pdfjs: ['pdfjs-dist'],
-          tesseract: ['tesseract.js']
+          tesseract: ['tesseract.js'],
+          xlsx: ['xlsx']
         }
       }
     }

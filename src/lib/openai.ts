@@ -44,10 +44,10 @@ Pour l'analyse croisée des documents :
 
 À la fin de chaque réponse, propose des suggestions pour approfondir l'analyse :
 
-## 🔄 Pour approfondir...
-➡ "Souhaitez-vous des détails sur un point particulier ?"
-➡ "Je peux analyser plus en détail certains aspects, lesquels vous intéressent ?"
-➡ "Voulez-vous explorer d'autres perspectives ?"
+## Pour approfondir...
+- "Souhaitez-vous des détails sur un point particulier ?"
+- "Je peux analyser plus en détail certains aspects, lesquels vous intéressent ?"
+- "Voulez-vous explorer d'autres perspectives ?"
 
 Sois concis et précis dans tes réponses.`;
 
@@ -147,7 +147,7 @@ function prepareMessages(messages: ChatMessage[], documentContent?: string): Cha
 export async function generateChatResponse(messages: ChatMessage[], documentContent?: string): Promise<string> {
   try {
     if (!documentContent?.trim()) {
-      throw new Error('⚠ Aucun contenu disponible pour analyse.');
+      throw new Error('Aucun contenu disponible pour analyse.');
     }
 
     const preparedMessages = prepareMessages(messages, documentContent);
@@ -171,7 +171,7 @@ export async function generateChatResponse(messages: ChatMessage[], documentCont
     return response;
   } catch (error: any) {
     if (error?.error?.code === 'context_length_exceeded') {
-      console.warn("⚠️ Limite de tokens dépassée, nouvel essai avec contexte minimal");
+      console.warn("Limite de tokens dépassée, nouvel essai avec contexte minimal");
       
       const lastMessage = messages[messages.length - 1];
       if (!lastMessage) throw new Error('No message to process');
@@ -199,5 +199,94 @@ export async function generateChatResponse(messages: ChatMessage[], documentCont
     }
     
     throw new Error(`Failed to generate response: ${error.message}`);
+  }
+}
+
+export async function generateChatResponseStreaming(
+  messages: ChatMessage[],
+  documentContent?: string,
+  onChunk: (chunk: string) => void
+): Promise<string> {
+  try {
+    if (!documentContent?.trim()) {
+      throw new Error('Aucun contenu disponible pour analyse.');
+    }
+
+    const preparedMessages = prepareMessages(messages, documentContent);
+    let fullResponse = '';
+    let pendingFormatting = {
+      codeBlock: false,
+      listItem: false,
+      heading: false,
+      emphasis: false,
+      strong: false,
+      link: false
+    };
+
+    const stream = await openai.chat.completions.create({
+      model: 'gpt-4-turbo-preview',
+      messages: preparedMessages,
+      temperature: 0.7,
+      max_tokens: 4000,
+      presence_penalty: 0.1,
+      frequency_penalty: 0.2,
+      stream: true,
+      top_p: 0.95
+    });
+
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content || '';
+      if (!content) continue;
+
+      // Détecter et gérer les éléments de formatage
+      if (content.includes('```')) {
+        pendingFormatting.codeBlock = !pendingFormatting.codeBlock;
+      }
+      if (content.match(/^#+\s/)) {
+        pendingFormatting.heading = true;
+      }
+      if (content.includes('\n')) {
+        pendingFormatting.heading = false;
+        pendingFormatting.listItem = false;
+      }
+      if (content.match(/^[-*]\s/)) {
+        pendingFormatting.listItem = true;
+      }
+      if (content.includes('**')) {
+        pendingFormatting.strong = !pendingFormatting.strong;
+      }
+      if (content.includes('*') && !content.includes('**')) {
+        pendingFormatting.emphasis = !pendingFormatting.emphasis;
+      }
+      if (content.includes('[')) {
+        pendingFormatting.link = true;
+      }
+      if (content.includes(')') && pendingFormatting.link) {
+        pendingFormatting.link = false;
+      }
+
+      // Ajouter le contenu au texte complet
+      fullResponse += content;
+
+      // Envoyer le chunk avec le formatage préservé
+      onChunk(content);
+    }
+
+    return fullResponse;
+  } catch (error: any) {
+    if (error?.error?.code === 'context_length_exceeded') {
+      console.warn("Limite de tokens dépassée, nouvel essai avec contexte minimal");
+      
+      const lastMessage = messages[messages.length - 1];
+      if (!lastMessage) throw new Error('No message to process');
+
+      return generateChatResponseStreaming(
+        [{ role: 'system', content: SYSTEM_PROMPT }, lastMessage],
+        documentContent,
+        onChunk
+      );
+    }
+    
+    throw new Error(`Failed to generate streaming response: ${error.message}`);
   }
 }

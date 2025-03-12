@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useEffect } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { X, Upload, FileText, FolderPlus, ChevronRight, Edit2, Trash2, Check, Loader2 } from 'lucide-react';
 import { useDocumentStore, Document, Folder } from '../lib/documentStore';
@@ -275,12 +275,15 @@ export function DocumentImportModal() {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-7xl mx-4">
-        <div className="flex items-center justify-between px-6 py-4 border-b">
-          <h2 className="text-xl font-medium text-gray-900">Importer un document</h2>
+        <div className="bg-[#f15922] px-6 py-4 flex items-center justify-between rounded-t-xl">
+          <h2 className="text-xl font-medium text-white flex items-center gap-2">
+            <FileText size={24} />
+            Importer un document
+          </h2>
           <div className="flex items-center gap-2">
             <button
               onClick={() => !processingStatus.isProcessing && setModalOpen(false)}
-              className="text-gray-400 hover:text-gray-500"
+              className="text-white hover:text-white/90"
               disabled={processingStatus.isProcessing}
             >
               <X size={24} />

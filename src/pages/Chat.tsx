@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Users, ArrowRight, LogOut, Database } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Users, ArrowRight, LogOut, Database, FileText } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 import { Logo } from '../components/Logo';
 import { DocumentIcon } from '../components/DocumentIcon';
@@ -10,12 +10,14 @@ import { FileManagementModal } from '../components/FileManagementModal';
 import { FileExplorer } from '../components/FileExplorer';
 import { ConversationList } from '../components/ConversationList';
 import { DocumentList } from '../components/DocumentList';
-import { TypingIndicator } from '../components/TypingIndicator';
+import { MessageItem } from '../components/MessageItem';
+import { ReportTemplateManager } from '../components/ReportTemplateManager';
+import { ReportGeneratorWidget } from '../components/ReportGeneratorWidget';
 import { supabase } from '../lib/supabase';
 import { useUserStore } from '../lib/store';
 import { useDocumentStore } from '../lib/documentStore';
 import { useConversationStore } from '../lib/conversationStore';
-import ReactMarkdown from 'react-markdown';
+import './Chat.css';
 
 interface ChatProps {
   session: Session;
@@ -26,6 +28,12 @@ export function Chat({ session }: ChatProps) {
   const [userRole, setUserRole] = useState<string>('user');
   const [isFileExplorerOpen, setFileExplorerOpen] = useState(false);
   const [isFileManagementOpen, setFileManagementOpen] = useState(false);
+  const [isTemplateManagerOpen, setTemplateManagerOpen] = useState(false);
+  const [userHasScrolled, setUserHasScrolled] = useState(false);
+  
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   
   const { setModalOpen: setUserModalOpen } = useUserStore();
   const { setModalOpen: setDocumentModalOpen } = useDocumentStore();
@@ -38,28 +46,35 @@ export function Chat({ session }: ChatProps) {
     fetchConversations,
     unlinkDocument,
   } = useConversationStore();
-  
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Get the last assistant message index
+  const lastAssistantMessageIndex = messages
+    .map((m, i) => ({ ...m, index: i }))
+    .filter(m => m.sender === 'assistant')
+    .pop()?.index;
 
   useEffect(() => {
     const fetchUserRole = async () => {
       try {
-        const { data, error } = await supabase
+        const { data: profile, error } = await supabase
           .from('profiles')
-          .select('role')
+          .select('role, status')
           .eq('id', session.user.id)
-          .maybeSingle();
+          .single();
 
         if (error) {
-          throw error;
+          console.error('Error fetching user profile:', error);
+          return;
         }
 
-        if (data?.role) {
-          setUserRole(data.role);
+        if (profile?.status) {
+          setUserRole(profile.role);
+        } else {
+          console.warn('User profile is inactive');
+          await handleLogout();
         }
       } catch (error) {
-        console.error('Error fetching user role:', error);
+        console.error('Error in fetchUserRole:', error);
       }
     };
 
@@ -67,37 +82,71 @@ export function Chat({ session }: ChatProps) {
     fetchConversations();
   }, [session, fetchConversations]);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  // Handle scroll detection
+  const handleScroll = () => {
+    if (!messagesContainerRef.current) return;
+    
+    const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
+    const isScrolledToBottom = scrollHeight - scrollTop <= clientHeight + 50; // 50px margin
+    
+    if (!isScrolledToBottom) {
+      setUserHasScrolled(true);
+    } else {
+      setUserHasScrolled(false);
+    }
   };
 
+  // Scroll to bottom only in specific conditions
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    if (userHasScrolled) return;
+
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, userHasScrolled]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isTyping || !currentConversation) return;
-
+    
     const content = input.trim();
     setInput('');
+    setUserHasScrolled(false);
 
     try {
       await sendMessage(content);
+      
+      // Ensure input is focused after sending
+      inputRef.current?.focus();
+      
+      // Scroll to bottom after sending
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
     } catch (error) {
       console.error('Error sending message:', error);
     }
   };
 
   const adjustTextareaHeight = () => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 200) + 'px';
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+      inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 200) + 'px';
     }
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    try {
+      setUserRole('user');
+      setInput('');
+      setFileExplorerOpen(false);
+      setFileManagementOpen(false);
+      setTemplateManagerOpen(false);
+
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error during logout:', error);
+      window.location.href = '/login';
+    }
   };
 
   const handleRemoveDocument = async (documentId: string) => {
@@ -106,14 +155,6 @@ export function Chat({ session }: ChatProps) {
     } catch (error) {
       console.error('Error removing document:', error);
     }
-  };
-
-  const formatMessage = (content: string) => {
-    return content
-      .replace(/^## (.*$)/gm, '<h2 class="text-xl font-bold mb-3 mt-4">$1</h2>')
-      .replace(/^### (.*$)/gm, '<h3 class="text-lg font-semibold mb-2 mt-3">$1</h3>')
-      .replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-[#f15922]">$1</strong>')
-      .replace(/\n\n/g, '</p><p class="mb-3">');
   };
 
   return (
@@ -145,16 +186,14 @@ export function Chat({ session }: ChatProps) {
         </div>
         <div className="flex items-center gap-2">
           {userRole === 'admin' && (
-            <button 
-              onClick={() => setUserModalOpen(true)}
-              className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
-              aria-label="User management"
-            >
-              <Users size={18} strokeWidth={2.5} />
-            </button>
-          )}
-          {userRole === 'admin' && (
             <>
+              <button 
+                onClick={() => setUserModalOpen(true)}
+                className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
+                aria-label="User management"
+              >
+                <Users size={18} strokeWidth={2.5} />
+              </button>
               <button 
                 onClick={() => setDocumentModalOpen(true)}
                 className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
@@ -168,6 +207,13 @@ export function Chat({ session }: ChatProps) {
                 aria-label="File management"
               >
                 <DocumentListIcon />
+              </button>
+              <button 
+                onClick={() => setTemplateManagerOpen(true)}
+                className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
+                aria-label="Report templates"
+              >
+                <FileText size={18} strokeWidth={2.5} />
               </button>
             </>
           )}
@@ -190,7 +236,11 @@ export function Chat({ session }: ChatProps) {
               />
             )}
             
-            <div className="flex-1 overflow-y-auto p-4">
+            <div 
+              className="flex-1 overflow-y-auto p-4"
+              ref={messagesContainerRef}
+              onScroll={handleScroll}
+            >
               {!currentConversation ? (
                 <div className="h-full flex flex-col items-center justify-center text-gray-500">
                   <div className="w-32 h-32 mb-4 text-[#106f69]">
@@ -200,47 +250,23 @@ export function Chat({ session }: ChatProps) {
                     Prêt.e à mettre du rythme dans vos données ?!
                   </h2>
                   <p className="text-gray-600 text-center">
-                    Alors cliquer sur la base de données en bas à gauche et choisis un premier document...
+                    Alors cliquez sur la base de données en bas à gauche et choisissez un premier document...
                   </p>
                 </div>
               ) : (
                 <>
-                  {messages.map((message) => (
-                    <div
+                  {messages.map((message, index) => (
+                    <MessageItem
                       key={message.id}
-                      className={`mb-6 ${message.sender === 'user' ? 'pl-12' : 'pr-12'} message-appear`}
-                    >
-                      <div className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div
-                          className={`rounded-lg px-4 py-2 max-w-[90%] ${
-                            message.sender === 'user'
-                              ? 'bg-[#f15922] text-white'
-                              : 'bg-gray-100 text-gray-800'
-                          }`}
-                        >
-                          {message.sender === 'user' ? (
-                            <p>{message.content}</p>
-                          ) : (
-                            <div 
-                              className="prose prose-sm max-w-none"
-                              dangerouslySetInnerHTML={{ 
-                                __html: formatMessage(message.content)
-                              }}
-                            />
-                          )}
-                        </div>
-                      </div>
-                    </div>
+                      message={message}
+                      isLatestAssistantMessage={index === lastAssistantMessageIndex}
+                    />
                   ))}
-                  {isTyping && (
-                    <div className="pl-4">
-                      <TypingIndicator />
-                    </div>
-                  )}
                 </>
               )}
               <div ref={messagesEndRef} />
             </div>
+
             <div className="flex-shrink-0 p-4 bg-gradient-to-t from-white via-white to-transparent">
               <form onSubmit={handleSubmit} className="relative flex items-center gap-2">
                 <button
@@ -253,7 +279,7 @@ export function Chat({ session }: ChatProps) {
                 </button>
                 <div className="relative flex-grow">
                   <textarea
-                    ref={textareaRef}
+                    ref={inputRef}
                     value={input}
                     onChange={(e) => {
                       setInput(e.target.value);
@@ -288,6 +314,10 @@ export function Chat({ session }: ChatProps) {
         </main>
       </div>
 
+      {currentConversation && conversationDocuments.length > 0 && (
+        <ReportGeneratorWidget />
+      )}
+
       <UserManagementModal />
       <DocumentImportModal />
       <FileManagementModal
@@ -297,6 +327,10 @@ export function Chat({ session }: ChatProps) {
       <FileExplorer
         isOpen={isFileExplorerOpen}
         onClose={() => setFileExplorerOpen(false)}
+      />
+      <ReportTemplateManager
+        isOpen={isTemplateManagerOpen}
+        onClose={() => setTemplateManagerOpen(false)}
       />
     </div>
   );

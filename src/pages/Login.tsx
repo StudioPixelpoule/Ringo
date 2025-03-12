@@ -16,15 +16,38 @@ export function Login() {
     setError(null);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      // First check if user exists and is active
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('status')
+        .eq('email', email.trim().toLowerCase())
+        .maybeSingle();
+
+      if (profileError) {
+        throw new Error('Erreur lors de la vérification du profil');
+      }
+
+      if (profile && !profile.status) {
+        throw new Error('Ce compte a été désactivé');
+      }
+
+      // Then attempt to sign in
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password
       });
 
-      if (error) throw error;
+      if (signInError) {
+        if (signInError.message.includes('Invalid login credentials')) {
+          throw new Error('Email ou mot de passe incorrect');
+        }
+        throw signInError;
+      }
+
+      // If successful, navigate to home
       navigate('/');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      setError(err instanceof Error ? err.message : 'Une erreur est survenue');
     } finally {
       setLoading(false);
     }
@@ -89,6 +112,16 @@ export function Login() {
               {loading ? 'Connexion...' : 'Allons-y !'}
             </button>
           </form>
+        </div>
+
+        <div className="mt-8 flex flex-col items-center text-white/80">
+          <span className="mb-2">Propulsé par</span>
+          <div className="w-64">
+            <svg viewBox="0 0 1000 200" fill="currentColor">
+              <text x="500" y="100" fontSize="60" fontFamily="Arial" fontWeight="300" textAnchor="middle">En mode</text>
+              <text x="500" y="180" fontSize="100" fontFamily="Arial" fontWeight="900" textAnchor="middle">SOLUTIONS</text>
+            </svg>
+          </div>
         </div>
       </div>
     </div>

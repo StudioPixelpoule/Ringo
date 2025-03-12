@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Trash2, AlertTriangle, ChevronUp, ChevronDown } from 'lucide-react';
+import { X, Trash2, AlertTriangle, ChevronUp, ChevronDown, FileText } from 'lucide-react';
 import { useDocumentStore, Document } from '../lib/documentStore';
 import { supabase } from '../lib/supabase';
 import { DeleteConfirmationModal } from './DeleteConfirmationModal';
@@ -134,33 +134,41 @@ export function FileManagementModal({ isOpen, onClose }: FileManagementModalProp
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-xl w-[90vw] max-w-6xl mx-4 flex flex-col h-[80vh] overflow-hidden">
-        <div className="bg-[#f15922] px-6 py-4 flex items-center justify-between">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl mx-4 max-h-[85vh] flex flex-col">
+        <div className="bg-[#f15922] px-6 py-4 flex items-center justify-between flex-shrink-0 rounded-t-xl">
           <h2 className="text-xl font-semibold text-white flex items-center gap-2">
-            <FileIcon type="doc" className="text-white" size={24} />
+            <FileText size={24} />
             Gestion des Fichiers
           </h2>
-          <button
-            onClick={onClose}
-            className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white"
-          >
-            <X size={20} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white"
+            >
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
-        <div className="flex-1 overflow-hidden p-6">
+        <div className="p-6 overflow-y-auto flex-1">
           {error && (
-            <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2">
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6 flex items-center gap-2">
               <AlertTriangle size={20} />
               <span>{error}</span>
+              <button
+                onClick={() => setError(null)}
+                className="ml-auto text-red-700 hover:text-red-900"
+              >
+                <X size={16} />
+              </button>
             </div>
           )}
 
-          <div className="h-full overflow-auto rounded-lg border border-gray-200">
-            <table className="w-full">
+          <div className="bg-white rounded-lg overflow-hidden">
+            <table className="min-w-full">
               <thead className="bg-gray-50">
-                <tr className="text-left text-gray-600">
-                  <th className="sticky top-0 bg-gray-50 px-4 py-3 font-medium">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     <button
                       onClick={() => handleSort('name')}
                       className="hover:text-gray-900 flex items-center gap-1 group"
@@ -171,7 +179,7 @@ export function FileManagementModal({ isOpen, onClose }: FileManagementModalProp
                       </div>
                     </button>
                   </th>
-                  <th className="sticky top-0 bg-gray-50 px-4 py-3 font-medium">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     <button
                       onClick={() => handleSort('type')}
                       className="hover:text-gray-900 flex items-center gap-1 group"
@@ -182,8 +190,8 @@ export function FileManagementModal({ isOpen, onClose }: FileManagementModalProp
                       </div>
                     </button>
                   </th>
-                  <th className="sticky top-0 bg-gray-50 px-4 py-3 font-medium">Chemin</th>
-                  <th className="sticky top-0 bg-gray-50 px-4 py-3 font-medium">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Chemin</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     <button
                       onClick={() => handleSort('created_at')}
                       className="hover:text-gray-900 flex items-center gap-1 group"
@@ -194,45 +202,47 @@ export function FileManagementModal({ isOpen, onClose }: FileManagementModalProp
                       </div>
                     </button>
                   </th>
-                  <th className="sticky top-0 bg-gray-50 px-4 py-3 text-right font-medium">Actions</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="bg-white divide-y divide-gray-200">
                 {loading ? (
                   <tr>
-                    <td colSpan={5} className="text-center py-8 text-gray-500">
-                      Chargement...
+                    <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
+                      <div className="flex items-center justify-center">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#f15922]"></div>
+                      </div>
                     </td>
                   </tr>
                 ) : sortedDocuments.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="text-center py-8 text-gray-500">
+                    <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
                       Aucun fichier trouvé
                     </td>
                   </tr>
                 ) : (
                   sortedDocuments.map((doc) => (
                     <tr key={doc.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3">
+                      <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <FileIcon type={doc.type} className="text-[#f15922]" size={20} />
                           <span className="truncate max-w-[200px]">{doc.name}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3">
-                        <span className="uppercase text-sm font-medium text-gray-600">
+                      <td className="px-6 py-4">
+                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
                           {doc.type}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-6 py-4">
                         <span className="text-gray-600">
                           {getFolderPath(folders, doc.folder_id)}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-gray-600">
+                      <td className="px-6 py-4 text-gray-600">
                         {formatDate(doc.created_at)}
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-6 py-4 text-right">
                         <button
                           onClick={() => handleDeleteClick(doc)}
                           className="text-red-500 hover:text-red-700 p-1 hover:bg-red-50 rounded-full transition-colors"

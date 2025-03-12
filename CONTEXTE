@@ -86,7 +86,7 @@ src/
 - Support multi-documents
 - Historique des conversations
 - Formatage Markdown des réponses
-- Indicateur de frappe
+- Streaming des réponses en temps réel
 
 ### 4. Gestion des Utilisateurs
 - Authentification email/mot de passe
@@ -144,7 +144,7 @@ src/
 - Gestion du contexte conversationnel
 - Optimisation des tokens
 - Gestion des limites de contexte
-- Fallback en cas d'erreur
+- Streaming des réponses en temps réel
 
 ## Sécurité et Performance
 
@@ -183,6 +183,9 @@ VITE_OPENAI_API_KEY=clé_api_openai
 - tesseract.js : OCR
 - framer-motion : Animations
 - lucide-react : Icônes
+- react-markdown : Rendu Markdown
+- react-syntax-highlighter : Coloration syntaxique
+- zustand : Gestion d'état
 
 ## Maintenance et Évolution
 

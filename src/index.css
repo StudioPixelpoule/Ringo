@@ -193,3 +193,26 @@
   background-color: rgba(241, 89, 34, 0.2);
   border-radius: 9999px;
 }
+
+/* Streaming text styles */
+.streaming-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.streaming-text p, 
+.streaming-text h1,
+.streaming-text h2,
+.streaming-text h3,
+.streaming-text h4,
+.streaming-text h5,
+.streaming-text h6,
+.streaming-text ul,
+.streaming-text ol,
+.streaming-text blockquote {
+  margin-bottom: 1rem;
+}
+
+.streaming-text p:last-child {
+  margin-bottom: 0;
+}

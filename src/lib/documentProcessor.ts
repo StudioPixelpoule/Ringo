@@ -1,6 +1,8 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import { createWorker } from 'tesseract.js';
 import mammoth from 'mammoth';
+import * as XLSX from 'xlsx';
+import Papa from 'papaparse';
 
 // Initialize PDF.js worker
 const workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`;
@@ -25,36 +27,70 @@ async function processDataFile(file: File, options?: ProcessingOptions): Promise
       message: 'Lecture du fichier de données...'
     });
 
-    const text = await file.text();
     let data: any;
-
-    options?.onProgress?.({
-      stage: 'processing',
-      progress: 30,
-      message: 'Analyse du contenu...'
-    });
+    const extension = file.name.split('.').pop()?.toLowerCase();
 
     // Handle different file types
-    if (file.name.toLowerCase().endsWith('.json')) {
+    if (extension === 'json') {
+      const text = await file.text();
       try {
         data = JSON.parse(text);
       } catch (e) {
         throw new Error('Le fichier JSON est invalide');
       }
-    } else if (file.name.toLowerCase().endsWith('.csv')) {
-      // Parse CSV
-      const lines = text.split('\n');
-      const headers = lines[0].split(',').map(h => h.trim());
-      const rows = lines.slice(1).map(line => {
-        const values = line.split(',').map(v => v.trim());
-        return headers.reduce((obj, header, i) => {
-          obj[header] = values[i];
-          return obj;
-        }, {} as any);
+    } else if (extension === 'csv') {
+      const text = await file.text();
+      const parseResult = await new Promise((resolve, reject) => {
+        Papa.parse(text, {
+          header: true,
+          dynamicTyping: true,
+          skipEmptyLines: true,
+          delimitersToGuess: [',', ';', '\t', '|'],
+          complete: resolve,
+          error: reject
+        });
       });
-      data = rows;
-    } else if (file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls')) {
-      throw new Error('Les fichiers Excel binaires ne sont pas supportés. Veuillez exporter en CSV.');
+
+      if (parseResult.errors?.length > 0) {
+        console.warn('CSV parsing warnings:', parseResult.errors);
+      }
+
+      data = parseResult.data;
+    } else if (extension === 'xlsx' || extension === 'xls') {
+      options?.onProgress?.({
+        stage: 'processing',
+        progress: 40,
+        message: 'Traitement du fichier Excel...'
+      });
+      
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, {
+        type: 'array',
+        cellDates: true,
+        cellText: true
+      });
+      
+      // Extract all sheets
+      data = {};
+      workbook.SheetNames.forEach(sheetName => {
+        const worksheet = workbook.Sheets[sheetName];
+        // Convert each sheet to JSON
+        data[sheetName] = XLSX.utils.sheet_to_json(worksheet, {
+          defval: '',
+          raw: false
+        });
+      });
+      
+      // If no data was extracted
+      if (!data || Object.keys(data).length === 0) {
+        throw new Error('Aucune donnée trouvée dans le fichier Excel');
+      }
+      
+      options?.onProgress?.({
+        stage: 'processing',
+        progress: 60,
+        message: 'Données Excel extraites avec succès'
+      });
     }
 
     options?.onProgress?.({
@@ -65,13 +101,19 @@ async function processDataFile(file: File, options?: ProcessingOptions): Promise
 
     // Format data for storage
     const formattedData = {
-      type: file.name.split('.').pop()?.toLowerCase(),
+      type: extension,
       fileName: file.name,
       data,
       metadata: {
-        rowCount: Array.isArray(data) ? data.length : 1,
-        fields: Array.isArray(data) ? Object.keys(data[0] || {}) : Object.keys(data || {}),
-        size: text.length
+        rowCount: Array.isArray(data) ? data.length : 
+                 typeof data === 'object' ? Object.values(data).reduce((sum: number, sheet: any[]) => sum + sheet.length, 0) : 1,
+        fields: Array.isArray(data) ? Object.keys(data[0] || {}) :
+                typeof data === 'object' ? Object.keys(data).map(sheet => ({
+                  sheet,
+                  fields: Object.keys(data[sheet][0] || {})
+                })) : Object.keys(data || {}),
+        size: file.size,
+        sheets: extension === 'xlsx' || extension === 'xls' ? Object.keys(data) : undefined
       },
       processingDate: new Date().toISOString()
     };

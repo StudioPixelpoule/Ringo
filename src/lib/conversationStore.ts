@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from './supabase';
-import { generateChatResponse } from './openai';
+import { generateChatResponse, generateChatResponseStreaming } from './openai';
 import { Document } from './documentStore';
 
 export interface Conversation {
@@ -25,41 +25,6 @@ export interface ConversationDocument {
   documents: Document;
 }
 
-async function formatDocument(doc: Document): Promise<string> {
-  try {
-    // Fetch document content from document_contents table
-    const { data, error } = await supabase
-      .from('document_contents')
-      .select('content')
-      .eq('document_id', doc.id)
-      .single();
-
-    if (error) {
-      console.error('Error fetching document content:', error);
-      return `⚠ Erreur lors de la récupération du contenu de "${doc.name}": ${error.message}`;
-    }
-
-    if (!data?.content) {
-      console.warn('Document has no content:', doc.id);
-      return `⚠ Document "${doc.name}" ne contient pas de contenu analysable.`;
-    }
-
-    // Formatage plus explicite pour l'API
-    return `
-====== DÉBUT DU DOCUMENT: ${doc.name} (${doc.type}) ======
-
-${data.content}
-
-====== FIN DU DOCUMENT: ${doc.name} ======
-
-INSTRUCTIONS: Le texte ci-dessus contient le contenu complet du document "${doc.name}". Utilise ce contenu pour répondre aux questions de l'utilisateur. Si on te demande des informations à propos de ce document, base ta réponse uniquement sur ce contenu.
-`;
-  } catch (error) {
-    console.error('Error formatting document:', error);
-    return `⚠ Erreur lors du traitement de "${doc.name}": ${error instanceof Error ? error.message : 'Erreur inconnue'}`;
-  }
-}
-
 interface ConversationStore {
   conversations: Conversation[];
   currentConversation: Conversation | null;
@@ -68,6 +33,7 @@ interface ConversationStore {
   loading: boolean;
   error: string | null;
   isTyping: boolean;
+  viewedMessages: Set<string>;
 
   fetchConversations: () => Promise<void>;
   createConversation: (title: string) => Promise<Conversation>;
@@ -80,6 +46,7 @@ interface ConversationStore {
   linkDocument: (documentId: string) => Promise<void>;
   unlinkDocument: (documentId: string) => Promise<void>;
   fetchConversationDocuments: (conversationId: string) => Promise<void>;
+  markMessageAsViewed: (messageId: string) => void;
   clearError: () => void;
 }
 
@@ -91,6 +58,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   loading: false,
   error: null,
   isTyping: false,
+  viewedMessages: new Set<string>(),
 
   fetchConversations: async () => {
     set({ loading: true, error: null });
@@ -258,7 +226,19 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      set({ messages: data || [] });
+      
+      // Mark existing messages as viewed
+      const currentViewedMessages = get().viewedMessages;
+      data?.forEach(message => {
+        if (message.sender === 'assistant') {
+          currentViewedMessages.add(message.id);
+        }
+      });
+      
+      set({ 
+        messages: data || [],
+        viewedMessages: currentViewedMessages
+      });
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Error fetching messages' });
     } finally {
@@ -320,29 +300,64 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
         conversationDocs
           .map(doc => doc.documents)
           .filter(Boolean)
-          .map(doc => formatDocument(doc))
+          .map(async doc => {
+            const { data: contentData } = await supabase
+              .from('document_contents')
+              .select('content')
+              .eq('document_id', doc.id)
+              .single();
+
+            return `
+====== DÉBUT DU DOCUMENT: ${doc.name} (${doc.type}) ======
+
+${contentData?.content || ''}
+
+====== FIN DU DOCUMENT: ${doc.name} ======
+
+INSTRUCTIONS: Le texte ci-dessus contient le contenu complet du document "${doc.name}". Utilise ce contenu pour répondre aux questions de l'utilisateur.
+`;
+          })
       );
 
       const documentContext = formattedDocuments.join('\n\n---\n\n');
 
-      const aiResponse = await generateChatResponse(
-        [...chatHistory, { role: 'user', content }],
-        documentContext
-      );
-
+      let aiResponse = '';
       const { data: aiMessage, error: aiError } = await supabase
         .from('messages')
         .insert([{
           conversation_id: conversation.id,
           sender: 'assistant',
-          content: aiResponse
+          content: ''
         }])
         .select()
         .single();
 
       if (aiError) throw aiError;
 
-      set({ messages: [...get().messages, aiMessage] });
+      // Stream the response
+      await generateChatResponseStreaming(
+        [...chatHistory, { role: 'user', content }],
+        documentContext,
+        async (chunk) => {
+          aiResponse += chunk;
+          
+          const { error: updateError } = await supabase
+            .from('messages')
+            .update({ content: aiResponse })
+            .eq('id', aiMessage.id);
+            
+          if (updateError) throw updateError;
+          
+          set({ 
+            messages: [...get().messages.filter(m => m.id !== aiMessage.id), 
+              { ...aiMessage, content: aiResponse }
+            ]
+          });
+        }
+      );
+
+      // Don't mark as viewed immediately - wait for streaming to complete
+      set({ messages: [...get().messages] });
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Error sending message' });
     } finally {
@@ -476,6 +491,12 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     } finally {
       set({ loading: false });
     }
+  },
+
+  markMessageAsViewed: (messageId) => {
+    set(state => ({
+      viewedMessages: new Set(state.viewedMessages).add(messageId)
+    }));
   },
 
   clearError: () => set({ error: null }),
