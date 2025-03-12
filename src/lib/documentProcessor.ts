@@ -179,6 +179,81 @@ async function processPDFDocument(file: File, options?: ProcessingOptions): Prom
   }
 }
 
+async function processAudioFile(file: File, options?: ProcessingOptions): Promise<string> {
+  try {
+    options?.onProgress?.({
+      stage: 'preparation',
+      progress: 10,
+      message: 'Préparation du fichier audio...'
+    });
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('model', 'whisper-1');
+    formData.append('response_format', 'verbose_json');
+
+    options?.onProgress?.({
+      stage: 'processing',
+      progress: 30,
+      message: 'Transcription en cours...'
+    });
+
+    const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`,
+      },
+      body: formData,
+      signal: options?.signal
+    });
+
+    if (!response.ok) {
+      throw new Error(`Transcription failed: ${response.statusText}`);
+    }
+
+    options?.onProgress?.({
+      stage: 'extraction',
+      progress: 70,
+      message: 'Traitement de la transcription...'
+    });
+
+    const result = await response.json();
+
+    if (!result.text) {
+      throw new Error('No transcription text received');
+    }
+
+    const processedResult = {
+      text: result.text,
+      metadata: {
+        title: file.name.replace(/\.[^/.]+$/, ''),
+        duration: result.duration,
+        language: result.language,
+        fileType: file.type,
+        fileName: file.name,
+        segments: result.segments.map((s: any) => ({
+          start: Number(s.start) || 0,
+          end: Number(s.end) || 0,
+          text: String(s.text || '').trim()
+        }))
+      },
+      confidence: 0.95,
+      processingDate: new Date().toISOString()
+    };
+
+    options?.onProgress?.({
+      stage: 'complete',
+      progress: 100,
+      message: 'Transcription terminée'
+    });
+
+    return JSON.stringify(processedResult);
+  } catch (error) {
+    console.error('[Audio Processing] Error:', error);
+    throw error;
+  }
+}
+
 export async function processDocument(
   file: File,
   options?: ProcessingOptions
@@ -198,6 +273,12 @@ export async function processDocument(
     let result: string;
 
     switch (file.type.toLowerCase()) {
+      case 'audio/mpeg':
+      case 'audio/wav':
+      case 'audio/x-wav':
+        result = await processAudioFile(file, options);
+        break;
+
       case 'application/pdf':
         result = await processPDFDocument(file, options);
         break;

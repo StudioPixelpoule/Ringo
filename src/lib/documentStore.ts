@@ -110,14 +110,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       // Process document content first
       const content = await processDocument(file, {
         onProgress: (progress) => {
-          set({
-            processingStatus: {
-              isProcessing: true,
-              progress: progress.progress * 0.6, // 60% of total progress
-              stage: progress.stage,
-              message: progress.message
-            }
-          });
+          set({ processingStatus: progress });
         }
       });
 
@@ -209,7 +202,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
           isProcessing: false,
           progress: 100,
           stage: 'complete',
-          message: 'Document enregistré avec succès'
+          message: file.type.startsWith('audio/') ? 'Fichier audio traité avec succès' : 'Document traité avec succès'
         }
       });
 
@@ -232,7 +225,15 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       }
 
       console.error('🚨 Error in uploadDocument:', error);
-      set({ error: error instanceof Error ? error.message : 'Erreur lors du téléversement' });
+      set({ 
+        error: error instanceof Error ? error.message : 'Erreur lors du téléversement',
+        processingStatus: {
+          isProcessing: false,
+          progress: 0,
+          stage: 'preparation',
+          message: ''
+        }
+      });
       throw error;
     } finally {
       set({ loading: false });

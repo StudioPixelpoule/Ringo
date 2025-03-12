@@ -19,7 +19,7 @@ export interface ChatMessage {
   content: string;
 }
 
-const SYSTEM_PROMPT = `Tu es Ringo, un assistant IA expert en analyse de documents et de fichiers audio. 
+const SYSTEM_PROMPT = `Tu es Ringo, un assistant IA expert en analyse de documents.
 
 Pour une meilleure lisibilité, structure tes réponses avec :
 
@@ -28,13 +28,6 @@ Pour une meilleure lisibilité, structure tes réponses avec :
 - Des points importants en **gras**
 - Des listes à puces pour énumérer des éléments
 - Des sauts de ligne pour aérer le texte
-
-Pour les fichiers audio :
-- Analyse la transcription fournie comme si tu écoutais une conversation
-- Identifie les points clés et les thèmes principaux
-- Utilise les segments temporels pour référencer des moments précis ([10s - 15s] par exemple)
-- Fournis un résumé structuré du contenu
-- Mets en évidence les citations importantes
 
 Pour les documents textuels :
 - Analyse le contenu et la structure
@@ -59,9 +52,9 @@ Pour l'analyse croisée des documents :
 Sois concis et précis dans tes réponses.`;
 
 // Constants for token limits
-const MAX_TOKENS = 8000;
-const MAX_TOKENS_PER_DOC = 4000;
-const MAX_TOKENS_PER_CHUNK = 2000;
+const MAX_TOKENS = 128000; // GPT-4 Turbo context window
+const MAX_TOKENS_PER_DOC = 32000;
+const MAX_TOKENS_PER_CHUNK = 8000;
 
 function estimateTokens(text: string): number {
   // GPT models use ~4 characters per token on average
@@ -117,8 +110,8 @@ function findRelevantContent(query: string, content: string, maxTokens: number):
 }
 
 function prepareMessages(messages: ChatMessage[], documentContent?: string): ChatMessage[] {
-  const MAX_SYSTEM_TOKENS = 1000;
-  const MAX_HISTORY_TOKENS = 2000;
+  const MAX_SYSTEM_TOKENS = 2000;
+  const MAX_HISTORY_TOKENS = 4000;
   const MAX_DOCUMENT_TOKENS = MAX_TOKENS - MAX_SYSTEM_TOKENS - MAX_HISTORY_TOKENS;
 
   const preparedMessages: ChatMessage[] = [
@@ -127,53 +120,26 @@ function prepareMessages(messages: ChatMessage[], documentContent?: string): Cha
 
   if (documentContent) {
     preparedMessages.push({
-      role: 'user',
-      content: truncateText(`Voici les documents à analyser :\n\n${documentContent}`, MAX_DOCUMENT_TOKENS)
+      role: 'system',
+      content: `Tu as reçu un ou plusieurs documents à analyser. Tu dois utiliser uniquement ces documents pour répondre aux questions de l'utilisateur. Si tu ne trouves pas l'information dans les documents, indique-le clairement.`
+    });
+
+    preparedMessages.push({
+      role: 'system',
+      content: truncateText(`DOCUMENTS À ANALYSER:\n\n${documentContent}`, MAX_DOCUMENT_TOKENS)
     });
   }
 
+  // Add conversation history
+  const relevantMessages = [...messages];
   let historyTokens = 0;
-  const recentMessages = [...messages].reverse();
 
-  for (const message of recentMessages) {
+  for (const message of relevantMessages) {
     const tokens = estimateTokens(message.content);
     if (historyTokens + tokens > MAX_HISTORY_TOKENS) break;
     preparedMessages.push(message);
     historyTokens += tokens;
   }
-
-  if (documentContent?.includes('---')) {
-    preparedMessages.push({
-      role: 'system',
-      content: `
-🔍 Analyse Croisée des Documents
-
-Pour cette analyse de plusieurs documents :
-1. Compare systématiquement les contenus
-2. Identifie les points communs et les différences
-3. Relève les éventuelles contradictions
-4. Montre comment les documents se complètent
-5. Propose une synthèse globale
-
-Structure ta réponse avec :
-## Points Communs
-## Différences
-## Complémentarités
-## Synthèse Globale
-`
-    });
-  }
-
-  preparedMessages.push({
-    role: 'system',
-    content: `
-Pour rendre la conversation plus interactive :
-1. Analyse la question de l'utilisateur et identifie les points qui pourraient être approfondis
-2. Après avoir répondu à la question principale, suggère 2-3 axes d'approfondissement pertinents
-3. Formule ces suggestions sous forme de questions précises
-4. Ajoute une section "🔄 Pour approfondir..." à la fin de ta réponse
-`
-  });
 
   return preparedMessages;
 }
@@ -187,7 +153,7 @@ export async function generateChatResponse(messages: ChatMessage[], documentCont
     const preparedMessages = prepareMessages(messages, documentContent);
     
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4',
+      model: 'gpt-4-turbo-preview',
       messages: preparedMessages,
       temperature: 0.7,
       max_tokens: 4000,
@@ -211,7 +177,7 @@ export async function generateChatResponse(messages: ChatMessage[], documentCont
       if (!lastMessage) throw new Error('No message to process');
 
       const completion = await openai.chat.completions.create({
-        model: 'gpt-4',
+        model: 'gpt-4-turbo-preview',
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
           lastMessage

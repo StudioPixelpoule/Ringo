@@ -189,7 +189,9 @@ export function DocumentImportModal() {
       const file = acceptedFiles[0];
       setSelectedFile(file);
       
-      if (file.type === 'application/pdf') {
+      if (file.type.startsWith('audio/')) {
+        setDocumentType('audio');
+      } else if (file.type === 'application/pdf') {
         setDocumentType('pdf');
       } else if (file.type.includes('word')) {
         setDocumentType('doc');
@@ -260,13 +262,19 @@ export function DocumentImportModal() {
     accept: {
       'application/pdf': ['.pdf'],
       'application/msword': ['.doc'],
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx']
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+      'audio/mpeg': ['.mp3'],
+      'audio/wav': ['.wav'],
+      'audio/x-wav': ['.wav']
     },
     multiple: false,
     disabled: processingStatus.isProcessing
   });
 
   const getFileIcon = (file: File) => {
+    if (file.type.startsWith('audio/')) {
+      return <FileAudio size={48} className="text-[#f15922]" />;
+    }
     return <FileText size={48} className="text-[#f15922]" />;
   };
 
@@ -406,6 +414,7 @@ export function DocumentImportModal() {
                         <option value="">Sélectionner un type</option>
                         <option value="pdf">PDF</option>
                         <option value="doc">Document Word</option>
+                        <option value="audio">Fichier audio</option>
                       </select>
                     </div>
 
