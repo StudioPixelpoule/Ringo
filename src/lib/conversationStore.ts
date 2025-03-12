@@ -34,20 +34,23 @@ async function formatDocument(doc: Document): Promise<string> {
       .eq('document_id', doc.id)
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Error fetching document content:', error);
+      return `⚠ Erreur lors de la récupération du contenu de "${doc.name}": ${error.message}`;
+    }
+
     if (!data?.content) {
       console.warn('Document has no content:', doc.id);
       return `⚠ Document "${doc.name}" ne contient pas de contenu analysable.`;
     }
 
-    return `📄 **DOCUMENT : ${doc.name}**\n📌 Type : ${doc.type}\n\n### Contenu Intégral\n${data.content}`;
+    return `📄 **DOCUMENT : ${doc.name}**\n📌 Type : ${doc.type}\n\n### Contenu\n${data.content}`;
   } catch (error) {
     console.error('Error formatting document:', {
       docId: doc.id,
       docName: doc.name,
       error: error instanceof Error ? error.message : 'Unknown error'
     });
-
     return `⚠ Erreur lors du traitement de "${doc.name}": ${error instanceof Error ? error.message : 'Erreur inconnue'}`;
   }
 }
@@ -133,13 +136,16 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   createConversationWithDocument: async (document) => {
     set({ loading: true, error: null });
     try {
-      if (!document.content) {
-        throw new Error('Document has no content to analyze');
-      }
+      // First check if document has content
+      const { data: contentData, error: contentError } = await supabase
+        .from('document_contents')
+        .select('content')
+        .eq('document_id', document.id)
+        .single();
 
-      if (get().currentConversation) {
-        await get().linkDocument(document.id);
-        return;
+      if (contentError) throw contentError;
+      if (!contentData?.content) {
+        throw new Error('Document has no content to analyze');
       }
 
       const conversation = await get().createConversation(document.name);
@@ -308,7 +314,6 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
             name,
             type,
             url,
-            content,
             processed
           )
         `)
@@ -317,6 +322,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       if (docError) throw docError;
 
       console.log('Formatting documents for analysis:', conversationDocs?.length || 0);
+
       const formattedDocuments = await Promise.all(
         (conversationDocs || [])
           .map(doc => doc.documents)
@@ -325,8 +331,8 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
             console.log('Processing document:', {
               id: doc.id,
               name: doc.name,
-              hasContent: !!doc.content,
-              contentLength: doc.content?.length || 0
+              type: doc.type,
+              processed: doc.processed
             });
             return await formatDocument(doc);
           })
@@ -507,7 +513,6 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
             name,
             type,
             url,
-            content,
             processed
           )
         `)
@@ -517,7 +522,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       
       console.log('Fetched conversation documents:', {
         count: data?.length || 0,
-        hasContent: data?.every(d => !!d.documents?.content)
+        hasContent: data?.every(d => d.documents?.processed)
       });
       
       set({ documents: data || [] });
