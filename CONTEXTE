@@ -1,7 +1,7 @@
 # RINGO - Assistant IA pour l'Analyse de Documents
 
 ## Vue d'Ensemble
-RINGO est une application web moderne qui permet aux utilisateurs d'analyser des documents et fichiers audio grâce à l'intelligence artificielle. L'application offre une interface intuitive pour gérer, visualiser et interagir avec les documents via une interface de chat.
+RINGO est une application web moderne qui permet aux utilisateurs d'analyser des documents grâce à l'intelligence artificielle. L'application offre une interface intuitive pour gérer, visualiser et interagir avec les documents via une interface de chat.
 
 ## Architecture Technique
 
@@ -12,7 +12,7 @@ RINGO est une application web moderne qui permet aux utilisateurs d'analyser des
 - Base de données : Supabase
 - Authentication : Supabase Auth
 - Stockage : Supabase Storage
-- IA : OpenAI GPT-4 et Whisper API
+- IA : OpenAI GPT-4
 
 ### Structure du Projet
 ```
@@ -35,18 +35,22 @@ src/
    - Champs : id, name, parent_id, created_at, updated_at
 
 3. `documents`
-   - Stockage des documents et métadonnées
-   - Champs : id, folder_id, name, type, content, processed, url, created_at
+   - Stockage des métadonnées des documents
+   - Champs : id, folder_id, name, type, group_name, description, url, processed, size, created_at, updated_at
 
-4. `conversations`
+4. `document_contents`
+   - Stockage du contenu extrait des documents
+   - Champs : id, document_id, content, created_at, updated_at
+
+5. `conversations`
    - Historique des conversations
    - Champs : id, user_id, title, created_at
 
-5. `messages`
+6. `messages`
    - Messages des conversations
    - Champs : id, conversation_id, sender, content, created_at
 
-6. `conversation_documents`
+7. `conversation_documents`
    - Liaison entre conversations et documents
    - Champs : id, conversation_id, document_id, created_at
 
@@ -58,18 +62,17 @@ src/
 ## Fonctionnalités Principales
 
 ### 1. Gestion des Documents
-- Upload de documents (PDF, Word, Audio)
+- Upload de documents (PDF, Word)
 - Organisation en dossiers hiérarchiques
 - Traitement automatique du contenu
 - Explorateur de fichiers intuitif
-- Support multi-formats (Word, Excel, PDF, Audio, etc.)
+- Support multi-formats (Word, PDF)
 - Prévisualisation des documents
 - Sélection multiple pour analyse
 
 ### 2. Traitement des Documents
 - PDF : Extraction de texte avec OCR au besoin
 - Word : Conversion en texte structuré
-- Audio : Transcription via Whisper API
 - Métadonnées : Extraction et stockage
 - Traitement asynchrone
 - Barre de progression
@@ -131,13 +134,6 @@ src/
 4. Stockage dans Supabase
 5. Indexation pour la recherche
 
-### Fichiers Audio
-1. Upload du fichier
-2. Découpage en chunks si nécessaire
-3. Transcription via Whisper API
-4. Structuration avec métadonnées
-5. Stockage du texte et segments
-
 ## Intégration IA
 
 ### OpenAI GPT-4
@@ -148,15 +144,6 @@ src/
 - Optimisation des tokens
 - Gestion des limites de contexte
 - Fallback en cas d'erreur
-
-### Whisper API
-- Transcription audio multilingue
-- Détection automatique de la langue
-- Segmentation temporelle
-- Métadonnées détaillées
-- Gestion des fichiers volumineux
-- Contrôle qualité
-- Validation des segments
 
 ## Sécurité et Performance
 

@@ -2,7 +2,6 @@ import React, { useCallback, useState, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { X, Upload, FileText, FolderPlus, ChevronRight, Edit2, Trash2, Check, Loader2, FileAudio, XCircle } from 'lucide-react';
 import { useDocumentStore, Document, Folder } from '../lib/documentStore';
-import { processDocument } from '../lib/documentProcessor';
 import { supabase } from '../lib/supabase';
 
 interface ProcessingStatus {
@@ -125,7 +124,6 @@ export function DocumentImportModal() {
     stage: 'upload',
     message: ''
   });
-  const [abortController, setAbortController] = useState<AbortController | null>(null);
 
   useEffect(() => {
     if (isModalOpen) {
@@ -191,9 +189,7 @@ export function DocumentImportModal() {
       const file = acceptedFiles[0];
       setSelectedFile(file);
       
-      if (file.type.startsWith('audio/')) {
-        setDocumentType('audio');
-      } else if (file.type === 'application/pdf') {
+      if (file.type === 'application/pdf') {
         setDocumentType('pdf');
       } else if (file.type.includes('word')) {
         setDocumentType('doc');
@@ -216,71 +212,36 @@ export function DocumentImportModal() {
         isProcessing: true,
         progress: 0,
         stage: 'upload',
-        message: 'Préparation du fichier...',
+        message: 'Préparation du document...',
         canCancel: true
       });
 
-      let content = '';
-      const isAudioFile = selectedFile.type.startsWith('audio/');
-
-      try {
-        setProcessingStatus({
-          isProcessing: true,
-          progress: 25,
-          stage: 'processing',
-          message: 'Traitement du document...',
-          canCancel: true
-        });
-
-        content = await processDocument(selectedFile);
-
-        if (!content) {
-          throw new Error(`Échec du traitement de ${selectedFile.name}`);
-        }
-      } catch (error) {
-        console.error('Processing error:', error);
-        throw new Error(`Erreur lors du traitement: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
-      }
+      const doc = await uploadDocument(selectedFile, currentFolder.id, {
+        type: documentType || selectedFile.type,
+        group_name: groupName,
+        description: description.replace(/\s+/g, '_'),
+        processed: true,
+        size: selectedFile.size
+      });
 
       setProcessingStatus({
-        isProcessing: true,
-        progress: 75,
-        stage: 'upload',
-        message: 'Enregistrement du document...',
-        canCancel: true
+        isProcessing: false,
+        progress: 100,
+        stage: 'complete',
+        message: 'Document traité avec succès !',
+        canCancel: false
       });
 
-      try {
-        const doc = await uploadDocument(selectedFile, currentFolder.id, {
-          type: documentType || selectedFile.type,
-          group_name: groupName,
-          description: description.replace(/\s+/g, '_'),
-          content,
-          processed: true,
-          size: selectedFile.size
-        });
+      setTimeout(() => {
+        if (!processingStatus.isProcessing) {
+          setSelectedFile(null);
+          setDocumentType('');
+          setGroupName('');
+          setDescription('');
+          setModalOpen(false);
+        }
+      }, 2000);
 
-        setProcessingStatus({
-          isProcessing: false,
-          progress: 100,
-          stage: 'complete',
-          message: `${isAudioFile ? 'Fichier audio' : 'Document'} traité avec succès !`,
-          canCancel: false
-        });
-
-        setTimeout(() => {
-          if (!processingStatus.isProcessing) {
-            setSelectedFile(null);
-            setDocumentType('');
-            setGroupName('');
-            setDescription('');
-            setModalOpen(false);
-          }
-        }, 2000);
-      } catch (error) {
-        console.error('Upload error:', error);
-        throw new Error(`Erreur lors de l'enregistrement: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
-      }
     } catch (error) {
       console.error('Overall error:', error);
       setProcessingStatus({
@@ -294,30 +255,18 @@ export function DocumentImportModal() {
     }
   };
 
-  const handleCancel = () => {
-    if (abortController) {
-      abortController.abort();
-    }
-  };
-
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
       'application/pdf': ['.pdf'],
       'application/msword': ['.doc'],
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
-      'audio/mpeg': ['.mp3'],
-      'audio/wav': ['.wav'],
-      'audio/x-wav': ['.wav']
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx']
     },
     multiple: false,
     disabled: processingStatus.isProcessing
   });
 
   const getFileIcon = (file: File) => {
-    if (file.type.startsWith('audio/')) {
-      return <FileAudio size={48} className="text-[#f15922]" />;
-    }
     return <FileText size={48} className="text-[#f15922]" />;
   };
 
@@ -328,13 +277,15 @@ export function DocumentImportModal() {
       <div className="bg-white rounded-xl shadow-xl w-full max-w-7xl mx-4">
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <h2 className="text-xl font-medium text-gray-900">Importer un document</h2>
-          <button
-            onClick={() => !processingStatus.isProcessing && setModalOpen(false)}
-            className="text-gray-400 hover:text-gray-500"
-            disabled={processingStatus.isProcessing}
-          >
-            <X size={24} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => !processingStatus.isProcessing && setModalOpen(false)}
+              className="text-gray-400 hover:text-gray-500"
+              disabled={processingStatus.isProcessing}
+            >
+              <X size={24} />
+            </button>
+          </div>
         </div>
 
         {processingStatus.stage === 'complete' ? (
@@ -455,7 +406,6 @@ export function DocumentImportModal() {
                         <option value="">Sélectionner un type</option>
                         <option value="pdf">PDF</option>
                         <option value="doc">Document Word</option>
-                        <option value="audio">Fichier audio</option>
                       </select>
                     </div>
 
@@ -529,15 +479,6 @@ export function DocumentImportModal() {
                     <p className="text-sm font-medium text-gray-700">
                       {Math.round(processingStatus.progress)}%
                     </p>
-                    {processingStatus.canCancel && (
-                      <button
-                        onClick={handleCancel}
-                        className="p-1 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
-                        title="Annuler l'upload"
-                      >
-                        <XCircle size={20} />
-                      </button>
-                    )}
                   </div>
                 </div>
                 <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
