@@ -1,3 +1,4 @@
+import React from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 
 interface DeleteConfirmationModalProps {

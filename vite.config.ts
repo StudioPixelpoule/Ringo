@@ -8,29 +8,13 @@ export default defineConfig({
   },
   build: {
     target: 'esnext',
-    outDir: 'dist',
-    sourcemap: false,
-    chunkSizeWarningLimit: 2000,
     rollupOptions: {
       output: {
         manualChunks: {
           pdfjs: ['pdfjs-dist'],
-          tesseract: ['tesseract.js'],
-          vendor: [
-            'react',
-            'react-dom',
-            'react-router-dom',
-            'framer-motion',
-            'd3',
-            'zustand'
-          ]
+          tesseract: ['tesseract.js']
         }
       }
-    }
-  },
-  resolve: {
-    alias: {
-      '@': '/src'
     }
   },
   server: {

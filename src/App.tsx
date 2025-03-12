@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Session } from '@supabase/supabase-js';
 import { Login } from './pages/Login';
@@ -19,19 +19,39 @@ function App() {
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSession(session);
-      setLoading(false);
-
-      // If session is null and we had a previous session, redirect to login
-      if (!session && window.location.pathname !== '/login') {
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'TOKEN_REFRESHED') {
+        setSession(session);
+      } else if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+        setSession(null);
         window.location.href = '/login';
+      } else {
+        setSession(session);
+      }
+      setLoading(false);
+    });
+
+    // Handle auth errors
+    const handleAuthError = (error: any) => {
+      if (error?.message?.includes('refresh_token_not_found') || 
+          error?.message?.includes('Invalid Refresh Token')) {
+        console.warn('Session expired, redirecting to login');
+        setSession(null);
+        window.location.href = '/login';
+      }
+    };
+
+    // Add error listener
+    window.addEventListener('unhandledrejection', (event) => {
+      if (event.reason?.name === 'AuthApiError') {
+        handleAuthError(event.reason);
       }
     });
 
-    // Cleanup subscription
+    // Cleanup subscriptions
     return () => {
       subscription.unsubscribe();
+      window.removeEventListener('unhandledrejection', handleAuthError);
     };
   }, []);
 

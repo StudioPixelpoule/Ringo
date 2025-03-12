@@ -1,13 +1,16 @@
 import React, { useCallback, useState, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { X, Upload, FileText, FolderPlus, ChevronRight, Edit2, Trash2, CheckCircle, Loader2 } from 'lucide-react';
-import { useDocumentStore, Folder } from '../lib/documentStore';
+import { X, Upload, FileText, FolderPlus, ChevronRight, Edit2, Trash2, Check, Loader2, FileAudio, XCircle } from 'lucide-react';
+import { useDocumentStore, Document, Folder } from '../lib/documentStore';
+import { processDocument } from '../lib/documentProcessor';
+import { supabase } from '../lib/supabase';
 
 interface ProcessingStatus {
   isProcessing: boolean;
   progress: number;
   stage: 'upload' | 'processing' | 'complete';
   message: string;
+  canCancel?: boolean;
 }
 
 interface FolderColumnProps {
@@ -122,38 +125,28 @@ export function DocumentImportModal() {
     stage: 'upload',
     message: ''
   });
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
 
   useEffect(() => {
     if (isModalOpen) {
       fetchFolders();
-      // Reset states when modal opens
-      setProcessingStatus({
-        isProcessing: false,
-        progress: 0,
-        stage: 'upload',
-        message: ''
-      });
-      setSelectedFile(null);
-      setDocumentType('');
-      setGroupName('');
-      setDescription('');
+      if (!processingStatus.isProcessing) {
+        setProcessingStatus({
+          isProcessing: false,
+          progress: 0,
+          stage: 'upload',
+          message: ''
+        });
+        setSelectedFile(null);
+        setDocumentType('');
+        setGroupName('');
+        setDescription('');
+      }
     }
-  }, [isModalOpen, fetchFolders]);
-
-  // Auto-close modal after successful upload
-  useEffect(() => {
-    let timeout: NodeJS.Timeout;
-    if (processingStatus.stage === 'complete') {
-      timeout = setTimeout(() => {
-        setModalOpen(false);
-      }, 2000);
-    }
-    return () => clearTimeout(timeout);
-  }, [processingStatus.stage, setModalOpen]);
+  }, [isModalOpen, fetchFolders, processingStatus.isProcessing]);
 
   const getFolderPath = () => {
     if (!currentFolder) return 'Aucun dossier sélectionné';
-    
     const path = selectedPath.map(folder => folder.name);
     if (path.length === 0) return 'Racine';
     return path.join(' / ');
@@ -194,8 +187,18 @@ export function DocumentImportModal() {
   };
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    if (acceptedFiles.length > 0) {
-      setSelectedFile(acceptedFiles[0]);
+    if (acceptedFiles.length > 0 && !processingStatus.isProcessing) {
+      const file = acceptedFiles[0];
+      setSelectedFile(file);
+      
+      if (file.type.startsWith('audio/')) {
+        setDocumentType('audio');
+      } else if (file.type === 'application/pdf') {
+        setDocumentType('pdf');
+      } else if (file.type.includes('word')) {
+        setDocumentType('doc');
+      }
+
       setProcessingStatus({
         isProcessing: false,
         progress: 0,
@@ -203,92 +206,97 @@ export function DocumentImportModal() {
         message: ''
       });
     }
-  }, []);
+  }, [processingStatus.isProcessing]);
 
   const handleUpload = async () => {
-    if (!currentFolder || !selectedFile) return;
+    if (!currentFolder || !selectedFile || processingStatus.isProcessing) return;
     
     try {
       setProcessingStatus({
         isProcessing: true,
         progress: 0,
         stage: 'upload',
-        message: 'Téléversement du fichier...'
+        message: 'Préparation du fichier...',
+        canCancel: true
       });
 
-      const doc = await uploadDocument(selectedFile, currentFolder.id, {
-        type: documentType,
-        group_name: groupName,
-        description: description.replace(/\s+/g, '_'),
+      let content = '';
+      const isAudioFile = selectedFile.type.startsWith('audio/');
+
+      try {
+        setProcessingStatus({
+          isProcessing: true,
+          progress: 25,
+          stage: 'processing',
+          message: 'Traitement du document...',
+          canCancel: true
+        });
+
+        content = await processDocument(selectedFile);
+
+        if (!content) {
+          throw new Error(`Échec du traitement de ${selectedFile.name}`);
+        }
+      } catch (error) {
+        console.error('Processing error:', error);
+        throw new Error(`Erreur lors du traitement: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+      }
+
+      setProcessingStatus({
+        isProcessing: true,
+        progress: 75,
+        stage: 'upload',
+        message: 'Enregistrement du document...',
+        canCancel: true
       });
 
-      // Update progress based on uploadProgress from store
-      setProcessingStatus(prev => ({
-        ...prev,
-        progress: uploadProgress,
-      }));
+      try {
+        const doc = await uploadDocument(selectedFile, currentFolder.id, {
+          type: documentType || selectedFile.type,
+          group_name: groupName,
+          description: description.replace(/\s+/g, '_'),
+          content,
+          processed: true,
+          size: selectedFile.size
+        });
 
-      if (doc.processed) {
         setProcessingStatus({
           isProcessing: false,
           progress: 100,
           stage: 'complete',
-          message: 'Document traité avec succès !'
-        });
-      } else {
-        setProcessingStatus({
-          isProcessing: true,
-          progress: 100,
-          stage: 'processing',
-          message: 'Traitement du document en cours...'
+          message: `${isAudioFile ? 'Fichier audio' : 'Document'} traité avec succès !`,
+          canCancel: false
         });
 
-        // Poll for document processing status
-        const checkProcessing = setInterval(async () => {
-          const { data } = await supabase
-            .from('documents')
-            .select('processed')
-            .eq('id', doc.id)
-            .single();
-
-          if (data?.processed) {
-            clearInterval(checkProcessing);
-            setProcessingStatus({
-              isProcessing: false,
-              progress: 100,
-              stage: 'complete',
-              message: 'Document traité avec succès !'
-            });
+        setTimeout(() => {
+          if (!processingStatus.isProcessing) {
+            setSelectedFile(null);
+            setDocumentType('');
+            setGroupName('');
+            setDescription('');
+            setModalOpen(false);
           }
         }, 2000);
-
-        // Clear interval after 2 minutes (timeout)
-        setTimeout(() => {
-          clearInterval(checkProcessing);
-          if (processingStatus.stage !== 'complete') {
-            setProcessingStatus({
-              isProcessing: false,
-              progress: 100,
-              stage: 'complete',
-              message: 'Document téléversé. Le traitement continue en arrière-plan.'
-            });
-          }
-        }, 120000);
+      } catch (error) {
+        console.error('Upload error:', error);
+        throw new Error(`Erreur lors de l'enregistrement: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
       }
-      
-      // Reset form
-      setSelectedFile(null);
-      setDocumentType('');
-      setGroupName('');
-      setDescription('');
     } catch (error) {
-      console.error('Upload failed:', error);
+      console.error('Overall error:', error);
       setProcessingStatus({
         isProcessing: false,
         progress: 0,
         stage: 'upload',
-        message: ''
+        message: error instanceof Error ? error.message : 'Une erreur est survenue',
+        canCancel: false
       });
+      setSelectedFile(null);
+    }
+  };
+
+  const handleCancel = () => {
+    if (abortController) {
+      abortController.abort();
     }
   };
 
@@ -298,13 +306,20 @@ export function DocumentImportModal() {
       'application/pdf': ['.pdf'],
       'application/msword': ['.doc'],
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
-      'application/vnd.ms-excel': ['.xls'],
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
       'audio/mpeg': ['.mp3'],
       'audio/wav': ['.wav'],
+      'audio/x-wav': ['.wav']
     },
     multiple: false,
+    disabled: processingStatus.isProcessing
   });
+
+  const getFileIcon = (file: File) => {
+    if (file.type.startsWith('audio/')) {
+      return <FileAudio size={48} className="text-[#f15922]" />;
+    }
+    return <FileText size={48} className="text-[#f15922]" />;
+  };
 
   if (!isModalOpen) return null;
 
@@ -314,8 +329,9 @@ export function DocumentImportModal() {
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <h2 className="text-xl font-medium text-gray-900">Importer un document</h2>
           <button
-            onClick={() => setModalOpen(false)}
+            onClick={() => !processingStatus.isProcessing && setModalOpen(false)}
             className="text-gray-400 hover:text-gray-500"
+            disabled={processingStatus.isProcessing}
           >
             <X size={24} />
           </button>
@@ -324,7 +340,7 @@ export function DocumentImportModal() {
         {processingStatus.stage === 'complete' ? (
           <div className="p-8 text-center">
             <div className="flex items-center justify-center mb-4">
-              <CheckCircle size={48} className="text-green-500" />
+              <Check size={48} className="text-green-500" />
             </div>
             <h3 className="text-xl font-medium text-gray-900 mb-2">
               {processingStatus.message}
@@ -336,7 +352,6 @@ export function DocumentImportModal() {
         ) : (
           <>
             <div className="grid grid-cols-3 gap-6 p-6">
-              {/* Left column - Document upload */}
               <div className="space-y-4">
                 <h3 className="text-lg font-medium text-gray-900">Téléverser un document</h3>
                 <div
@@ -344,27 +359,41 @@ export function DocumentImportModal() {
                   className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
                     isDragActive
                       ? 'border-[#f15922] bg-[#f15922]/5'
+                      : processingStatus.isProcessing
+                      ? 'border-gray-200 bg-gray-50 cursor-not-allowed'
                       : 'border-gray-300 hover:border-[#f15922] hover:bg-gray-50'
                   }`}
                 >
-                  <input {...getInputProps()} />
-                  <Upload
-                    size={48}
-                    className={`mx-auto mb-4 ${
-                      isDragActive ? 'text-[#f15922]' : 'text-gray-400'
-                    }`}
-                  />
-                  <p className="text-lg font-medium text-gray-900 mb-2">
-                    {selectedFile ? selectedFile.name : 'Déposez votre fichier ici'}
-                  </p>
-                  <p className="text-gray-500">ou</p>
-                  <button className="mt-2 px-4 py-2 bg-[#f15922] text-white rounded-md hover:bg-[#f15922]/90">
-                    Parcourir
-                  </button>
+                  <input {...getInputProps()} disabled={processingStatus.isProcessing} />
+                  <div className="flex flex-col items-center justify-center">
+                    {selectedFile ? (
+                      getFileIcon(selectedFile)
+                    ) : (
+                      <Upload
+                        size={48}
+                        className={`mx-auto mb-4 ${
+                          isDragActive ? 'text-[#f15922]' : 'text-gray-400'
+                        }`}
+                      />
+                    )}
+                    <p className="text-lg font-medium text-gray-900 mb-2">
+                      {selectedFile ? selectedFile.name : 'Déposez votre fichier ici'}
+                    </p>
+                    <p className="text-gray-500">ou</p>
+                    <button 
+                      className={`mt-2 px-4 py-2 ${
+                        processingStatus.isProcessing
+                          ? 'bg-gray-300 cursor-not-allowed'
+                          : 'bg-[#f15922] hover:bg-[#f15922]/90'
+                      } text-white rounded-md transition-colors`}
+                      disabled={processingStatus.isProcessing}
+                    >
+                      Parcourir
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              {/* Middle column - Folder navigation */}
               <div className="space-y-4">
                 <h3 className="text-lg font-medium text-gray-900">IRSST</h3>
                 <div className="border rounded-lg overflow-hidden">
@@ -396,7 +425,6 @@ export function DocumentImportModal() {
                 </div>
               </div>
 
-              {/* Right column - Document indexing */}
               <div className="space-y-4">
                 <h3 className="text-lg font-medium text-gray-900">Indexation du document</h3>
                 <div className="space-y-4">
@@ -422,11 +450,11 @@ export function DocumentImportModal() {
                         value={documentType}
                         onChange={(e) => setDocumentType(e.target.value)}
                         className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#f15922] focus:border-transparent"
+                        disabled={processingStatus.isProcessing}
                       >
                         <option value="">Sélectionner un type</option>
                         <option value="pdf">PDF</option>
                         <option value="doc">Document Word</option>
-                        <option value="xls">Feuille Excel</option>
                         <option value="audio">Fichier audio</option>
                       </select>
                     </div>
@@ -439,6 +467,7 @@ export function DocumentImportModal() {
                         value={groupName}
                         onChange={(e) => setGroupName(e.target.value)}
                         className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#f15922] focus:border-transparent"
+                        disabled={processingStatus.isProcessing}
                       >
                         <option value="">Sélectionner un groupe</option>
                         <option value="groupe1">Groupe 1</option>
@@ -457,6 +486,7 @@ export function DocumentImportModal() {
                         placeholder="Description du document (utilisez _ au lieu des espaces)"
                         className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#f15922] focus:border-transparent resize-none"
                         rows={4}
+                        disabled={processingStatus.isProcessing}
                       />
                       <p className="text-xs text-gray-500 mt-1">
                         Note: Les caractères spéciaux seront remplacés par des underscores (_).
@@ -491,19 +521,30 @@ export function DocumentImportModal() {
 
             {processingStatus.isProcessing && (
               <div className="px-6 pb-6">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm text-gray-600">
+                    {processingStatus.message}
+                  </p>
+                  <div className="flex items-center gap-4">
+                    <p className="text-sm font-medium text-gray-700">
+                      {Math.round(processingStatus.progress)}%
+                    </p>
+                    {processingStatus.canCancel && (
+                      <button
+                        onClick={handleCancel}
+                        className="p-1 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                        title="Annuler l'upload"
+                      >
+                        <XCircle size={20} />
+                      </button>
+                    )}
+                  </div>
+                </div>
                 <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-[#f15922] transition-all duration-300"
                     style={{ width: `${processingStatus.progress}%` }}
                   />
-                </div>
-                <div className="flex items-center justify-between mt-2">
-                  <p className="text-sm text-gray-600">
-                    {processingStatus.message}
-                  </p>
-                  <p className="text-sm font-medium text-gray-700">
-                    {Math.round(processingStatus.progress)}%
-                  </p>
                 </div>
               </div>
             )}

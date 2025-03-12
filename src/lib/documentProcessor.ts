@@ -1,293 +1,229 @@
+import * as pdfjsLib from 'pdfjs-dist';
 import { createWorker } from 'tesseract.js';
 import mammoth from 'mammoth';
-import * as pdfjsLib from 'pdfjs-dist';
-import { processAudioFile } from './audioProcessor';
 
 // Initialize PDF.js worker
 const workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`;
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
 
-interface ProcessingResult {
-  text: string;
-  metadata: {
-    title?: string;
-    author?: string;
-    date?: string;
-    language?: string;
-    pageCount?: number;
-    fileType: string;
-    fileName: string;
-  };
-  structure: {
-    title?: string;
-    abstract?: string;
-    sections: Array<{
-      heading?: string;
-      content: string;
-      pageNumber?: number;
-    }>;
-  };
-  confidence: number;
-  processingDate: string;
+// Chunk size for large file processing (16MB)
+const CHUNK_SIZE = 16 * 1024 * 1024;
+
+interface ProcessingProgress {
+  stage: 'preparation' | 'processing' | 'extraction' | 'complete';
+  progress: number;
+  message: string;
 }
 
-function cleanText(text: string): string {
-  return text
-    .replace(/\s+/g, ' ')
-    .replace(/[\n\r]+/g, '\n')
-    .replace(/[^\S\n]+/g, ' ')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
+interface ProcessingOptions {
+  onProgress?: (progress: ProcessingProgress) => void;
+  signal?: AbortSignal;
 }
 
-function detectLanguage(text: string): string {
-  const frenchPattern = /^(le|la|les|un|une|des|je|tu|il|elle|nous|vous|ils|elles|et|ou|mais|donc)\s/i;
-  return frenchPattern.test(text) ? 'fra' : 'eng';
-}
-
-async function extractPDFText(file: File): Promise<ProcessingResult> {
-  const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  const metadata = await pdf.getMetadata();
-
-  const pages: Array<{ text: string; items: any[] }> = [];
-  let totalConfidence = 0;
-
-  // Process each page
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent({ normalizeWhitespace: true });
-    
-    let pageText = '';
-    const items = content.items as any[];
-    
-    // Extract text while preserving structure
-    let lastY: number | null = null;
-    let currentLine = '';
-    
-    for (const item of items) {
-      const y = Math.round(item.transform[5]);
-      const text = item.str.trim();
-      
-      if (!text) continue;
-      
-      // Detect line breaks based on vertical position
-      if (lastY !== null && Math.abs(y - lastY) > item.height) {
-        if (currentLine) {
-          pageText += currentLine + '\n';
-          currentLine = '';
-        }
-      }
-      
-      currentLine += (currentLine && Math.abs(item.transform[4] - items[items.length - 1]?.transform[4]) < 5 ? ' ' : '') + text;
-      lastY = y;
-    }
-    
-    if (currentLine) {
-      pageText += currentLine;
-    }
-
-    pages.push({
-      text: cleanText(pageText),
-      items
-    });
-
-    // If page has very little text, try OCR
-    if (pageText.length < 100) {
-      const scale = 2.0;
-      const viewport = page.getViewport({ scale });
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-      
-      if (context) {
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        
-        await page.render({
-          canvasContext: context,
-          viewport,
-        }).promise;
-        
-        const worker = await createWorker();
-        const lang = detectLanguage(pageText);
-        await worker.loadLanguage(lang);
-        await worker.initialize(lang);
-        
-        const { data } = await worker.recognize(canvas);
-        await worker.terminate();
-        
-        if (data.text.length > pageText.length) {
-          pages[i - 1].text = cleanText(data.text);
-          totalConfidence += data.confidence / 100;
-        } else {
-          totalConfidence += 1;
-        }
-      }
-    } else {
-      totalConfidence += 1;
-    }
-  }
-
-  // Extract document structure
-  const sections: ProcessingResult['structure']['sections'] = [];
-  let currentSection = { content: '' };
-  let abstract = '';
-
-  pages.forEach((page, pageIndex) => {
-    const lines = page.text.split('\n');
-    
-    lines.forEach(line => {
-      const trimmedLine = line.trim();
-      if (!trimmedLine) return;
-
-      // Detect headings (all caps, numbered, or larger font)
-      const isHeading = 
-        trimmedLine.toUpperCase() === trimmedLine ||
-        /^\d+[.\s]/.test(trimmedLine) ||
-        page.items.some(item => 
-          item.str.includes(trimmedLine) && 
-          (item.transform[0] > 12 || item.fontName?.toLowerCase().includes('bold'))
-        );
-
-      if (isHeading) {
-        if (currentSection.content) {
-          sections.push({ ...currentSection, pageNumber: pageIndex + 1 });
-        }
-        currentSection = {
-          heading: trimmedLine,
-          content: '',
-          pageNumber: pageIndex + 1
-        };
-      } else {
-        // First non-heading paragraph is considered abstract
-        if (!abstract && !currentSection.heading && pageIndex === 0) {
-          abstract = trimmedLine;
-        } else {
-          currentSection.content += (currentSection.content ? '\n' : '') + trimmedLine;
-        }
-      }
-    });
-  });
-
-  // Add final section
-  if (currentSection.content) {
-    sections.push(currentSection);
-  }
-
-  // Combine all text
-  const fullText = pages.map(p => p.text).join('\n\n');
-
-  return {
-    text: fullText,
-    metadata: {
-      title: metadata.info?.Title || sections[0]?.heading,
-      author: metadata.info?.Author,
-      date: metadata.info?.CreationDate,
-      language: detectLanguage(fullText),
-      pageCount: pdf.numPages,
-      fileType: file.type,
-      fileName: file.name
-    },
-    structure: {
-      title: sections[0]?.heading,
-      abstract,
-      sections
-    },
-    confidence: totalConfidence / pdf.numPages,
-    processingDate: new Date().toISOString()
-  };
-}
-
-async function processTextDocument(file: File): Promise<ProcessingResult> {
-  let text = '';
-  let confidence = 1;
-
-  if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-    const arrayBuffer = await file.arrayBuffer();
-    const result = await mammoth.extractRawText({ arrayBuffer });
-    text = result.value;
-  } else {
-    text = await file.text();
-  }
-
-  text = cleanText(text);
-  const language = detectLanguage(text);
-
-  // Extract structure
-  const lines = text.split('\n');
-  const sections: ProcessingResult['structure']['sections'] = [];
-  let currentSection = { content: '' };
-  let abstract = '';
-
-  lines.forEach(line => {
-    const trimmedLine = line.trim();
-    if (!trimmedLine) return;
-
-    if (trimmedLine.toUpperCase() === trimmedLine || /^\d+[.\s]/.test(trimmedLine)) {
-      if (currentSection.content) {
-        sections.push({ ...currentSection });
-      }
-      currentSection = {
-        heading: trimmedLine,
-        content: ''
-      };
-    } else {
-      if (!abstract && !currentSection.heading) {
-        abstract = trimmedLine;
-      } else {
-        currentSection.content += (currentSection.content ? '\n' : '') + trimmedLine;
-      }
-    }
-  });
-
-  if (currentSection.content) {
-    sections.push(currentSection);
-  }
-
-  return {
-    text,
-    metadata: {
-      title: sections[0]?.heading,
-      date: new Date().toISOString(),
-      language,
-      fileType: file.type,
-      fileName: file.name
-    },
-    structure: {
-      title: sections[0]?.heading,
-      abstract,
-      sections
-    },
-    confidence,
-    processingDate: new Date().toISOString()
-  };
-}
-
-export async function processDocument(file: File): Promise<string> {
+async function processTextDocument(file: File, options?: ProcessingOptions): Promise<string> {
   try {
-    let result: any;
+    options?.onProgress?.({
+      stage: 'preparation',
+      progress: 10,
+      message: 'Préparation du document texte...'
+    });
+
+    let text: string;
+
+    if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer });
+      text = result.value;
+    } else {
+      text = await file.text();
+    }
+
+    if (!text?.trim()) {
+      throw new Error(`Aucun contenu extrait du document: ${file.name}`);
+    }
+
+    options?.onProgress?.({
+      stage: 'processing',
+      progress: 50,
+      message: 'Nettoyage et structuration du texte...'
+    });
+
+    // Clean and structure text
+    text = text
+      .replace(/\s+/g, ' ')
+      .replace(/[\n\r]+/g, '\n')
+      .replace(/[^\S\n]+/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
+    options?.onProgress?.({
+      stage: 'complete',
+      progress: 100,
+      message: 'Traitement terminé'
+    });
+
+    return text;
+  } catch (error) {
+    console.error('[Text Processing] Error:', error);
+    throw new Error(`Erreur lors du traitement du document texte: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+  }
+}
+
+async function processPDFDocument(file: File, options?: ProcessingOptions): Promise<string> {
+  try {
+    options?.onProgress?.({
+      stage: 'preparation',
+      progress: 10,
+      message: 'Chargement du PDF...'
+    });
+
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({
+      data: arrayBuffer,
+      useSystemFonts: true,
+      standardFontDataUrl: `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/standard_fonts/`,
+      cMapUrl: `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/cmaps/`,
+      cMapPacked: true,
+      disableFontFace: false
+    }).promise;
+
+    const numPages = pdf.numPages;
+    let extractedText = '';
+    let currentPage = 1;
+
+    for (let i = 1; i <= numPages; i++) {
+      if (options?.signal?.aborted) {
+        throw new Error('Processing cancelled');
+      }
+
+      options?.onProgress?.({
+        stage: 'processing',
+        progress: Math.round((i / numPages) * 80) + 10,
+        message: `Traitement de la page ${i}/${numPages}...`
+      });
+
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      let pageText = '';
+
+      // Extract text while preserving structure
+      for (const item of content.items as any[]) {
+        if (item.str?.trim()) {
+          pageText += item.str + ' ';
+        }
+      }
+
+      // If page has little text, try OCR
+      if (pageText.length < 100) {
+        try {
+          const scale = 2.0;
+          const viewport = page.getViewport({ scale });
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+
+          if (context) {
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+
+            await page.render({
+              canvasContext: context,
+              viewport
+            }).promise;
+
+            const worker = await createWorker();
+            await worker.loadLanguage('fra+eng');
+            await worker.initialize('fra+eng');
+            const { data } = await worker.recognize(canvas);
+            await worker.terminate();
+
+            if (data.text.length > pageText.length) {
+              pageText = data.text;
+            }
+          }
+        } catch (ocrError) {
+          console.warn(`OCR failed for page ${i}:`, ocrError);
+        }
+      }
+
+      extractedText += pageText.trim() + '\n\n';
+      currentPage++;
+    }
+
+    options?.onProgress?.({
+      stage: 'extraction',
+      progress: 90,
+      message: 'Finalisation de l\'extraction...'
+    });
+
+    const cleanedText = extractedText
+      .replace(/\s+/g, ' ')
+      .replace(/[\n\r]+/g, '\n')
+      .replace(/[^\S\n]+/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
+    if (!cleanedText) {
+      throw new Error(`Aucun texte extrait du PDF: ${file.name}`);
+    }
+
+    options?.onProgress?.({
+      stage: 'complete',
+      progress: 100,
+      message: 'Traitement terminé'
+    });
+
+    return cleanedText;
+  } catch (error) {
+    console.error('[PDF Processing] Error:', error);
+    throw new Error(`Erreur lors du traitement du PDF: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+  }
+}
+
+export async function processDocument(
+  file: File,
+  options?: ProcessingOptions
+): Promise<string> {
+  try {
+    console.log('📄 Starting document processing:', {
+      name: file.name,
+      type: file.type,
+      size: file.size
+    });
+
+    // Validate file size
+    if (file.size > 100 * 1024 * 1024) { // 100MB limit
+      throw new Error('Le fichier est trop volumineux (limite: 100MB)');
+    }
+
+    let result: string;
 
     switch (file.type.toLowerCase()) {
       case 'application/pdf':
-        result = await extractPDFText(file);
+        result = await processPDFDocument(file, options);
         break;
+
       case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
       case 'text/plain':
-        result = await processTextDocument(file);
+        result = await processTextDocument(file, options);
         break;
-      case 'audio/mpeg':
-      case 'audio/wav':
-      case 'audio/x-wav':
-      case 'audio/mp3':
-        result = await processAudioFile(file);
-        break;
+
       default:
         throw new Error(`Type de fichier non supporté: ${file.type}`);
     }
 
-    return JSON.stringify(result);
+    if (!result?.trim()) {
+      throw new Error(`Aucun contenu valide extrait de ${file.name}`);
+    }
+
+    console.log('✅ Document processing completed:', {
+      fileName: file.name,
+      contentLength: result.length,
+      excerpt: result.substring(0, 100) + '...'
+    });
+
+    return result;
   } catch (error) {
     console.error('[Document Processing] Error:', error);
-    throw new Error(`Failed to process document: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw error;
   }
 }

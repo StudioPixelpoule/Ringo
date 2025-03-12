@@ -1,6 +1,5 @@
 import OpenAI from 'openai';
 
-// Get API key from environment
 const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
 
 if (!apiKey) {
@@ -10,7 +9,6 @@ if (!apiKey) {
   );
 }
 
-// Initialize OpenAI client
 const openai = new OpenAI({
   apiKey,
   dangerouslyAllowBrowser: true
@@ -22,6 +20,7 @@ export interface ChatMessage {
 }
 
 const SYSTEM_PROMPT = `Tu es Ringo, un assistant IA expert en analyse de documents et de fichiers audio. 
+
 Pour une meilleure lisibilité, structure tes réponses avec :
 
 - Des titres en utilisant "##" pour les sections principales
@@ -31,10 +30,11 @@ Pour une meilleure lisibilité, structure tes réponses avec :
 - Des sauts de ligne pour aérer le texte
 
 Pour les fichiers audio :
-- Analyse la transcription fournie
+- Analyse la transcription fournie comme si tu écoutais une conversation
 - Identifie les points clés et les thèmes principaux
-- Utilise les segments temporels pour référencer des moments précis
+- Utilise les segments temporels pour référencer des moments précis ([10s - 15s] par exemple)
 - Fournis un résumé structuré du contenu
+- Mets en évidence les citations importantes
 
 Pour les documents textuels :
 - Analyse le contenu et la structure
@@ -42,47 +42,67 @@ Pour les documents textuels :
 - Met en évidence les informations importantes
 - Propose une synthèse claire
 
+Pour l'analyse croisée des documents :
+- Compare systématiquement les contenus
+- Identifie les points communs et les différences
+- Relève les éventuelles contradictions
+- Montre comment les documents se complètent
+- Propose une synthèse globale
+
+À la fin de chaque réponse, propose des suggestions pour approfondir l'analyse :
+
+## 🔄 Pour approfondir...
+➡ "Souhaitez-vous des détails sur un point particulier ?"
+➡ "Je peux analyser plus en détail certains aspects, lesquels vous intéressent ?"
+➡ "Voulez-vous explorer d'autres perspectives ?"
+
 Sois concis et précis dans tes réponses.`;
 
+// Constants for token limits
+const MAX_TOKENS = 8000;
+const MAX_TOKENS_PER_DOC = 4000;
+const MAX_TOKENS_PER_CHUNK = 2000;
+
 function estimateTokens(text: string): number {
-  // GPT models use ~4 chars per token on average
+  // GPT models use ~4 characters per token on average
   return Math.ceil(text.length / 4);
 }
 
-function truncateToTokenLimit(text: string, maxTokens: number): string {
-  if (estimateTokens(text) <= maxTokens) return text;
+function truncateText(text: string, maxTokens: number): string {
+  const estimatedTokens = estimateTokens(text);
+  if (estimatedTokens <= maxTokens) {
+    return text;
+  }
 
-  // Split into paragraphs and add until we reach the limit
+  // Split into paragraphs and accumulate until we hit the token limit
   const paragraphs = text.split('\n\n');
   let result = '';
-  let tokens = 0;
+  let currentTokens = 0;
 
   for (const paragraph of paragraphs) {
     const paragraphTokens = estimateTokens(paragraph);
-    if (tokens + paragraphTokens > maxTokens) break;
+    if (currentTokens + paragraphTokens > maxTokens) {
+      break;
+    }
     result += (result ? '\n\n' : '') + paragraph;
-    tokens += paragraphTokens;
+    currentTokens += paragraphTokens;
   }
 
-  return result;
+  return result + '\n\n[Texte tronqué pour respecter la limite de tokens]';
 }
 
 function findRelevantContent(query: string, content: string, maxTokens: number): string {
-  // Split content into paragraphs
   const paragraphs = content.split('\n\n');
   
-  // Score each paragraph based on relevance to query
-  const scoredParagraphs = paragraphs.map(p => ({
-    text: p,
-    score: query.toLowerCase().split(/\s+/).reduce((score, word) => 
+  const scoredParagraphs = paragraphs.map(p => {
+    const score = query.toLowerCase().split(/\s+/).reduce((score, word) => 
       score + (p.toLowerCase().includes(word) ? 1 : 0), 0
-    )
-  }));
+    );
+    return { text: p, score };
+  });
 
-  // Sort by relevance score
   scoredParagraphs.sort((a, b) => b.score - a.score);
 
-  // Combine most relevant paragraphs within token limit
   let result = '';
   let tokens = 0;
 
@@ -97,69 +117,21 @@ function findRelevantContent(query: string, content: string, maxTokens: number):
 }
 
 function prepareMessages(messages: ChatMessage[], documentContent?: string): ChatMessage[] {
-  const MAX_TOKENS = 6000; // Leave room for response
-  const SYSTEM_TOKENS = estimateTokens(SYSTEM_PROMPT);
-  const MAX_HISTORY_TOKENS = 1000;
-  const MAX_DOCUMENT_TOKENS = MAX_TOKENS - SYSTEM_TOKENS - MAX_HISTORY_TOKENS;
+  const MAX_SYSTEM_TOKENS = 1000;
+  const MAX_HISTORY_TOKENS = 2000;
+  const MAX_DOCUMENT_TOKENS = MAX_TOKENS - MAX_SYSTEM_TOKENS - MAX_HISTORY_TOKENS;
 
-  const preparedMessages: ChatMessage[] = [{
-    role: 'system',
-    content: SYSTEM_PROMPT
-  }];
+  const preparedMessages: ChatMessage[] = [
+    { role: 'system', content: SYSTEM_PROMPT }
+  ];
 
-  // Add document context if available
   if (documentContent) {
-    try {
-      const parsed = JSON.parse(documentContent);
-      const lastUserMessage = messages.findLast(m => m.role === 'user')?.content || '';
-      
-      // Extract metadata
-      const metadata = parsed.metadata || {};
-      const fileType = metadata.fileType || 'document';
-      const duration = metadata.duration ? `\nDurée: ${Math.round(metadata.duration)} secondes` : '';
-      const segments = metadata.segments || [];
-
-      // Get relevant content based on user's query
-      const relevantContent = findRelevantContent(
-        lastUserMessage,
-        parsed.text || documentContent,
-        MAX_DOCUMENT_TOKENS - 500 // Reserve tokens for metadata
-      );
-
-      let contextMessage = `
-Type de fichier: ${fileType}
-${metadata.title ? `Titre: ${metadata.title}` : ''}${duration}
-${metadata.language ? `Langue: ${metadata.language}` : ''}
-
-Contenu pertinent:
-${relevantContent}`;
-
-      // Add audio segments if available and relevant
-      if (segments.length > 0) {
-        const relevantSegments = segments
-          .filter(s => relevantContent.includes(s.text))
-          .map(s => `[${Math.floor(s.start)}s - ${Math.ceil(s.end)}s] ${s.text}`)
-          .join('\n');
-
-        if (relevantSegments) {
-          contextMessage += '\n\nSegments temporels pertinents:\n' + relevantSegments;
-        }
-      }
-
-      preparedMessages.push({
-        role: 'system',
-        content: truncateToTokenLimit(contextMessage, MAX_DOCUMENT_TOKENS)
-      });
-    } catch (error) {
-      // Fallback for plain text
-      preparedMessages.push({
-        role: 'system',
-        content: truncateToTokenLimit(documentContent, MAX_DOCUMENT_TOKENS)
-      });
-    }
+    preparedMessages.push({
+      role: 'user',
+      content: truncateText(`Voici les documents à analyser :\n\n${documentContent}`, MAX_DOCUMENT_TOKENS)
+    });
   }
 
-  // Add conversation history
   let historyTokens = 0;
   const recentMessages = [...messages].reverse();
 
@@ -170,36 +142,70 @@ ${relevantContent}`;
     historyTokens += tokens;
   }
 
+  if (documentContent?.includes('---')) {
+    preparedMessages.push({
+      role: 'system',
+      content: `
+🔍 Analyse Croisée des Documents
+
+Pour cette analyse de plusieurs documents :
+1. Compare systématiquement les contenus
+2. Identifie les points communs et les différences
+3. Relève les éventuelles contradictions
+4. Montre comment les documents se complètent
+5. Propose une synthèse globale
+
+Structure ta réponse avec :
+## Points Communs
+## Différences
+## Complémentarités
+## Synthèse Globale
+`
+    });
+  }
+
+  preparedMessages.push({
+    role: 'system',
+    content: `
+Pour rendre la conversation plus interactive :
+1. Analyse la question de l'utilisateur et identifie les points qui pourraient être approfondis
+2. Après avoir répondu à la question principale, suggère 2-3 axes d'approfondissement pertinents
+3. Formule ces suggestions sous forme de questions précises
+4. Ajoute une section "🔄 Pour approfondir..." à la fin de ta réponse
+`
+  });
+
   return preparedMessages;
 }
 
 export async function generateChatResponse(messages: ChatMessage[], documentContent?: string): Promise<string> {
   try {
-    const preparedMessages = prepareMessages(messages, documentContent);
+    if (!documentContent?.trim()) {
+      throw new Error('⚠ Aucun contenu disponible pour analyse.');
+    }
 
+    const preparedMessages = prepareMessages(messages, documentContent);
+    
     const completion = await openai.chat.completions.create({
       model: 'gpt-4',
       messages: preparedMessages,
       temperature: 0.7,
-      max_tokens: 1000,
-      stream: true,
-      presence_penalty: -0.5,
-      frequency_penalty: 0.3,
+      max_tokens: 4000,
+      presence_penalty: 0.1,
+      frequency_penalty: 0.2,
+      response_format: { type: 'text' },
+      top_p: 0.95
     });
 
-    let response = '';
-    for await (const chunk of completion) {
-      const content = chunk.choices[0]?.delta?.content || '';
-      response += content;
+    const response = completion.choices[0]?.message?.content;
+    if (!response) {
+      throw new Error('No response content received from OpenAI');
     }
 
     return response;
   } catch (error: any) {
-    console.error('[OpenAI] Error generating response:', error);
-
-    // Handle token limit errors gracefully
     if (error?.error?.code === 'context_length_exceeded') {
-      console.warn('[OpenAI] Token limit exceeded, retrying with minimal context');
+      console.warn("⚠️ Limite de tokens dépassée, nouvel essai avec contexte minimal");
       
       const lastMessage = messages[messages.length - 1];
       if (!lastMessage) throw new Error('No message to process');
@@ -211,19 +217,21 @@ export async function generateChatResponse(messages: ChatMessage[], documentCont
           lastMessage
         ],
         temperature: 0.7,
-        max_tokens: 1000,
-        stream: true
+        max_tokens: 4000,
+        presence_penalty: 0.1,
+        frequency_penalty: 0.2,
+        response_format: { type: 'text' },
+        top_p: 0.95
       });
 
-      let response = '';
-      for await (const chunk of completion) {
-        const content = chunk.choices[0]?.delta?.content || '';
-        response += content;
+      const response = completion.choices[0]?.message?.content;
+      if (!response) {
+        throw new Error('No response content received from OpenAI');
       }
       
       return response;
     }
     
-    throw new Error('Failed to generate response');
+    throw new Error(`Failed to generate response: ${error.message}`);
   }
 }

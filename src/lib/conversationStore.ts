@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from './supabase';
-import { generateChatResponse, ChatMessage } from './openai';
+import { generateChatResponse } from './openai';
 import { Document } from './documentStore';
 
 export interface Conversation {
@@ -23,6 +23,33 @@ export interface ConversationDocument {
   document_id: string;
   created_at: string;
   documents: Document;
+}
+
+async function formatDocument(doc: Document): Promise<string> {
+  try {
+    // Fetch document content from document_contents table
+    const { data, error } = await supabase
+      .from('document_contents')
+      .select('content')
+      .eq('document_id', doc.id)
+      .single();
+
+    if (error) throw error;
+    if (!data?.content) {
+      console.warn('Document has no content:', doc.id);
+      return `⚠ Document "${doc.name}" ne contient pas de contenu analysable.`;
+    }
+
+    return `📄 **DOCUMENT : ${doc.name}**\n📌 Type : ${doc.type}\n\n### Contenu Intégral\n${data.content}`;
+  } catch (error) {
+    console.error('Error formatting document:', {
+      docId: doc.id,
+      docName: doc.name,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+
+    return `⚠ Erreur lors du traitement de "${doc.name}": ${error instanceof Error ? error.message : 'Erreur inconnue'}`;
+  }
 }
 
 interface ConversationStore {
@@ -48,39 +75,6 @@ interface ConversationStore {
   clearError: () => void;
 }
 
-function parseDocumentContent(doc: Document): string {
-  try {
-    if (!doc.content) return '';
-    
-    const parsed = JSON.parse(doc.content);
-    
-    // Handle different document processing formats
-    if (parsed.text) {
-      return parsed.text;
-    }
-    
-    if (parsed.metadata && parsed.structure) {
-      // Handle PDF processing format
-      const content = [
-        parsed.metadata.title && `# ${parsed.metadata.title}`,
-        parsed.structure.abstract && `## Abstract\n${parsed.structure.abstract}`,
-        parsed.text && `## Content\n${parsed.text}`,
-        parsed.structure.sections?.map(section => 
-          `### ${section.heading || 'Section'}\n${section.content}`
-        ).join('\n\n')
-      ].filter(Boolean).join('\n\n');
-      
-      return content;
-    }
-    
-    // Fallback to raw content
-    return typeof parsed === 'string' ? parsed : JSON.stringify(parsed, null, 2);
-  } catch (error) {
-    console.warn('Failed to parse document content:', error);
-    return doc.content;
-  }
-}
-
 export const useConversationStore = create<ConversationStore>((set, get) => ({
   conversations: [],
   currentConversation: null,
@@ -101,7 +95,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       if (error) throw error;
       set({ conversations: data || [] });
     } catch (error) {
-      set({ error: (error as Error).message });
+      set({ error: error instanceof Error ? error.message : 'Error fetching conversations' });
     } finally {
       set({ loading: false });
     }
@@ -129,20 +123,27 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       
       return data;
     } catch (error) {
-      set({ error: (error as Error).message });
+      set({ error: error instanceof Error ? error.message : 'Error creating conversation' });
       throw error;
     } finally {
       set({ loading: false });
     }
   },
 
-  createConversationWithDocument: async (document: Document) => {
+  createConversationWithDocument: async (document) => {
     set({ loading: true, error: null });
     try {
-      // Create new conversation with document name as title
+      if (!document.content) {
+        throw new Error('Document has no content to analyze');
+      }
+
+      if (get().currentConversation) {
+        await get().linkDocument(document.id);
+        return;
+      }
+
       const conversation = await get().createConversation(document.name);
       
-      // Link document to conversation
       const { error: linkError } = await supabase
         .from('conversation_documents')
         .insert([{
@@ -152,15 +153,23 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
       if (linkError) throw linkError;
       
-      // Set as current conversation and fetch documents
       set({ currentConversation: conversation });
       await get().fetchConversationDocuments(conversation.id);
       
-      // Send initial message
-      const initialMessage = `Je souhaite analyser le document "${document.name}". Pouvez-vous m'aider ?`;
-      await get().sendMessage(initialMessage);
+      const { data: welcomeMessage, error: messageError } = await supabase
+        .from('messages')
+        .insert([{
+          conversation_id: conversation.id,
+          sender: 'assistant',
+          content: `Je vois que vous avez ajouté le document "${document.name}". Je suis prêt à analyser son contenu. Que souhaitez-vous savoir ?`
+        }])
+        .select()
+        .single();
+
+      if (messageError) throw messageError;
+      set({ messages: [welcomeMessage] });
     } catch (error) {
-      set({ error: (error as Error).message });
+      set({ error: error instanceof Error ? error.message : 'Error creating conversation with document' });
     } finally {
       set({ loading: false });
     }
@@ -169,7 +178,6 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   deleteConversation: async (id) => {
     set({ loading: true, error: null });
     try {
-      // Delete conversation documents first
       const { error: docError } = await supabase
         .from('conversation_documents')
         .delete()
@@ -177,7 +185,6 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
       if (docError) throw docError;
 
-      // Delete messages
       const { error: msgError } = await supabase
         .from('messages')
         .delete()
@@ -185,7 +192,6 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
       if (msgError) throw msgError;
 
-      // Finally delete the conversation
       const { error } = await supabase
         .from('conversations')
         .delete()
@@ -201,7 +207,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
         documents: get().currentConversation?.id === id ? [] : get().documents
       });
     } catch (error) {
-      set({ error: (error as Error).message });
+      set({ error: error instanceof Error ? error.message : 'Error deleting conversation' });
     } finally {
       set({ loading: false });
     }
@@ -237,7 +243,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
           : get().currentConversation
       });
     } catch (error) {
-      set({ error: (error as Error).message });
+      set({ error: error instanceof Error ? error.message : 'Error updating conversation title' });
     } finally {
       set({ loading: false });
     }
@@ -255,7 +261,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       if (error) throw error;
       set({ messages: data || [] });
     } catch (error) {
-      set({ error: (error as Error).message });
+      set({ error: error instanceof Error ? error.message : 'Error fetching messages' });
     } finally {
       set({ loading: false });
     }
@@ -270,7 +276,6 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
     set({ loading: true, error: null, isTyping: true });
     try {
-      // Send user message
       const { data: userMessage, error: userError } = await supabase
         .from('messages')
         .insert([{
@@ -283,30 +288,66 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
       if (userError) throw userError;
 
-      // Update messages immediately with user message
       const messages = get().messages;
       set({ messages: [...messages, userMessage] });
 
-      // Get conversation history for context
-      const chatHistory: ChatMessage[] = get().messages.map(msg => ({
+      const chatHistory = get().messages.map(msg => ({
         role: msg.sender,
         content: msg.content
       }));
 
-      // Get document content from all linked documents
-      const documents = get().documents;
-      const documentContents = documents
-        .map(doc => parseDocumentContent(doc.documents))
-        .filter(Boolean)
-        .join('\n\n---\n\n');
+      const { data: conversationDocs, error: docError } = await supabase
+        .from('conversation_documents')
+        .select(`
+          id,
+          conversation_id,
+          document_id,
+          created_at,
+          documents:document_id (
+            id,
+            name,
+            type,
+            url,
+            content,
+            processed
+          )
+        `)
+        .eq('conversation_id', conversation.id);
 
-      // Generate AI response with document content
-      const aiResponse = await generateChatResponse(
-        [...chatHistory, { role: 'user', content }],
-        documentContents
+      if (docError) throw docError;
+
+      console.log('Formatting documents for analysis:', conversationDocs?.length || 0);
+      const formattedDocuments = await Promise.all(
+        (conversationDocs || [])
+          .map(doc => doc.documents)
+          .filter(Boolean)
+          .map(async doc => {
+            console.log('Processing document:', {
+              id: doc.id,
+              name: doc.name,
+              hasContent: !!doc.content,
+              contentLength: doc.content?.length || 0
+            });
+            return await formatDocument(doc);
+          })
       );
 
-      // Save AI response
+      const combinedDocuments = formattedDocuments.join('\n\n---\n\n');
+
+      if (!combinedDocuments.trim()) {
+        throw new Error('No content available for analysis');
+      }
+
+      console.log('Sending to OpenAI:', {
+        historyLength: chatHistory.length,
+        documentsLength: combinedDocuments.length
+      });
+
+      const aiResponse = await generateChatResponse(
+        [...chatHistory, { role: 'user', content }],
+        combinedDocuments
+      );
+
       const { data: aiMessage, error: aiError } = await supabase
         .from('messages')
         .insert([{
@@ -319,10 +360,10 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
       if (aiError) throw aiError;
 
-      // Update messages with AI response
       set({ messages: [...get().messages, aiMessage] });
     } catch (error) {
-      set({ error: (error as Error).message });
+      console.error('Error in sendMessage:', error);
+      set({ error: error instanceof Error ? error.message : 'Error sending message' });
     } finally {
       set({ loading: false, isTyping: false });
     }
@@ -337,19 +378,48 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
     set({ loading: true, error: null });
     try {
-      // Check if document is already linked
-      const { data: existing } = await supabase
-        .from('conversation_documents')
-        .select('id')
-        .eq('conversation_id', conversation.id)
+      // First, fetch the document to verify it has content
+      const { data: doc, error: docError } = await supabase
+        .from('documents')
+        .select('*')
+        .eq('id', documentId)
+        .single();
+
+      if (docError) throw docError;
+      if (!doc) throw new Error('Document not found');
+
+      // Check if document content exists
+      const { data: contentData, error: contentError } = await supabase
+        .from('document_contents')
+        .select('content')
         .eq('document_id', documentId)
         .single();
 
-      if (existing) {
+      if (contentError) throw contentError;
+      if (!contentData?.content) throw new Error('Document has no content');
+
+      console.log('Linking document:', {
+        id: doc.id,
+        name: doc.name,
+        hasContent: !!contentData.content,
+        contentLength: contentData.content?.length || 0
+      });
+
+      // Check if document is already linked
+      const { data: existing, error: checkError } = await supabase
+        .from('conversation_documents')
+        .select('*')
+        .eq('conversation_id', conversation.id)
+        .eq('document_id', documentId);
+
+      if (checkError) throw checkError;
+
+      if (existing && existing.length > 0) {
         set({ error: 'Document already linked to this conversation' });
         return;
       }
 
+      // Link the document
       const { error } = await supabase
         .from('conversation_documents')
         .insert([{
@@ -360,8 +430,38 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       if (error) throw error;
       
       await get().fetchConversationDocuments(conversation.id);
+
+      const currentMessages = get().messages;
+      if (currentMessages.length === 0) {
+        const { data: welcomeMessage, error: messageError } = await supabase
+          .from('messages')
+          .insert([{
+            conversation_id: conversation.id,
+            sender: 'assistant',
+            content: `Je vois que vous avez ajouté le document "${doc.name}". Je suis prêt à analyser son contenu. Que souhaitez-vous savoir ?`
+          }])
+          .select()
+          .single();
+
+        if (messageError) throw messageError;
+        set({ messages: [welcomeMessage] });
+      } else {
+        const { data: acknowledgmentMessage, error: messageError } = await supabase
+          .from('messages')
+          .insert([{
+            conversation_id: conversation.id,
+            sender: 'assistant',
+            content: `J'ai bien reçu le document "${doc.name}". Je suis prêt à l'analyser avec les autres documents quand vous le souhaiterez.`
+          }])
+          .select()
+          .single();
+
+        if (messageError) throw messageError;
+        set({ messages: [...currentMessages, acknowledgmentMessage] });
+      }
     } catch (error) {
-      set({ error: (error as Error).message });
+      console.error('Error linking document:', error);
+      set({ error: error instanceof Error ? error.message : 'Error linking document' });
     } finally {
       set({ loading: false });
     }
@@ -386,7 +486,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       
       await get().fetchConversationDocuments(conversation.id);
     } catch (error) {
-      set({ error: (error as Error).message });
+      set({ error: error instanceof Error ? error.message : 'Error unlinking document' });
     } finally {
       set({ loading: false });
     }
@@ -414,9 +514,16 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
         .eq('conversation_id', conversationId);
 
       if (error) throw error;
+      
+      console.log('Fetched conversation documents:', {
+        count: data?.length || 0,
+        hasContent: data?.every(d => !!d.documents?.content)
+      });
+      
       set({ documents: data || [] });
     } catch (error) {
-      set({ error: (error as Error).message });
+      console.error('Error fetching conversation documents:', error);
+      set({ error: error instanceof Error ? error.message : 'Error fetching conversation documents' });
     } finally {
       set({ loading: false });
     }

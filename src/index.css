@@ -80,17 +80,17 @@
   height: 32px;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-center: center;
   border-radius: 50%;
-  transition: all 0.3s ease;
-}
-
-.send-button:not(:disabled):hover {
-  transform: translateX(2px) scale(1.05);
+  transition: transform 0.1s ease;
 }
 
 .send-button:not(:disabled):active {
-  transform: translateX(0) scale(0.95);
+  transform: scale(0.95);
+}
+
+.send-button:disabled {
+  opacity: 0.3;
 }
 
 .neumorphic-button {

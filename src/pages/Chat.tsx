@@ -7,7 +7,7 @@ import { DocumentListIcon } from '../components/DocumentListIcon';
 import { UserManagementModal } from '../components/UserManagementModal';
 import { DocumentImportModal } from '../components/DocumentImportModal';
 import { FileManagementModal } from '../components/FileManagementModal';
-import { MindmapModal } from '../components/MindmapModal';
+import { FileExplorer } from '../components/FileExplorer';
 import { ConversationList } from '../components/ConversationList';
 import { DocumentList } from '../components/DocumentList';
 import { TypingIndicator } from '../components/TypingIndicator';
@@ -17,13 +17,18 @@ import { useDocumentStore } from '../lib/documentStore';
 import { useConversationStore } from '../lib/conversationStore';
 import ReactMarkdown from 'react-markdown';
 
-export function Chat({ session }: { session: Session }) {
+interface ChatProps {
+  session: Session;
+}
+
+export function Chat({ session }: ChatProps) {
   const [input, setInput] = useState('');
   const [userRole, setUserRole] = useState<string>('user');
-  const [isMindmapOpen, setIsMindmapOpen] = useState(false);
+  const [isFileExplorerOpen, setFileExplorerOpen] = useState(false);
   const [isFileManagementOpen, setFileManagementOpen] = useState(false);
+  
   const { setModalOpen: setUserModalOpen } = useUserStore();
-  const { setModalOpen: setDocModalOpen } = useDocumentStore();
+  const { setModalOpen: setDocumentModalOpen } = useDocumentStore();
   const {
     messages,
     currentConversation,
@@ -39,14 +44,22 @@ export function Chat({ session }: { session: Session }) {
 
   useEffect(() => {
     const fetchUserRole = async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', session.user.id)
-        .single();
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .maybeSingle();
 
-      if (data) {
-        setUserRole(data.role);
+        if (error) {
+          throw error;
+        }
+
+        if (data?.role) {
+          setUserRole(data.role);
+        }
+      } catch (error) {
+        console.error('Error fetching user role:', error);
       }
     };
 
@@ -72,7 +85,7 @@ export function Chat({ session }: { session: Session }) {
     try {
       await sendMessage(content);
     } catch (error) {
-      console.error('Failed to send message:', error);
+      console.error('Error sending message:', error);
     }
   };
 
@@ -91,7 +104,7 @@ export function Chat({ session }: { session: Session }) {
     try {
       await unlinkDocument(documentId);
     } catch (error) {
-      console.error('Failed to remove document:', error);
+      console.error('Error removing document:', error);
     }
   };
 
@@ -143,7 +156,7 @@ export function Chat({ session }: { session: Session }) {
           {userRole === 'admin' && (
             <>
               <button 
-                onClick={() => setDocModalOpen(true)}
+                onClick={() => setDocumentModalOpen(true)}
                 className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
                 aria-label="Document import"
               >
@@ -168,7 +181,7 @@ export function Chat({ session }: { session: Session }) {
           </div>
         </aside>
 
-        <main className="w-2/4 flex flex-col bg-white">
+        <main className="flex-1 flex flex-col bg-white">
           <div className="flex-1 overflow-hidden flex flex-col">
             {currentConversation && (
               <DocumentList 
@@ -179,8 +192,16 @@ export function Chat({ session }: { session: Session }) {
             
             <div className="flex-1 overflow-y-auto p-4">
               {!currentConversation ? (
-                <div className="h-full flex items-center justify-center text-gray-500">
-                  Sélectionnez ou créez une conversation pour commencer
+                <div className="h-full flex flex-col items-center justify-center text-gray-500">
+                  <div className="w-32 h-32 mb-4 text-[#106f69]">
+                    <Logo />
+                  </div>
+                  <h2 className="text-2xl font-bold text-[#f15922] mb-2">
+                    Prêt.e à mettre du rythme dans vos données ?!
+                  </h2>
+                  <p className="text-gray-600 text-center">
+                    Alors cliquer sur la base de données en bas à gauche et choisis un premier document...
+                  </p>
                 </div>
               ) : (
                 <>
@@ -224,9 +245,9 @@ export function Chat({ session }: { session: Session }) {
               <form onSubmit={handleSubmit} className="relative flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsMindmapOpen(true)}
+                  onClick={() => setFileExplorerOpen(true)}
                   className="chat-neumorphic-button flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center text-gray-600 hover:text-gray-700 focus:outline-none"
-                  aria-label="Open mindmap"
+                  aria-label="Open file explorer"
                 >
                   <Database size={20} />
                 </button>
@@ -252,12 +273,12 @@ export function Chat({ session }: { session: Session }) {
                   <button
                     type="submit"
                     disabled={!input.trim() || isTyping || !currentConversation}
-                    className="send-button absolute right-3 top-1/2 -translate-y-1/2 disabled:opacity-30 disabled:translate-x-0 disabled:scale-100"
+                    className="send-button absolute right-3 top-1/2 -translate-y-1/2"
                     aria-label="Send message"
                   >
                     <ArrowRight 
                       size={20} 
-                      className="text-[#f15922] transition-all duration-300 ease-in-out transform group-hover:translate-x-1" 
+                      className="text-[#f15922]" 
                     />
                   </button>
                 </div>
@@ -265,12 +286,6 @@ export function Chat({ session }: { session: Session }) {
             </div>
           </div>
         </main>
-
-        <aside className="w-1/4 bg-[#cfd3bd] border-l border-gray-200 overflow-hidden flex flex-col">
-          <div className="p-4 flex-1 overflow-y-auto">
-            <h2 className="text-xl font-medium text-gray-700">Rapports</h2>
-          </div>
-        </aside>
       </div>
 
       <UserManagementModal />
@@ -279,9 +294,9 @@ export function Chat({ session }: { session: Session }) {
         isOpen={isFileManagementOpen}
         onClose={() => setFileManagementOpen(false)}
       />
-      <MindmapModal
-        isOpen={isMindmapOpen}
-        onClose={() => setIsMindmapOpen(false)}
+      <FileExplorer
+        isOpen={isFileExplorerOpen}
+        onClose={() => setFileExplorerOpen(false)}
       />
     </div>
   );

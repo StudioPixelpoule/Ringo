@@ -1,4 +1,12 @@
 import { createChunkedStream, validateAudioChunk } from './streamUtils';
+import { supabase } from './supabase';
+
+interface ProcessingProgress {
+  stage: 'upload' | 'processing' | 'complete';
+  progress: number;
+  message: string;
+  canCancel?: boolean;
+}
 
 interface AudioProcessingResult {
   text: string;
@@ -27,7 +35,6 @@ async function processAudioChunk(chunk: Blob, apiKey: string): Promise<{
   text: string;
   segments: Array<{ start: number; end: number; text: string; }>;
 }> {
-  // Validate chunk before processing
   const isValid = await validateAudioChunk(chunk);
   if (!isValid) {
     throw new Error('Invalid audio chunk detected');
@@ -72,11 +79,22 @@ async function processAudioChunk(chunk: Blob, apiKey: string): Promise<{
   }
 }
 
-export async function processAudioFile(file: File): Promise<string> {
+export async function processAudioFile(
+  file: File,
+  onProgress?: (progress: ProcessingProgress) => void,
+  signal?: AbortSignal
+): Promise<string> {
   try {
+    console.log(`[Audio Processing] Starting processing: ${file.name}`);
+
     const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
     if (!apiKey) {
       throw new Error('OpenAI API key is not configured');
+    }
+
+    // Check if operation was cancelled
+    if (signal?.aborted) {
+      throw new Error('Processing cancelled');
     }
 
     // Validate file type
@@ -84,6 +102,13 @@ export async function processAudioFile(file: File): Promise<string> {
     if (!validTypes.includes(file.type)) {
       throw new Error(`Type de fichier audio non supporté: ${file.type}`);
     }
+
+    onProgress?.({
+      stage: 'processing',
+      progress: 10,
+      message: 'Préparation du fichier audio...',
+      canCancel: true
+    });
 
     const MAX_CHUNK_SIZE = 24 * 1024 * 1024; // 24MB to stay under Whisper's 25MB limit
     let transcription = '';
@@ -95,11 +120,22 @@ export async function processAudioFile(file: File): Promise<string> {
     if (file.size > MAX_CHUNK_SIZE) {
       const chunks = await createChunkedStream(file, MAX_CHUNK_SIZE);
       
-      for (const chunk of chunks) {
-        const result = await processAudioChunk(chunk, apiKey);
+      for (let i = 0; i < chunks.length; i++) {
+        // Check if operation was cancelled
+        if (signal?.aborted) {
+          throw new Error('Processing cancelled');
+        }
+
+        onProgress?.({
+          stage: 'processing',
+          progress: 10 + ((i / chunks.length) * 80),
+          message: `Transcription partie ${i + 1} sur ${chunks.length}`,
+          canCancel: true
+        });
+
+        const result = await processAudioChunk(chunks[i], apiKey);
         transcription += (transcription ? ' ' : '') + result.text;
         
-        // Adjust segment timestamps with offset
         const adjustedSegments = result.segments.map(segment => ({
           start: segment.start + timeOffset,
           end: segment.end + timeOffset,
@@ -108,7 +144,6 @@ export async function processAudioFile(file: File): Promise<string> {
         
         segments.push(...adjustedSegments);
         
-        // Update time offset for next chunk
         const lastSegment = result.segments[result.segments.length - 1];
         if (lastSegment) {
           timeOffset = lastSegment.end;
@@ -116,11 +151,34 @@ export async function processAudioFile(file: File): Promise<string> {
         }
       }
     } else {
-      // Process small file directly
+      onProgress?.({
+        stage: 'processing',
+        progress: 50,
+        message: 'Transcription en cours...',
+        canCancel: true
+      });
+
+      // Check if operation was cancelled
+      if (signal?.aborted) {
+        throw new Error('Processing cancelled');
+      }
+
       const result = await processAudioChunk(file, apiKey);
       transcription = result.text;
       segments.push(...result.segments);
       totalDuration = result.segments[result.segments.length - 1]?.end || 0;
+    }
+
+    onProgress?.({
+      stage: 'processing',
+      progress: 90,
+      message: 'Finalisation de la transcription...',
+      canCancel: true
+    });
+
+    // Check if operation was cancelled
+    if (signal?.aborted) {
+      throw new Error('Processing cancelled');
     }
 
     // Prepare result
@@ -138,9 +196,17 @@ export async function processAudioFile(file: File): Promise<string> {
       processingDate: new Date().toISOString()
     };
 
+    onProgress?.({
+      stage: 'complete',
+      progress: 100,
+      message: 'Transcription terminée',
+      canCancel: false
+    });
+
+    console.log('[Audio Processing] Processing completed successfully');
     return JSON.stringify(result);
   } catch (error) {
     console.error('[Audio Processing] Error:', error);
-    throw new Error(`Failed to process audio: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw error;
   }
 }
