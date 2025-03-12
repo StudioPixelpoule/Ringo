@@ -1,28 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Trash2, AlertTriangle, FileText, FileSpreadsheet, FileAudio, File as FilePdf } from 'lucide-react';
+import { X, Trash2, AlertTriangle, ChevronUp, ChevronDown } from 'lucide-react';
 import { useDocumentStore, Document } from '../lib/documentStore';
 import { supabase } from '../lib/supabase';
 import { DeleteConfirmationModal } from './DeleteConfirmationModal';
+import { FileIcon } from './FileIcon';
 
 interface FileManagementModalProps {
   isOpen: boolean;
   onClose: () => void;
-}
-
-function getFileIcon(type: string) {
-  switch (type.toLowerCase()) {
-    case 'pdf':
-      return <FilePdf className="text-red-500" />;
-    case 'docx':
-    case 'doc':
-      return <FileText className="text-blue-500" />;
-    case 'mp3':
-    case 'wav':
-      return <FileAudio className="text-purple-500" />;
-    default:
-      return <FileText className="text-gray-500" />;
-  }
 }
 
 function formatDate(dateString: string) {
@@ -111,18 +97,7 @@ export function FileManagementModal({ isOpen, onClose }: FileManagementModalProp
 
       if (storageError) throw storageError;
 
-      // Then, update the document record to clear processed content
-      const { error: updateError } = await supabase
-        .from('documents')
-        .update({
-          content: null,
-          processed: false
-        })
-        .eq('id', deleteConfirmation.document.id);
-
-      if (updateError) throw updateError;
-
-      // Finally, delete the document record
+      // Then, delete the document record
       const { error: dbError } = await supabase
         .from('documents')
         .delete()
@@ -139,141 +114,149 @@ export function FileManagementModal({ isOpen, onClose }: FileManagementModalProp
     }
   };
 
-  const getSortIcon = (key: keyof Document) => {
-    if (sortConfig.key !== key) return '↕️';
-    return sortConfig.direction === 'asc' ? '↑' : '↓';
+  const SortIndicator = ({ columnKey }: { columnKey: keyof Document }) => {
+    if (sortConfig.key !== columnKey) {
+      return (
+        <div className="w-4 h-4 opacity-30">
+          <ChevronUp size={16} className="absolute" />
+          <ChevronDown size={16} className="absolute" />
+        </div>
+      );
+    }
+    return sortConfig.direction === 'asc' ? (
+      <ChevronUp size={16} className="text-[#f15922]" />
+    ) : (
+      <ChevronDown size={16} className="text-[#f15922]" />
+    );
   };
 
   if (!isOpen) return null;
 
   return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      >
-        <motion.div
-          initial={{ scale: 0.95, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.95, opacity: 0 }}
-          className="bg-white rounded-xl shadow-xl w-[90vw] max-w-6xl mx-4 overflow-hidden"
-        >
-          <div className="bg-[#f15922] px-6 py-4 flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-white flex items-center gap-2">
-              <FileText size={24} />
-              Gestion des Fichiers
-            </h2>
-            <button
-              onClick={onClose}
-              className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white"
-            >
-              <X size={20} />
-            </button>
-          </div>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-xl w-[90vw] max-w-6xl mx-4 flex flex-col h-[80vh] overflow-hidden">
+        <div className="bg-[#f15922] px-6 py-4 flex items-center justify-between">
+          <h2 className="text-xl font-semibold text-white flex items-center gap-2">
+            <FileIcon type="doc" className="text-white" size={24} />
+            Gestion des Fichiers
+          </h2>
+          <button
+            onClick={onClose}
+            className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white"
+          >
+            <X size={20} />
+          </button>
+        </div>
 
-          <div className="p-6">
-            {error && (
-              <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2">
-                <AlertTriangle size={20} />
-                <span>{error}</span>
-              </div>
-            )}
-
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left py-3 px-4">
-                      <button
-                        onClick={() => handleSort('name')}
-                        className="text-gray-600 font-medium hover:text-gray-900 flex items-center gap-1"
-                      >
-                        Nom {getSortIcon('name')}
-                      </button>
-                    </th>
-                    <th className="text-left py-3 px-4">
-                      <button
-                        onClick={() => handleSort('type')}
-                        className="text-gray-600 font-medium hover:text-gray-900 flex items-center gap-1"
-                      >
-                        Type {getSortIcon('type')}
-                      </button>
-                    </th>
-                    <th className="text-left py-3 px-4 w-1/3">Chemin</th>
-                    <th className="text-left py-3 px-4">
-                      <button
-                        onClick={() => handleSort('created_at')}
-                        className="text-gray-600 font-medium hover:text-gray-900 flex items-center gap-1"
-                      >
-                        Date d'ajout {getSortIcon('created_at')}
-                      </button>
-                    </th>
-                    <th className="text-right py-3 px-4">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr>
-                      <td colSpan={5} className="text-center py-8 text-gray-500">
-                        Chargement...
-                      </td>
-                    </tr>
-                  ) : sortedDocuments.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="text-center py-8 text-gray-500">
-                        Aucun fichier trouvé
-                      </td>
-                    </tr>
-                  ) : (
-                    sortedDocuments.map((doc) => (
-                      <tr key={doc.id} className="border-b hover:bg-gray-50">
-                        <td className="py-3 px-4">
-                          <div className="flex items-center gap-2">
-                            {getFileIcon(doc.type)}
-                            <span className="truncate">{doc.name}</span>
-                          </div>
-                        </td>
-                        <td className="py-3 px-4">
-                          <span className="uppercase text-sm font-medium text-gray-600">
-                            {doc.type}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4">
-                          <span className="text-gray-600">
-                            {getFolderPath(folders, doc.folder_id)}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-gray-600">
-                          {formatDate(doc.created_at)}
-                        </td>
-                        <td className="py-3 px-4 text-right">
-                          <button
-                            onClick={() => handleDeleteClick(doc)}
-                            className="text-red-500 hover:text-red-700 p-1 hover:bg-red-50 rounded-full transition-colors"
-                            title="Supprimer le fichier"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+        <div className="flex-1 overflow-hidden p-6">
+          {error && (
+            <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2">
+              <AlertTriangle size={20} />
+              <span>{error}</span>
             </div>
-          </div>
-        </motion.div>
+          )}
 
-        <DeleteConfirmationModal
-          isOpen={deleteConfirmation.isOpen}
-          title="Supprimer le fichier"
-          message={`Êtes-vous sûr de vouloir supprimer le fichier "${deleteConfirmation.document?.name}" ? Cette action est irréversible.`}
-          onConfirm={handleConfirmDelete}
-          onCancel={() => setDeleteConfirmation({ isOpen: false, document: null })}
-        />
-      </motion.div>
-    </AnimatePresence>
+          <div className="h-full overflow-auto rounded-lg border border-gray-200">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr className="text-left text-gray-600">
+                  <th className="sticky top-0 bg-gray-50 px-4 py-3 font-medium">
+                    <button
+                      onClick={() => handleSort('name')}
+                      className="hover:text-gray-900 flex items-center gap-1 group"
+                    >
+                      <span>Nom</span>
+                      <div className="relative flex items-center">
+                        <SortIndicator columnKey="name" />
+                      </div>
+                    </button>
+                  </th>
+                  <th className="sticky top-0 bg-gray-50 px-4 py-3 font-medium">
+                    <button
+                      onClick={() => handleSort('type')}
+                      className="hover:text-gray-900 flex items-center gap-1 group"
+                    >
+                      <span>Type</span>
+                      <div className="relative flex items-center">
+                        <SortIndicator columnKey="type" />
+                      </div>
+                    </button>
+                  </th>
+                  <th className="sticky top-0 bg-gray-50 px-4 py-3 font-medium">Chemin</th>
+                  <th className="sticky top-0 bg-gray-50 px-4 py-3 font-medium">
+                    <button
+                      onClick={() => handleSort('created_at')}
+                      className="hover:text-gray-900 flex items-center gap-1 group"
+                    >
+                      <span>Date d'ajout</span>
+                      <div className="relative flex items-center">
+                        <SortIndicator columnKey="created_at" />
+                      </div>
+                    </button>
+                  </th>
+                  <th className="sticky top-0 bg-gray-50 px-4 py-3 text-right font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {loading ? (
+                  <tr>
+                    <td colSpan={5} className="text-center py-8 text-gray-500">
+                      Chargement...
+                    </td>
+                  </tr>
+                ) : sortedDocuments.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="text-center py-8 text-gray-500">
+                      Aucun fichier trouvé
+                    </td>
+                  </tr>
+                ) : (
+                  sortedDocuments.map((doc) => (
+                    <tr key={doc.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <FileIcon type={doc.type} className="text-[#f15922]" size={20} />
+                          <span className="truncate max-w-[200px]">{doc.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="uppercase text-sm font-medium text-gray-600">
+                          {doc.type}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-gray-600">
+                          {getFolderPath(folders, doc.folder_id)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-gray-600">
+                        {formatDate(doc.created_at)}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => handleDeleteClick(doc)}
+                          className="text-red-500 hover:text-red-700 p-1 hover:bg-red-50 rounded-full transition-colors"
+                          title="Supprimer le fichier"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <DeleteConfirmationModal
+        isOpen={deleteConfirmation.isOpen}
+        title="Supprimer le fichier"
+        message={`Êtes-vous sûr de vouloir supprimer le fichier "${deleteConfirmation.document?.name}" ? Cette action est irréversible.`}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteConfirmation({ isOpen: false, document: null })}
+      />
+    </div>
   );
 }

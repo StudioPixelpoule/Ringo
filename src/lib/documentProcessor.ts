@@ -6,9 +6,6 @@ import mammoth from 'mammoth';
 const workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`;
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
 
-// Chunk size for large file processing (16MB)
-const CHUNK_SIZE = 16 * 1024 * 1024;
-
 interface ProcessingProgress {
   stage: 'preparation' | 'processing' | 'extraction' | 'complete';
   progress: number;
@@ -18,6 +15,78 @@ interface ProcessingProgress {
 interface ProcessingOptions {
   onProgress?: (progress: ProcessingProgress) => void;
   signal?: AbortSignal;
+}
+
+async function processDataFile(file: File, options?: ProcessingOptions): Promise<string> {
+  try {
+    options?.onProgress?.({
+      stage: 'preparation',
+      progress: 10,
+      message: 'Lecture du fichier de données...'
+    });
+
+    const text = await file.text();
+    let data: any;
+
+    options?.onProgress?.({
+      stage: 'processing',
+      progress: 30,
+      message: 'Analyse du contenu...'
+    });
+
+    // Handle different file types
+    if (file.name.toLowerCase().endsWith('.json')) {
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        throw new Error('Le fichier JSON est invalide');
+      }
+    } else if (file.name.toLowerCase().endsWith('.csv')) {
+      // Parse CSV
+      const lines = text.split('\n');
+      const headers = lines[0].split(',').map(h => h.trim());
+      const rows = lines.slice(1).map(line => {
+        const values = line.split(',').map(v => v.trim());
+        return headers.reduce((obj, header, i) => {
+          obj[header] = values[i];
+          return obj;
+        }, {} as any);
+      });
+      data = rows;
+    } else if (file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls')) {
+      throw new Error('Les fichiers Excel binaires ne sont pas supportés. Veuillez exporter en CSV.');
+    }
+
+    options?.onProgress?.({
+      stage: 'extraction',
+      progress: 70,
+      message: 'Structuration des données...'
+    });
+
+    // Format data for storage
+    const formattedData = {
+      type: file.name.split('.').pop()?.toLowerCase(),
+      fileName: file.name,
+      data,
+      metadata: {
+        rowCount: Array.isArray(data) ? data.length : 1,
+        fields: Array.isArray(data) ? Object.keys(data[0] || {}) : Object.keys(data || {}),
+        size: text.length
+      },
+      processingDate: new Date().toISOString()
+    };
+
+    options?.onProgress?.({
+      stage: 'complete',
+      progress: 100,
+      message: 'Traitement terminé'
+    });
+
+    return JSON.stringify(formattedData, null, 2);
+  } catch (error) {
+    console.error('[Data Processing] Error:', error);
+    throw new Error(`Erreur lors du traitement du fichier: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+  }
 }
 
 async function processTextDocument(file: File, options?: ProcessingOptions): Promise<string> {
@@ -179,81 +248,6 @@ async function processPDFDocument(file: File, options?: ProcessingOptions): Prom
   }
 }
 
-async function processAudioFile(file: File, options?: ProcessingOptions): Promise<string> {
-  try {
-    options?.onProgress?.({
-      stage: 'preparation',
-      progress: 10,
-      message: 'Préparation du fichier audio...'
-    });
-
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('model', 'whisper-1');
-    formData.append('response_format', 'verbose_json');
-
-    options?.onProgress?.({
-      stage: 'processing',
-      progress: 30,
-      message: 'Transcription en cours...'
-    });
-
-    const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`,
-      },
-      body: formData,
-      signal: options?.signal
-    });
-
-    if (!response.ok) {
-      throw new Error(`Transcription failed: ${response.statusText}`);
-    }
-
-    options?.onProgress?.({
-      stage: 'extraction',
-      progress: 70,
-      message: 'Traitement de la transcription...'
-    });
-
-    const result = await response.json();
-
-    if (!result.text) {
-      throw new Error('No transcription text received');
-    }
-
-    const processedResult = {
-      text: result.text,
-      metadata: {
-        title: file.name.replace(/\.[^/.]+$/, ''),
-        duration: result.duration,
-        language: result.language,
-        fileType: file.type,
-        fileName: file.name,
-        segments: result.segments.map((s: any) => ({
-          start: Number(s.start) || 0,
-          end: Number(s.end) || 0,
-          text: String(s.text || '').trim()
-        }))
-      },
-      confidence: 0.95,
-      processingDate: new Date().toISOString()
-    };
-
-    options?.onProgress?.({
-      stage: 'complete',
-      progress: 100,
-      message: 'Transcription terminée'
-    });
-
-    return JSON.stringify(processedResult);
-  } catch (error) {
-    console.error('[Audio Processing] Error:', error);
-    throw error;
-  }
-}
-
 export async function processDocument(
   file: File,
   options?: ProcessingOptions
@@ -271,25 +265,27 @@ export async function processDocument(
     }
 
     let result: string;
+    const extension = file.name.split('.').pop()?.toLowerCase();
 
-    switch (file.type.toLowerCase()) {
-      case 'audio/mpeg':
-      case 'audio/wav':
-      case 'audio/x-wav':
-        result = await processAudioFile(file, options);
-        break;
+    // Handle data files
+    if (['json', 'csv', 'xlsx', 'xls'].includes(extension || '')) {
+      result = await processDataFile(file, options);
+    }
+    // Handle documents
+    else {
+      switch (file.type.toLowerCase()) {
+        case 'application/pdf':
+          result = await processPDFDocument(file, options);
+          break;
 
-      case 'application/pdf':
-        result = await processPDFDocument(file, options);
-        break;
+        case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+        case 'text/plain':
+          result = await processTextDocument(file, options);
+          break;
 
-      case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
-      case 'text/plain':
-        result = await processTextDocument(file, options);
-        break;
-
-      default:
-        throw new Error(`Type de fichier non supporté: ${file.type}`);
+        default:
+          throw new Error(`Type de fichier non supporté: ${file.type}`);
+      }
     }
 
     if (!result?.trim()) {

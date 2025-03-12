@@ -1,15 +1,15 @@
 import React, { useCallback, useState, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { X, Upload, FileText, FolderPlus, ChevronRight, Edit2, Trash2, Check, Loader2, FileAudio, XCircle } from 'lucide-react';
+import { X, Upload, FileText, FolderPlus, ChevronRight, Edit2, Trash2, Check, Loader2 } from 'lucide-react';
 import { useDocumentStore, Document, Folder } from '../lib/documentStore';
 import { supabase } from '../lib/supabase';
+import { FileIcon } from './FileIcon';
 
 interface ProcessingStatus {
   isProcessing: boolean;
   progress: number;
-  stage: 'upload' | 'processing' | 'complete';
+  stage: 'preparation' | 'processing' | 'extraction' | 'complete';
   message: string;
-  canCancel?: boolean;
 }
 
 interface FolderColumnProps {
@@ -102,7 +102,6 @@ export function DocumentImportModal() {
     currentFolder,
     loading,
     error,
-    uploadProgress,
     setModalOpen,
     createFolder,
     uploadDocument,
@@ -121,7 +120,7 @@ export function DocumentImportModal() {
   const [processingStatus, setProcessingStatus] = useState<ProcessingStatus>({
     isProcessing: false,
     progress: 0,
-    stage: 'upload',
+    stage: 'preparation',
     message: ''
   });
 
@@ -132,7 +131,7 @@ export function DocumentImportModal() {
         setProcessingStatus({
           isProcessing: false,
           progress: 0,
-          stage: 'upload',
+          stage: 'preparation',
           message: ''
         });
         setSelectedFile(null);
@@ -142,6 +141,45 @@ export function DocumentImportModal() {
       }
     }
   }, [isModalOpen, fetchFolders, processingStatus.isProcessing]);
+
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    if (acceptedFiles.length > 0 && !processingStatus.isProcessing) {
+      const file = acceptedFiles[0];
+      setSelectedFile(file);
+      
+      // Auto-detect document type
+      const extension = file.name.split('.').pop()?.toLowerCase();
+      if (['json', 'csv', 'xlsx', 'xls'].includes(extension || '')) {
+        setDocumentType('data');
+      } else if (file.type === 'application/pdf') {
+        setDocumentType('pdf');
+      } else if (file.type.includes('word')) {
+        setDocumentType('doc');
+      }
+
+      setProcessingStatus({
+        isProcessing: false,
+        progress: 0,
+        stage: 'preparation',
+        message: ''
+      });
+    }
+  }, [processingStatus.isProcessing]);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      'application/pdf': ['.pdf'],
+      'application/msword': ['.doc'],
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+      'application/json': ['.json'],
+      'text/csv': ['.csv'],
+      'application/vnd.ms-excel': ['.xls'],
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx']
+    },
+    multiple: false,
+    disabled: processingStatus.isProcessing
+  });
 
   const getFolderPath = () => {
     if (!currentFolder) return 'Aucun dossier sélectionné';
@@ -184,28 +222,6 @@ export function DocumentImportModal() {
     }
   };
 
-  const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    if (acceptedFiles.length > 0 && !processingStatus.isProcessing) {
-      const file = acceptedFiles[0];
-      setSelectedFile(file);
-      
-      if (file.type.startsWith('audio/')) {
-        setDocumentType('audio');
-      } else if (file.type === 'application/pdf') {
-        setDocumentType('pdf');
-      } else if (file.type.includes('word')) {
-        setDocumentType('doc');
-      }
-
-      setProcessingStatus({
-        isProcessing: false,
-        progress: 0,
-        stage: 'upload',
-        message: ''
-      });
-    }
-  }, [processingStatus.isProcessing]);
-
   const handleUpload = async () => {
     if (!currentFolder || !selectedFile || processingStatus.isProcessing) return;
     
@@ -213,9 +229,8 @@ export function DocumentImportModal() {
       setProcessingStatus({
         isProcessing: true,
         progress: 0,
-        stage: 'upload',
-        message: 'Préparation du document...',
-        canCancel: true
+        stage: 'preparation',
+        message: 'Préparation du document...'
       });
 
       const doc = await uploadDocument(selectedFile, currentFolder.id, {
@@ -230,8 +245,7 @@ export function DocumentImportModal() {
         isProcessing: false,
         progress: 100,
         stage: 'complete',
-        message: 'Document traité avec succès !',
-        canCancel: false
+        message: 'Document traité avec succès !'
       });
 
       setTimeout(() => {
@@ -249,33 +263,11 @@ export function DocumentImportModal() {
       setProcessingStatus({
         isProcessing: false,
         progress: 0,
-        stage: 'upload',
-        message: error instanceof Error ? error.message : 'Une erreur est survenue',
-        canCancel: false
+        stage: 'preparation',
+        message: error instanceof Error ? error.message : 'Une erreur est survenue'
       });
       setSelectedFile(null);
     }
-  };
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: {
-      'application/pdf': ['.pdf'],
-      'application/msword': ['.doc'],
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
-      'audio/mpeg': ['.mp3'],
-      'audio/wav': ['.wav'],
-      'audio/x-wav': ['.wav']
-    },
-    multiple: false,
-    disabled: processingStatus.isProcessing
-  });
-
-  const getFileIcon = (file: File) => {
-    if (file.type.startsWith('audio/')) {
-      return <FileAudio size={48} className="text-[#f15922]" />;
-    }
-    return <FileText size={48} className="text-[#f15922]" />;
   };
 
   if (!isModalOpen) return null;
@@ -296,217 +288,186 @@ export function DocumentImportModal() {
           </div>
         </div>
 
-        {processingStatus.stage === 'complete' ? (
-          <div className="p-8 text-center">
-            <div className="flex items-center justify-center mb-4">
-              <Check size={48} className="text-green-500" />
-            </div>
-            <h3 className="text-xl font-medium text-gray-900 mb-2">
-              {processingStatus.message}
-            </h3>
-            <p className="text-gray-500">
-              La fenêtre va se fermer automatiquement...
-            </p>
-          </div>
-        ) : (
-          <>
-            <div className="grid grid-cols-3 gap-6 p-6">
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium text-gray-900">Téléverser un document</h3>
-                <div
-                  {...getRootProps()}
-                  className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-                    isDragActive
-                      ? 'border-[#f15922] bg-[#f15922]/5'
-                      : processingStatus.isProcessing
-                      ? 'border-gray-200 bg-gray-50 cursor-not-allowed'
-                      : 'border-gray-300 hover:border-[#f15922] hover:bg-gray-50'
-                  }`}
+        <div className="grid grid-cols-3 gap-6 p-6">
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium text-gray-900">Téléverser un document</h3>
+            <div
+              {...getRootProps()}
+              className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+                isDragActive
+                  ? 'border-[#f15922] bg-[#f15922]/5'
+                  : processingStatus.isProcessing
+                  ? 'border-gray-200 bg-gray-50 cursor-not-allowed'
+                  : 'border-gray-300 hover:border-[#f15922] hover:bg-gray-50'
+              }`}
+            >
+              <input {...getInputProps()} disabled={processingStatus.isProcessing} />
+              <div className="flex flex-col items-center justify-center">
+                {selectedFile ? (
+                  <FileIcon file={selectedFile} size={48} />
+                ) : (
+                  <Upload
+                    size={48}
+                    className={`mx-auto mb-4 ${
+                      isDragActive ? 'text-[#f15922]' : 'text-gray-400'
+                    }`}
+                  />
+                )}
+                <p className="text-lg font-medium text-gray-900 mb-2">
+                  {selectedFile ? selectedFile.name : 'Déposez votre fichier ici'}
+                </p>
+                <p className="text-gray-500">ou</p>
+                <button 
+                  className={`mt-2 px-4 py-2 ${
+                    processingStatus.isProcessing
+                      ? 'bg-gray-300 cursor-not-allowed'
+                      : 'bg-[#f15922] hover:bg-[#f15922]/90'
+                  } text-white rounded-md transition-colors`}
+                  disabled={processingStatus.isProcessing}
                 >
-                  <input {...getInputProps()} disabled={processingStatus.isProcessing} />
-                  <div className="flex flex-col items-center justify-center">
-                    {selectedFile ? (
-                      getFileIcon(selectedFile)
-                    ) : (
-                      <Upload
-                        size={48}
-                        className={`mx-auto mb-4 ${
-                          isDragActive ? 'text-[#f15922]' : 'text-gray-400'
-                        }`}
-                      />
-                    )}
-                    <p className="text-lg font-medium text-gray-900 mb-2">
-                      {selectedFile ? selectedFile.name : 'Déposez votre fichier ici'}
-                    </p>
-                    <p className="text-gray-500">ou</p>
-                    <button 
-                      className={`mt-2 px-4 py-2 ${
-                        processingStatus.isProcessing
-                          ? 'bg-gray-300 cursor-not-allowed'
-                          : 'bg-[#f15922] hover:bg-[#f15922]/90'
-                      } text-white rounded-md transition-colors`}
-                      disabled={processingStatus.isProcessing}
-                    >
-                      Parcourir
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium text-gray-900">IRSST</h3>
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="flex overflow-x-auto">
-                    <FolderColumn
-                      folders={folders}
-                      level={0}
-                      parentId={null}
-                      selectedPath={selectedPath}
-                      onSelect={handleFolderSelect}
-                      onCreateFolder={handleCreateFolder}
-                      onRenameFolder={handleRenameFolder}
-                      onDeleteFolder={handleDeleteFolder}
-                    />
-                    {selectedPath.map((folder, index) => (
-                      <FolderColumn
-                        key={folder.id}
-                        folders={folders}
-                        level={index + 1}
-                        parentId={folder.id}
-                        selectedPath={selectedPath}
-                        onSelect={handleFolderSelect}
-                        onCreateFolder={handleCreateFolder}
-                        onRenameFolder={handleRenameFolder}
-                        onDeleteFolder={handleDeleteFolder}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium text-gray-900">Indexation du document</h3>
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm text-gray-500 mb-1">
-                      Fichier : <span className="text-gray-700">
-                        {selectedFile ? selectedFile.name : 'Aucun fichier sélectionné'}
-                      </span>
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      Dossier : <span className="text-gray-700 font-medium">
-                        {getFolderPath()}
-                      </span>
-                    </p>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Type de document
-                      </label>
-                      <select
-                        value={documentType}
-                        onChange={(e) => setDocumentType(e.target.value)}
-                        className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#f15922] focus:border-transparent"
-                        disabled={processingStatus.isProcessing}
-                      >
-                        <option value="">Sélectionner un type</option>
-                        <option value="pdf">PDF</option>
-                        <option value="doc">Document Word</option>
-                        <option value="audio">Fichier audio</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Groupe concerné
-                      </label>
-                      <select
-                        value={groupName}
-                        onChange={(e) => setGroupName(e.target.value)}
-                        className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#f15922] focus:border-transparent"
-                        disabled={processingStatus.isProcessing}
-                      >
-                        <option value="">Sélectionner un groupe</option>
-                        <option value="groupe1">Groupe 1</option>
-                        <option value="groupe2">Groupe 2</option>
-                        <option value="groupe3">Groupe 3</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Description
-                      </label>
-                      <textarea
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
-                        placeholder="Description du document (utilisez _ au lieu des espaces)"
-                        className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#f15922] focus:border-transparent resize-none"
-                        rows={4}
-                        disabled={processingStatus.isProcessing}
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        Note: Les caractères spéciaux seront remplacés par des underscores (_).
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  onClick={handleUpload}
-                  disabled={!selectedFile || !currentFolder || !documentType || !groupName || processingStatus.isProcessing}
-                  className={`w-full mt-6 px-4 py-2 rounded-md flex items-center justify-center gap-2 ${
-                    !selectedFile || !currentFolder || !documentType || !groupName || processingStatus.isProcessing
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      : 'bg-[#f15922] text-white hover:bg-[#f15922]/90'
-                  }`}
-                >
-                  {processingStatus.isProcessing ? (
-                    <>
-                      <Loader2 size={20} className="animate-spin" />
-                      {processingStatus.stage === 'upload' ? 'Téléversement en cours...' : 'Traitement en cours...'}
-                    </>
-                  ) : (
-                    <>
-                      <Upload size={20} />
-                      Téléverser le document
-                    </>
-                  )}
+                  Parcourir
                 </button>
               </div>
             </div>
+          </div>
 
-            {processingStatus.isProcessing && (
-              <div className="px-6 pb-6">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm text-gray-600">
-                    {processingStatus.message}
-                  </p>
-                  <div className="flex items-center gap-4">
-                    <p className="text-sm font-medium text-gray-700">
-                      {Math.round(processingStatus.progress)}%
-                    </p>
-                  </div>
-                </div>
-                <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-[#f15922] transition-all duration-300"
-                    style={{ width: `${processingStatus.progress}%` }}
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium text-gray-900">IRSST</h3>
+            <div className="border rounded-lg overflow-hidden">
+              <div className="flex overflow-x-auto">
+                <FolderColumn
+                  folders={folders}
+                  level={0}
+                  parentId={null}
+                  selectedPath={selectedPath}
+                  onSelect={handleFolderSelect}
+                  onCreateFolder={handleCreateFolder}
+                  onRenameFolder={handleRenameFolder}
+                  onDeleteFolder={handleDeleteFolder}
+                />
+                {selectedPath.map((folder, index) => (
+                  <FolderColumn
+                    key={folder.id}
+                    folders={folders}
+                    level={index + 1}
+                    parentId={folder.id}
+                    selectedPath={selectedPath}
+                    onSelect={handleFolderSelect}
+                    onCreateFolder={handleCreateFolder}
+                    onRenameFolder={handleRenameFolder}
+                    onDeleteFolder={handleDeleteFolder}
                   />
-                </div>
+                ))}
               </div>
-            )}
+            </div>
+          </div>
 
-            {error && (
-              <div className="px-6 pb-6">
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-                  {error}
-                </div>
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium text-gray-900">Indexation du document</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Type de document
+                </label>
+                <select
+                  value={documentType}
+                  onChange={(e) => setDocumentType(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#f15922] focus:border-transparent"
+                  disabled={processingStatus.isProcessing}
+                >
+                  <option value="">Sélectionner un type</option>
+                  <option value="pdf">PDF</option>
+                  <option value="doc">Document Word</option>
+                  <option value="data">Données (JSON/CSV)</option>
+                </select>
               </div>
-            )}
-          </>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Groupe concerné
+                </label>
+                <select
+                  value={groupName}
+                  onChange={(e) => setGroupName(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#f15922] focus:border-transparent"
+                  disabled={processingStatus.isProcessing}
+                >
+                  <option value="">Sélectionner un groupe</option>
+                  <option value="groupe1">Groupe 1</option>
+                  <option value="groupe2">Groupe 2</option>
+                  <option value="groupe3">Groupe 3</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Description
+                </label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Description du document (utilisez _ au lieu des espaces)"
+                  className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#f15922] focus:border-transparent resize-none"
+                  rows={4}
+                  disabled={processingStatus.isProcessing}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Note: Les caractères spéciaux seront remplacés par des underscores (_).
+                </p>
+              </div>
+
+              <button
+                onClick={handleUpload}
+                disabled={!selectedFile || !currentFolder || !documentType || !groupName || processingStatus.isProcessing}
+                className={`w-full mt-6 px-4 py-2 rounded-md flex items-center justify-center gap-2 ${
+                  !selectedFile || !currentFolder || !documentType || !groupName || processingStatus.isProcessing
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-[#f15922] text-white hover:bg-[#f15922]/90'
+                }`}
+              >
+                {processingStatus.isProcessing ? (
+                  <>
+                    <Loader2 size={20} className="animate-spin" />
+                    {processingStatus.stage === 'preparation' ? 'Préparation en cours...' : 'Traitement en cours...'}
+                  </>
+                ) : (
+                  <>
+                    <Upload size={20} />
+                    Téléverser le document
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {processingStatus.isProcessing && (
+          <div className="px-6 pb-6">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm text-gray-600">
+                {processingStatus.message}
+              </p>
+              <div className="flex items-center gap-4">
+                <p className="text-sm font-medium text-gray-700">
+                  {Math.round(processingStatus.progress)}%
+                </p>
+              </div>
+            </div>
+            <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-[#f15922] transition-all duration-300"
+                style={{ width: `${processingStatus.progress}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="px-6 pb-6">
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+              {error}
+            </div>
+          </div>
         )}
       </div>
     </div>

@@ -1,144 +1,197 @@
-# Historique du Projet RINGO
+# Guide d'Installation RINGO
 
-## Mars 2025
+## Prérequis
 
-### 12/03/2025 - Optimisation du Stockage des Documents
-- Séparation du contenu des documents dans une table dédiée
-- Amélioration des performances de recherche
-- Optimisation du traitement des documents
-- Migration des données existantes
+### Environnement de développement
+- Node.js 18.x ou supérieur
+- npm 9.x ou supérieur
+- Un compte Supabase
+- Un compte OpenAI avec une clé API
 
-### 05/03/2025 - Initialisation du Projet
-- Création du projet avec Vite et React TypeScript
-- Configuration initiale de l'environnement de développement
-- Installation des dépendances de base :
-  - React 18.3.1
-  - TypeScript 5.5.3
-  - Vite 5.4.2
-  - ESLint 9.9.1
+### Services requis
+- Supabase (base de données, authentification, stockage)
+- OpenAI API (GPT-4 Turbo)
 
-### 05/03/2025 - Configuration de Tailwind CSS
-- Installation et configuration de Tailwind CSS
-- Mise en place des styles de base
-- Configuration du fichier `tailwind.config.js`
-- Ajout des directives Tailwind dans `index.css`
+## Installation pas à pas
 
-### 05/03/2025 - Intégration de Supabase
-- Installation de `@supabase/supabase-js`
-- Configuration des variables d'environnement
-- Création du client Supabase
-- Mise en place de l'authentification par email
+### 1. Création du projet
 
-### 05/03/2025 - Structure de la Base de Données
-- Création des tables principales :
-  - `profiles` : Gestion des utilisateurs
-  - `folders` : Organisation des documents
-  - `documents` : Métadonnées des documents
-  - `document_contents` : Contenu des documents
-  - `conversations` : Gestion des conversations
-  - `messages` : Stockage des messages
-  - `conversation_documents` : Liaison documents-conversations
-- Configuration des politiques RLS
-- Mise en place des triggers et fonctions
+```bash
+# Créer un nouveau projet Vite avec React et TypeScript
+npm create vite@latest ringo -- --template react-ts
 
-### 05/03/2025 - Interface Utilisateur
-- Création des composants principaux :
-  - Layout à trois colonnes
-  - Header avec navigation
-  - Zone de chat
-  - Panneau des conversations
-  - Panneau des documents
-- Implémentation du design neumorphique
-- Configuration des animations avec Framer Motion
+# Se déplacer dans le dossier du projet
+cd ringo
 
-### 05/03/2025 - Gestion des Documents
-- Intégration de PDF.js pour le traitement des PDF
-- Configuration de Mammoth.js pour les documents Word
-- Mise en place du système de téléversement
-- Création de la visualisation mindmap avec D3.js
-
-### 05/03/2025 - Intégration OpenAI
-- Configuration du client OpenAI
-- Mise en place du système de chat
-- Optimisation du traitement des messages
-- Gestion du contexte des conversations
-
-### 05/03/2025 - Gestion des Utilisateurs
-- Système de rôles (admin/user)
-- Interface d'administration des utilisateurs
-- Gestion des permissions
-- Système de création de comptes
-
-### 05/03/2025 - Améliorations du Traitement des Documents
-- Optimisation de l'extraction de texte des PDF
-- Amélioration de la détection de structure
-- Préservation de la mise en forme
-- Gestion des métadonnées
-
-### 05/03/2025 - Amélioration de l'Interface
-- Ajout des indicateurs de progression
-- Amélioration du formatage des messages
-- Optimisation de la visualisation mindmap
-- Ajout de confirmations de suppression
-
-### 05/03/2025 - Optimisations Techniques
-- Amélioration des performances de chargement
-- Optimisation du traitement des documents
-- Gestion améliorée des erreurs
-- Logging détaillé des opérations
-
-## Dépendances Principales
-
-```json
-{
-  "dependencies": {
-    "@supabase/supabase-js": "^2.39.7",
-    "d3": "^7.8.5",
-    "framer-motion": "^11.0.8",
-    "lucide-react": "^0.344.0",
-    "mammoth": "^1.7.0",
-    "openai": "^4.28.0",
-    "pdfjs-dist": "3.11.174",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-dropzone": "^14.2.3",
-    "react-markdown": "^9.0.1",
-    "react-router-dom": "^6.22.2",
-    "tesseract.js": "^5.0.5",
-    "zustand": "^4.5.2"
-  }
-}
+# Installer les dépendances de base
+npm install
 ```
 
-## Variables d'Environnement
+### 2. Installation des dépendances
+
+```bash
+# Dépendances principales
+npm install @supabase/supabase-js@2.39.7 \
+           d3@7.8.5 \
+           framer-motion@11.0.8 \
+           lucide-react@0.344.0 \
+           mammoth@1.7.0 \
+           openai@4.28.0 \
+           pdfjs-dist@3.11.174 \
+           react@18.3.1 \
+           react-dom@18.3.1 \
+           react-dropzone@14.2.3 \
+           react-markdown@9.0.1 \
+           react-router-dom@6.22.2 \
+           tesseract.js@5.0.5 \
+           web-streams-polyfill@3.3.3 \
+           zustand@4.5.2
+
+# Dépendances de développement
+npm install -D @eslint/js@9.9.1 \
+             @types/d3@7.4.3 \
+             @types/react@18.3.5 \
+             @types/react-dom@18.3.0 \
+             @vitejs/plugin-react@4.3.1 \
+             autoprefixer@10.4.18 \
+             eslint@9.9.1 \
+             eslint-plugin-react-hooks@5.1.0-rc.0 \
+             eslint-plugin-react-refresh@0.4.11 \
+             globals@15.9.0 \
+             postcss@8.4.35 \
+             tailwindcss@3.4.1 \
+             typescript@5.5.3 \
+             typescript-eslint@8.3.0 \
+             vite@5.4.2
+```
+
+### 3. Configuration de Tailwind CSS
+
+```bash
+# Initialiser Tailwind CSS
+npx tailwindcss init -p
+```
+
+Créer ou mettre à jour `src/index.css` :
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Styles personnalisés... */
+```
+
+### 4. Configuration de Supabase
+
+1. Créer un nouveau projet sur [Supabase](https://supabase.com)
+)
+2. Noter l'URL du projet et la clé anon/public
+3. Créer un fichier `.env` à la racine du projet :
 
 ```env
-VITE_SUPABASE_URL=url_de_votre_projet_supabase
-VITE_SUPABASE_ANON_KEY=cle_anon_supabase
-VITE_OPENAI_API_KEY=cle_api_openai
+VITE_SUPABASE_URL=votre_url_supabase
+VITE_SUPABASE_ANON_KEY=votre_cle_anon
+VITE_OPENAI_API_KEY=votre_cle_api_openai
 ```
 
-## Structure du Projet
+### 5. Configuration de la base de données
+
+1. Aller dans l'interface SQL de Supabase
+2. Exécuter les migrations dans l'ordre :
+
+```sql
+-- 1. Configuration initiale des utilisateurs
+CREATE TABLE IF NOT EXISTS profiles (
+  id uuid PRIMARY KEY REFERENCES auth.users ON DELETE CASCADE,
+  email text UNIQUE NOT NULL,
+  role text NOT NULL CHECK (role IN ('admin', 'user')) DEFAULT 'user',
+  status boolean DEFAULT true,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+
+-- 2. Configuration des dossiers et documents
+CREATE TABLE IF NOT EXISTS folders (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  parent_id uuid REFERENCES folders(id) ON DELETE CASCADE,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS documents (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  folder_id uuid REFERENCES folders(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  type text NOT NULL,
+  group_name text,
+  description text,
+  url text,
+  processed boolean DEFAULT false,
+  size bigint,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS document_contents (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  document_id uuid REFERENCES documents(id) ON DELETE CASCADE NOT NULL,
+  content text NOT NULL,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  UNIQUE(document_id)
+);
+
+-- 3. Configuration des conversations
+CREATE TABLE IF NOT EXISTS conversations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  title text NOT NULL,
+  created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS messages (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id uuid REFERENCES conversations(id) ON DELETE CASCADE NOT NULL,
+  sender text NOT NULL CHECK (sender IN ('user', 'assistant')),
+  content text NOT NULL,
+  created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS conversation_documents (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id uuid REFERENCES conversations(id) ON DELETE CASCADE NOT NULL,
+  document_id uuid REFERENCES documents(id) ON DELETE CASCADE NOT NULL,
+  created_at timestamptz DEFAULT now(),
+  UNIQUE(conversation_id, document_id)
+);
+```
+
+### 6. Configuration du stockage Supabase
+
+1. Créer un nouveau bucket "documents" dans Supabase Storage
+2. Configurer les politiques de sécurité pour le bucket
+
+### 7. Lancement du projet
+
+```bash
+# Démarrer le serveur de développement
+npm run dev
+```
+
+## Structure des dossiers
 
 ```
 src/
-├── components/    # Composants React
-│   ├── Logo.tsx
-│   ├── DocumentIcon.tsx
-│   ├── DocumentListIcon.tsx
-│   └── ...
-├── lib/          # Logique métier
-│   ├── supabase.ts
-│   ├── store.ts
-│   ├── documentStore.ts
-│   └── ...
-├── pages/        # Pages de l'application
-│   ├── Login.tsx
-│   └── Chat.tsx
-└── ...
+├── components/    # Composants React réutilisables
+├── lib/          # Logique métier et utilitaires
+├── pages/        # Pages principales
+└── main.tsx      # Point d'entrée
 ```
 
-## Commandes Disponibles
+## Commandes disponibles
 
 ```bash
 # Installation des dépendances
@@ -153,3 +206,57 @@ npm run build
 # Vérification du code
 npm run lint
 ```
+
+## Configuration de l'environnement de production
+
+1. Configurer les variables d'environnement sur votre plateforme d'hébergement
+2. Construire le projet : `npm run build`
+3. Déployer le dossier `dist`
+
+## Dépannage
+
+### Problèmes courants
+
+1. Erreur "Failed to fetch" avec Supabase
+   - Vérifier les variables d'environnement
+   - Vérifier la connexion internet
+   - Vérifier les politiques RLS
+
+2. Erreur lors du traitement des documents
+   - Vérifier les permissions du bucket de stockage
+   - Vérifier la taille des fichiers (limite: 100MB)
+   - Vérifier les formats supportés
+
+3. Erreur d'authentification
+   - Vérifier la configuration de l'authentification Supabase
+   - Vérifier les politiques RLS
+   - Vérifier les rôles utilisateur
+
+## Notes de sécurité
+
+1. Ne jamais exposer les clés API dans le code
+2. Toujours utiliser les variables d'environnement
+3. Configurer correctement les politiques RLS
+4. Valider les entrées utilisateur
+5. Limiter la taille des fichiers uploadés
+6. Vérifier les types MIME des fichiers
+
+## Support des navigateurs
+
+- Chrome 80+
+- Firefox 75+
+- Safari 13.1+
+- Edge 80+
+
+## Ressources
+
+- [Documentation Supabase](https://supabase.com/docs)
+)
+- [Documentation OpenAI](https://platform.openai.com/docs)
+)
+- [Documentation Vite](https://vitejs.dev/guide/)
+)
+- [Documentation React](https://reactjs.org/docs/getting-started.html)
+)
+- [Documentation Tailwind CSS](https://tailwindcss.com/docs)
+)

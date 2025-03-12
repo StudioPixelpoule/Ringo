@@ -12,7 +12,7 @@ RINGO est une application web moderne qui permet aux utilisateurs d'analyser des
 - Base de données : Supabase
 - Authentication : Supabase Auth
 - Stockage : Supabase Storage
-- IA : OpenAI GPT-4
+- IA : OpenAI GPT-4 Turbo
 
 ### Structure du Projet
 ```
@@ -66,13 +66,14 @@ src/
 - Organisation en dossiers hiérarchiques
 - Traitement automatique du contenu
 - Explorateur de fichiers intuitif
-- Support multi-formats (Word, PDF)
+- Support multi-formats (Word, PDF, JSON, CSV)
 - Prévisualisation des documents
 - Sélection multiple pour analyse
 
 ### 2. Traitement des Documents
 - PDF : Extraction de texte avec OCR au besoin
 - Word : Conversion en texte structuré
+- JSON/CSV : Parsing et structuration des données
 - Métadonnées : Extraction et stockage
 - Traitement asynchrone
 - Barre de progression
@@ -136,7 +137,7 @@ src/
 
 ## Intégration IA
 
-### OpenAI GPT-4
+### OpenAI GPT-4 Turbo
 - Analyse contextuelle des documents
 - Réponses aux questions utilisateur
 - Formatage structuré des réponses

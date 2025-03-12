@@ -202,7 +202,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
           isProcessing: false,
           progress: 100,
           stage: 'complete',
-          message: file.type.startsWith('audio/') ? 'Fichier audio traité avec succès' : 'Document traité avec succès'
+          message: 'Document traité avec succès !'
         }
       });
 
