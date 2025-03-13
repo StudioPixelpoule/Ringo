@@ -127,7 +127,20 @@ export function DocumentImportModal() {
   useEffect(() => {
     if (isModalOpen) {
       fetchFolders();
-      if (!processingStatus.isProcessing) {
+
+      // Check for pending report import
+      const pendingImport = localStorage.getItem('pendingReportImport');
+      if (pendingImport) {
+        const importData = JSON.parse(pendingImport);
+        const file = new File([importData.content], importData.name, {
+          type: importData.type
+        });
+        setSelectedFile(file);
+        setDocumentType('report');
+        setGroupName('Rapports');
+        setDescription('Rapport généré automatiquement');
+        localStorage.removeItem('pendingReportImport');
+      } else if (!processingStatus.isProcessing) {
         setProcessingStatus({
           isProcessing: false,
           progress: 0,
@@ -157,6 +170,10 @@ export function DocumentImportModal() {
         setDocumentType('doc');
       } else if (file.type.includes('audio')) {
         setDocumentType('audio');
+      } else if (file.type === 'text/html') {
+        setDocumentType('report');
+        setGroupName('Rapports');
+        setDescription('Rapport généré automatiquement');
       }
 
       setProcessingStatus({
@@ -180,7 +197,7 @@ export function DocumentImportModal() {
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
       'audio/mpeg': ['.mp3'],
       'audio/wav': ['.wav'],
-      'audio/x-wav': ['.wav']
+      'text/html': ['.html']
     },
     multiple: false,
     disabled: processingStatus.isProcessing
@@ -388,6 +405,7 @@ export function DocumentImportModal() {
                   <option value="doc">Document Word</option>
                   <option value="data">Données (JSON/CSV)</option>
                   <option value="audio">Audio (MP3/WAV)</option>
+                  <option value="report">Rapport</option>
                 </select>
               </div>
 
@@ -405,6 +423,7 @@ export function DocumentImportModal() {
                   <option value="groupe1">Groupe 1</option>
                   <option value="groupe2">Groupe 2</option>
                   <option value="groupe3">Groupe 3</option>
+                  <option value="Rapports">Rapports</option>
                 </select>
               </div>
 

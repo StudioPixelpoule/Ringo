@@ -51,7 +51,7 @@ async function processDataFile(file: File, options?: ProcessingOptions): Promise
         });
       });
 
-      if (parseResult.errors?.length > 0) {
+      if ('errors' in parseResult && parseResult.errors?.length > 0) {
         console.warn('CSV parsing warnings:', parseResult.errors);
       }
 
@@ -127,7 +127,7 @@ async function processDataFile(file: File, options?: ProcessingOptions): Promise
     return JSON.stringify(formattedData, null, 2);
   } catch (error) {
     console.error('[Data Processing] Error:', error);
-    throw new Error(`Erreur lors du traitement du fichier: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+    throw error;
   }
 }
 
@@ -176,7 +176,7 @@ async function processTextDocument(file: File, options?: ProcessingOptions): Pro
     return text;
   } catch (error) {
     console.error('[Text Processing] Error:', error);
-    throw new Error(`Erreur lors du traitement du document texte: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+    throw error;
   }
 }
 
@@ -286,7 +286,7 @@ async function processPDFDocument(file: File, options?: ProcessingOptions): Prom
     return cleanedText;
   } catch (error) {
     console.error('[PDF Processing] Error:', error);
-    throw new Error(`Erreur lors du traitement du PDF: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+    throw error;
   }
 }
 
@@ -325,6 +325,11 @@ export async function processDocument(
           result = await processTextDocument(file, options);
           break;
 
+        case 'text/html':
+          // For HTML reports, just return the content as is
+          result = await file.text();
+          break;
+
         default:
           throw new Error(`Type de fichier non supporté: ${file.type}`);
       }
@@ -343,6 +348,6 @@ export async function processDocument(
     return result;
   } catch (error) {
     console.error('[Document Processing] Error:', error);
-    throw error;
+    throw error instanceof Error ? error : new Error('Une erreur est survenue lors du traitement du document');
   }
 }

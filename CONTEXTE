@@ -27,7 +27,7 @@ src/
 
 ### Tables Principales
 1. `profiles`
-   - Gestion des utilisateurs et rôles
+   - Gestion des utilisateurs et rôles (user, admin, super_admin)
    - Champs : id, email, role, status, created_at, updated_at
 
 2. `folders`
@@ -54,21 +54,26 @@ src/
    - Liaison entre conversations et documents
    - Champs : id, conversation_id, document_id, created_at
 
+8. `user_feedback`
+   - Retours utilisateurs
+   - Champs : id, user_id, content, created_at, read_at, status
+
 ### Sécurité
 - Row Level Security (RLS) activé sur toutes les tables
 - Politiques d'accès basées sur l'authentification
-- Séparation des rôles (admin/user)
+- Séparation des rôles (super_admin/admin/user)
+- Vérification du statut actif des utilisateurs
 
 ## Fonctionnalités Principales
 
 ### 1. Gestion des Documents
-- Upload de documents (PDF, Word)
+- Upload de documents (PDF, Word, JSON, CSV)
 - Organisation en dossiers hiérarchiques
 - Traitement automatique du contenu
 - Explorateur de fichiers intuitif
-- Support multi-formats (Word, PDF, JSON, CSV)
 - Prévisualisation des documents
 - Sélection multiple pour analyse
+- Gestion des permissions par rôle
 
 ### 2. Traitement des Documents
 - PDF : Extraction de texte avec OCR au besoin
@@ -90,12 +95,19 @@ src/
 
 ### 4. Gestion des Utilisateurs
 - Authentification email/mot de passe
-- Rôles administrateur et utilisateur
+- Rôles super_admin, admin et utilisateur
 - Gestion des permissions
 - Statut actif/inactif
 - Interface d'administration
 - Création de comptes
 - Modification des rôles
+
+### 5. Système de Feedback
+- Retours utilisateurs
+- Gestion des statuts (unread, read, archived)
+- Interface admin dédiée
+- Notifications de nouveaux retours
+- Historique des retours
 
 ## Interface Utilisateur
 
@@ -109,7 +121,7 @@ src/
 - États de chargement
 
 ### Composants Principaux
-- Header avec navigation et recherche
+- Header avec navigation et contrôles
 - Liste des conversations
 - Zone de chat interactive
 - Explorateur de fichiers

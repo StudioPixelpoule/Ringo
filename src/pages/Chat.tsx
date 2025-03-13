@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Users, ArrowRight, LogOut, Database, FileText } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 import { Logo } from '../components/Logo';
@@ -13,6 +14,8 @@ import { DocumentList } from '../components/DocumentList';
 import { MessageItem } from '../components/MessageItem';
 import { ReportTemplateManager } from '../components/ReportTemplateManager';
 import { ReportGeneratorWidget } from '../components/ReportGeneratorWidget';
+import { FeedbackButton } from '../components/FeedbackButton';
+import { FeedbackManager } from '../components/FeedbackManager';
 import { supabase } from '../lib/supabase';
 import { useUserStore } from '../lib/store';
 import { useDocumentStore } from '../lib/documentStore';
@@ -182,6 +185,9 @@ export function Chat({ session }: ChatProps) {
     }
   };
 
+  const isAdminOrSuperAdmin = userRole === 'admin' || userRole === 'super_admin';
+  const isSuperAdmin = userRole === 'super_admin';
+
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-gray-50">
       <header className="bg-[#f15922] shadow-sm h-16 flex-shrink-0 flex items-center justify-between px-6">
@@ -203,22 +209,26 @@ export function Chat({ session }: ChatProps) {
             </button>
             <div className="border-l border-white/20 pl-4 flex flex-col">
               <span className="text-white/90 text-sm">{session.user.email}</span>
-              {userRole === 'admin' && (
+              {userRole === 'super_admin' ? (
+                <span className="text-white/70 text-xs">super admin</span>
+              ) : userRole === 'admin' ? (
                 <span className="text-white/70 text-xs">admin</span>
-              )}
+              ) : null}
             </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {userRole === 'admin' && (
+          {isAdminOrSuperAdmin && (
             <>
-              <button 
-                onClick={() => setUserModalOpen(true)}
-                className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
-                aria-label="User management"
-              >
-                <Users size={18} strokeWidth={2.5} />
-              </button>
+              {isSuperAdmin && (
+                <button 
+                  onClick={() => setUserModalOpen(true)}
+                  className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
+                  aria-label="User management"
+                >
+                  <Users size={18} strokeWidth={2.5} />
+                </button>
+              )}
               <button 
                 onClick={() => setDocumentModalOpen(true)}
                 className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
@@ -240,6 +250,7 @@ export function Chat({ session }: ChatProps) {
               >
                 <FileText size={18} strokeWidth={2.5} />
               </button>
+              {isSuperAdmin && <FeedbackManager />}
             </>
           )}
         </div>
@@ -342,6 +353,8 @@ export function Chat({ session }: ChatProps) {
       {currentConversation && conversationDocuments.length > 0 && (
         <ReportGeneratorWidget />
       )}
+
+      <FeedbackButton />
 
       <UserManagementModal />
       <DocumentImportModal />

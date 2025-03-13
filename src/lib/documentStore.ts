@@ -25,8 +25,9 @@ export interface Document {
 interface ProcessingStatus {
   isProcessing: boolean;
   progress: number;
-  stage: 'preparation' | 'processing' | 'extraction' | 'complete';
+  stage: 'upload' | 'processing' | 'complete';
   message: string;
+  canCancel?: boolean;
 }
 
 interface DocumentStore {
@@ -64,8 +65,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   processingStatus: {
     isProcessing: false,
     progress: 0,
-    stage: 'preparation',
-    message: ''
+    stage: 'upload',
+    message: '',
+    canCancel: false
   },
   selectedDocuments: [],
 
@@ -74,6 +76,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   createFolder: async (name, parentId) => {
     set({ loading: true, error: null });
     try {
+      console.log("📁 Création du dossier:", { name, parentId });
+      
       const { data, error } = await supabase
         .from('folders')
         .insert([{ name, parent_id: parentId }])
@@ -84,8 +88,11 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       
       const folders = get().folders;
       set({ folders: [...folders, data] });
+      
+      console.log("✅ Dossier créé:", data);
     } catch (error) {
-      set({ error: error instanceof Error ? error.message : 'Error creating folder' });
+      console.error("🚨 Erreur création dossier:", error);
+      set({ error: error instanceof Error ? error.message : 'Erreur création dossier' });
     } finally {
       set({ loading: false });
     }
@@ -98,8 +105,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       processingStatus: {
         isProcessing: true,
         progress: 0,
-        stage: 'preparation',
-        message: 'Préparation du document...'
+        stage: 'upload',
+        message: 'Préparation...',
+        canCancel: true
       }
     });
 
@@ -110,7 +118,15 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       // Process document content first
       const content = await processDocument(file, {
         onProgress: (progress) => {
-          set({ processingStatus: progress });
+          set({
+            processingStatus: {
+              isProcessing: true,
+              progress: progress.progress * 0.7, // 70% of total progress
+              stage: 'processing',
+              message: progress.message,
+              canCancel: true
+            }
+          });
         }
       });
 
@@ -123,8 +139,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         processingStatus: {
           isProcessing: true,
           progress: 70,
-          stage: 'processing',
-          message: 'Téléversement du fichier...'
+          stage: 'upload',
+          message: 'Téléversement du fichier...',
+          canCancel: true
         }
       });
 
@@ -151,7 +168,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
           isProcessing: true,
           progress: 80,
           stage: 'processing',
-          message: 'Création de l\'enregistrement...'
+          message: 'Création de l\'enregistrement...',
+          canCancel: true
         }
       });
 
@@ -179,7 +197,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
           isProcessing: true,
           progress: 90,
           stage: 'processing',
-          message: 'Enregistrement du contenu...'
+          message: 'Enregistrement du contenu...',
+          canCancel: true
         }
       });
 
@@ -202,7 +221,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
           isProcessing: false,
           progress: 100,
           stage: 'complete',
-          message: 'Document traité avec succès !'
+          message: 'Document traité avec succès !',
+          canCancel: false
         }
       });
 
@@ -230,8 +250,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         processingStatus: {
           isProcessing: false,
           progress: 0,
-          stage: 'preparation',
-          message: ''
+          stage: 'upload',
+          message: '',
+          canCancel: false
         }
       });
       throw error;
@@ -243,15 +264,20 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   fetchFolders: async () => {
     set({ loading: true, error: null });
     try {
+      console.log("📁 Récupération des dossiers");
+      
       const { data, error } = await supabase
         .from('folders')
         .select('*')
         .order('created_at', { ascending: true });
 
       if (error) throw error;
+      
+      console.log("✅ Dossiers récupérés:", data?.length || 0);
       set({ folders: data || [] });
     } catch (error) {
-      set({ error: error instanceof Error ? error.message : 'Error fetching folders' });
+      console.error("🚨 Erreur récupération dossiers:", error);
+      set({ error: error instanceof Error ? error.message : 'Erreur récupération dossiers' });
     } finally {
       set({ loading: false });
     }
@@ -260,6 +286,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   fetchDocuments: async (folderId) => {
     set({ loading: true, error: null });
     try {
+      console.log("📄 Récupération des documents du dossier:", folderId);
+      
       const { data, error } = await supabase
         .from('documents')
         .select('*')
@@ -267,9 +295,12 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         .order('created_at', { ascending: false });
 
       if (error) throw error;
+      
+      console.log("✅ Documents récupérés:", data?.length || 0);
       set({ documents: data || [] });
     } catch (error) {
-      set({ error: error instanceof Error ? error.message : 'Error fetching documents' });
+      console.error("🚨 Erreur récupération documents:", error);
+      set({ error: error instanceof Error ? error.message : 'Erreur récupération documents' });
     } finally {
       set({ loading: false });
     }
@@ -278,15 +309,20 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   fetchAllDocuments: async () => {
     set({ loading: true, error: null });
     try {
+      console.log("📄 Récupération de tous les documents");
+      
       const { data, error } = await supabase
         .from('documents')
         .select('*')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
+      
+      console.log("✅ Documents récupérés:", data?.length || 0);
       set({ documents: data || [] });
     } catch (error) {
-      set({ error: error instanceof Error ? error.message : 'Error fetching documents' });
+      console.error("🚨 Erreur récupération documents:", error);
+      set({ error: error instanceof Error ? error.message : 'Erreur récupération documents' });
     } finally {
       set({ loading: false });
     }
@@ -297,6 +333,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   deleteFolder: async (id) => {
     set({ loading: true, error: null });
     try {
+      console.log("🗑️ Suppression du dossier:", id);
+      
       const { error } = await supabase
         .from('folders')
         .delete()
@@ -306,8 +344,11 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       
       const folders = get().folders;
       set({ folders: folders.filter((f) => f.id !== id) });
+      
+      console.log("✅ Dossier supprimé");
     } catch (error) {
-      set({ error: error instanceof Error ? error.message : 'Error deleting folder' });
+      console.error("🚨 Erreur suppression dossier:", error);
+      set({ error: error instanceof Error ? error.message : 'Erreur suppression dossier' });
     } finally {
       set({ loading: false });
     }
@@ -316,6 +357,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   renameFolder: async (id, newName) => {
     set({ loading: true, error: null });
     try {
+      console.log("✏️ Renommage du dossier:", { id, newName });
+      
       const { error } = await supabase
         .from('folders')
         .update({ name: newName })
@@ -329,26 +372,32 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
           f.id === id ? { ...f, name: newName } : f
         ),
       });
+      
+      console.log("✅ Dossier renommé");
     } catch (error) {
-      set({ error: error instanceof Error ? error.message : 'Error renaming folder' });
+      console.error("🚨 Erreur renommage dossier:", error);
+      set({ error: error instanceof Error ? error.message : 'Erreur renommage dossier' });
     } finally {
       set({ loading: false });
     }
   },
 
   selectDocument: (id) => {
+    console.log("📄 Sélection du document:", id);
     set((state) => ({
       selectedDocuments: [...state.selectedDocuments, id]
     }));
   },
 
   unselectDocument: (id) => {
+    console.log("📄 Désélection du document:", id);
     set((state) => ({
       selectedDocuments: state.selectedDocuments.filter(docId => docId !== id)
     }));
   },
 
   clearSelectedDocuments: () => {
+    console.log("🧹 Effacement de la sélection");
     set({ selectedDocuments: [] });
   },
 

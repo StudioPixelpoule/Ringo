@@ -1,7 +1,6 @@
 import { ConversationDocument } from './conversationStore';
 import { supabase } from './supabase';
 import { generateChatResponse } from './openai';
-import { jsPDF } from 'jspdf';
 
 interface ReportTemplate {
   id: string;
@@ -162,7 +161,7 @@ INSTRUCTIONS: Le texte ci-dessus contient le contenu complet du document "${doc.
       contents.join('\n\n---\n\n')
     );
 
-    // Create HTML report
+    // Create HTML report with professional styling
     const htmlContent = `
     <!DOCTYPE html>
     <html>
@@ -170,60 +169,202 @@ INSTRUCTIONS: Le texte ci-dessus contient le contenu complet du document "${doc.
       <meta charset="UTF-8">
       <title>Rapport - ${template.name}</title>
       <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
+        
         body {
-          font-family: Arial, sans-serif;
+          font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
           line-height: 1.6;
           color: #333;
-          margin: 40px;
           max-width: 800px;
           margin: 40px auto;
+          padding: 0 20px;
+          background: #fff;
         }
-        h1 { 
-          color: #f15922; 
-          font-size: 24px;
-          margin-bottom: 10px;
+
+        /* Header styles */
+        .header {
+          border-bottom: 3px solid #f15922;
+          padding-bottom: 20px;
+          margin-bottom: 30px;
         }
-        h2 { 
-          color: #dba747; 
-          border-bottom: 1px solid #eee; 
-          padding-bottom: 5px;
-          margin-top: 30px;
-          font-size: 20px;
+
+        .header h1 {
+          color: #f15922;
+          font-size: 28px;
+          font-weight: 700;
+          margin: 0 0 10px 0;
         }
-        h3 { 
-          color: #444; 
-          font-size: 18px;
-          margin-top: 20px;
-        }
-        .header { 
-          border-bottom: 2px solid #f15922; 
-          padding-bottom: 20px; 
-          margin-bottom: 30px; 
-        }
+
         .metadata {
           color: #666;
           font-size: 14px;
           margin-bottom: 10px;
         }
+
+        /* Content styles */
         .content {
           margin: 20px 0;
         }
-        .footer { 
-          margin-top: 50px; 
-          border-top: 1px solid #eee; 
-          padding-top: 20px; 
-          font-size: 12px;
+
+        /* Typography */
+        h1 {
+          color: #f15922;
+          font-size: 28px;
+          font-weight: 700;
+          margin: 1.5em 0 0.5em;
+          padding-bottom: 0.3em;
+          border-bottom: 2px solid #f15922;
+        }
+
+        h2 {
+          color: #dba747;
+          font-size: 24px;
+          font-weight: 700;
+          margin: 1.5em 0 0.5em;
+          padding-bottom: 0.3em;
+          border-bottom: 1px solid #dba747;
+        }
+
+        h3 {
+          color: #444;
+          font-size: 20px;
+          font-weight: 600;
+          margin: 1.2em 0 0.4em;
+        }
+
+        p {
+          margin: 0 0 1em;
+          line-height: 1.8;
+        }
+
+        /* Lists */
+        ul, ol {
+          margin: 1em 0;
+          padding-left: 2em;
+        }
+
+        li {
+          margin: 0.5em 0;
+          line-height: 1.6;
+        }
+
+        ul li {
+          list-style-type: none;
+          position: relative;
+        }
+
+        ul li::before {
+          content: "•";
+          color: #f15922;
+          font-weight: bold;
+          position: absolute;
+          left: -1.2em;
+        }
+
+        /* Emphasis */
+        strong {
+          color: #f15922;
+          font-weight: 600;
+        }
+
+        em {
+          font-style: italic;
           color: #666;
         }
-        ul {
+
+        /* Blockquotes */
+        blockquote {
+          margin: 1.5em 0;
+          padding: 1em 1.5em;
+          border-left: 4px solid #dba747;
+          background-color: #f8f9fa;
+          color: #555;
+          font-style: italic;
+        }
+
+        /* Tables */
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 1.5em 0;
+          background: #fff;
+          border: 1px solid #e0e0e0;
+        }
+
+        th, td {
+          padding: 12px 15px;
+          text-align: left;
+          border: 1px solid #e0e0e0;
+        }
+
+        th {
+          background-color: #f5f5f5;
+          font-weight: 600;
+          color: #333;
+        }
+
+        tr:nth-child(even) {
+          background-color: #f9f9f9;
+        }
+
+        /* Code blocks */
+        pre {
+          background-color: #f6f8fa;
+          border: 1px solid #e1e4e8;
+          border-radius: 6px;
+          padding: 16px;
+          overflow: auto;
+          font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+          font-size: 85%;
+          line-height: 1.45;
+          margin: 1.5em 0;
+        }
+
+        code {
+          font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+          font-size: 85%;
+          background-color: rgba(27, 31, 35, 0.05);
+          padding: 0.2em 0.4em;
+          border-radius: 3px;
+        }
+
+        /* Footer */
+        .footer {
+          margin-top: 50px;
+          padding-top: 20px;
+          border-top: 1px solid #eee;
+          color: #666;
+          font-size: 14px;
+        }
+
+        .footer ul {
           margin: 10px 0;
           padding-left: 20px;
         }
-        li {
+
+        .footer li {
           margin: 5px 0;
         }
-        strong {
-          color: #f15922;
+
+        /* Print styles */
+        @media print {
+          body {
+            margin: 0;
+            padding: 20px;
+            max-width: none;
+          }
+
+          .header {
+            margin-bottom: 20px;
+          }
+
+          h1, h2, h3 {
+            page-break-after: avoid;
+          }
+
+          ul, ol, img, table {
+            page-break-inside: avoid;
+          }
         }
       </style>
     </head>
