@@ -1,29 +1,10 @@
 import { createChunkedStream, validateAudioChunk } from './streamUtils';
-import { supabase } from './supabase';
 
 interface ProcessingProgress {
   stage: 'upload' | 'processing' | 'complete';
   progress: number;
   message: string;
   canCancel?: boolean;
-}
-
-interface AudioProcessingResult {
-  text: string;
-  metadata: {
-    title?: string;
-    duration: number;
-    language?: string;
-    fileType: string;
-    fileName: string;
-    segments: Array<{
-      start: number;
-      end: number;
-      text: string;
-    }>;
-  };
-  confidence: number;
-  processingDate: string;
 }
 
 function detectLanguage(text: string): string {
@@ -81,20 +62,14 @@ async function processAudioChunk(chunk: Blob, apiKey: string): Promise<{
 
 export async function processAudioFile(
   file: File,
-  onProgress?: (progress: ProcessingProgress) => void,
-  signal?: AbortSignal
+  apiKey: string,
+  onProgress?: (progress: ProcessingProgress) => void
 ): Promise<string> {
   try {
     console.log(`[Audio Processing] Starting processing: ${file.name}`);
 
-    const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
     if (!apiKey) {
       throw new Error('OpenAI API key is not configured');
-    }
-
-    // Check if operation was cancelled
-    if (signal?.aborted) {
-      throw new Error('Processing cancelled');
     }
 
     // Validate file type
@@ -112,7 +87,7 @@ export async function processAudioFile(
 
     const MAX_CHUNK_SIZE = 24 * 1024 * 1024; // 24MB to stay under Whisper's 25MB limit
     let transcription = '';
-    const segments: AudioProcessingResult['metadata']['segments'] = [];
+    const segments: Array<{ start: number; end: number; text: string; }> = [];
     let timeOffset = 0;
     let totalDuration = 0;
 
@@ -121,11 +96,6 @@ export async function processAudioFile(
       const chunks = await createChunkedStream(file, MAX_CHUNK_SIZE);
       
       for (let i = 0; i < chunks.length; i++) {
-        // Check if operation was cancelled
-        if (signal?.aborted) {
-          throw new Error('Processing cancelled');
-        }
-
         onProgress?.({
           stage: 'processing',
           progress: 10 + ((i / chunks.length) * 80),
@@ -158,11 +128,6 @@ export async function processAudioFile(
         canCancel: true
       });
 
-      // Check if operation was cancelled
-      if (signal?.aborted) {
-        throw new Error('Processing cancelled');
-      }
-
       const result = await processAudioChunk(file, apiKey);
       transcription = result.text;
       segments.push(...result.segments);
@@ -170,19 +135,14 @@ export async function processAudioFile(
     }
 
     onProgress?.({
-      stage: 'processing',
-      progress: 90,
-      message: 'Finalisation de la transcription...',
-      canCancel: true
+      stage: 'complete',
+      progress: 100,
+      message: 'Transcription terminée',
+      canCancel: false
     });
 
-    // Check if operation was cancelled
-    if (signal?.aborted) {
-      throw new Error('Processing cancelled');
-    }
-
     // Prepare result
-    const result: AudioProcessingResult = {
+    const result = {
       text: transcription,
       metadata: {
         title: file.name.replace(/\.[^/.]+$/, ''),
@@ -196,14 +156,6 @@ export async function processAudioFile(
       processingDate: new Date().toISOString()
     };
 
-    onProgress?.({
-      stage: 'complete',
-      progress: 100,
-      message: 'Transcription terminée',
-      canCancel: false
-    });
-
-    console.log('[Audio Processing] Processing completed successfully');
     return JSON.stringify(result);
   } catch (error) {
     console.error('[Audio Processing] Error:', error);

@@ -86,3 +86,27 @@
   color: #abb2bf;
   padding: 0;
 }
+
+/* Smooth transitions for Markdown elements */
+.streaming-text * {
+  transition: opacity 0.2s ease;
+}
+
+/* Ensure code blocks appear instantly */
+.streaming-text pre,
+.streaming-text code {
+  transition: none;
+}
+
+/* Ensure lists maintain proper structure */
+.streaming-text ul > li,
+.streaming-text ol > li {
+  opacity: 1;
+  transition: opacity 0.2s ease;
+}
+
+/* Ensure blockquotes maintain proper structure */
+.streaming-text blockquote > p {
+  opacity: 1;
+  transition: opacity 0.2s ease;
+}

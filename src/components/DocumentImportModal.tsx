@@ -155,6 +155,8 @@ export function DocumentImportModal() {
         setDocumentType('pdf');
       } else if (file.type.includes('word')) {
         setDocumentType('doc');
+      } else if (file.type.includes('audio')) {
+        setDocumentType('audio');
       }
 
       setProcessingStatus({
@@ -175,7 +177,10 @@ export function DocumentImportModal() {
       'application/json': ['.json'],
       'text/csv': ['.csv'],
       'application/vnd.ms-excel': ['.xls'],
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx']
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+      'audio/mpeg': ['.mp3'],
+      'audio/wav': ['.wav'],
+      'audio/x-wav': ['.wav']
     },
     multiple: false,
     disabled: processingStatus.isProcessing
@@ -382,6 +387,7 @@ export function DocumentImportModal() {
                   <option value="pdf">PDF</option>
                   <option value="doc">Document Word</option>
                   <option value="data">Données (JSON/CSV)</option>
+                  <option value="audio">Audio (MP3/WAV)</option>
                 </select>
               </div>
 

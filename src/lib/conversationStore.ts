@@ -7,6 +7,7 @@ export interface Conversation {
   id: string;
   title: string;
   created_at: string;
+  user_id: string;
 }
 
 export interface Message {
@@ -33,7 +34,7 @@ interface ConversationStore {
   loading: boolean;
   error: string | null;
   isTyping: boolean;
-  viewedMessages: Set<string>;
+  streamedMessages: Set<string>;
 
   fetchConversations: () => Promise<void>;
   createConversation: (title: string) => Promise<Conversation>;
@@ -46,7 +47,7 @@ interface ConversationStore {
   linkDocument: (documentId: string) => Promise<void>;
   unlinkDocument: (documentId: string) => Promise<void>;
   fetchConversationDocuments: (conversationId: string) => Promise<void>;
-  markMessageAsViewed: (messageId: string) => void;
+  markMessageAsStreamed: (messageId: string) => void;
   clearError: () => void;
 }
 
@@ -58,14 +59,18 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   loading: false,
   error: null,
   isTyping: false,
-  viewedMessages: new Set<string>(),
+  streamedMessages: new Set<string>(),
 
   fetchConversations: async () => {
     set({ loading: true, error: null });
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
       const { data, error } = await supabase
         .from('conversations')
         .select('*')
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -80,14 +85,15 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   createConversation: async (title) => {
     set({ loading: true, error: null });
     try {
-      const { data: userData, error: userError } = await supabase.auth.getUser();
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (userError) throw userError;
+      if (!user) throw new Error('User not authenticated');
 
       const { data, error } = await supabase
         .from('conversations')
         .insert([{ 
           title,
-          user_id: userData.user.id
+          user_id: user.id
         }])
         .select()
         .single();
@@ -145,20 +151,6 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   deleteConversation: async (id) => {
     set({ loading: true, error: null });
     try {
-      const { error: docError } = await supabase
-        .from('conversation_documents')
-        .delete()
-        .eq('conversation_id', id);
-
-      if (docError) throw docError;
-
-      const { error: msgError } = await supabase
-        .from('messages')
-        .delete()
-        .eq('conversation_id', id);
-
-      if (msgError) throw msgError;
-
       const { error } = await supabase
         .from('conversations')
         .delete()
@@ -226,19 +218,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      
-      // Mark existing messages as viewed
-      const currentViewedMessages = get().viewedMessages;
-      data?.forEach(message => {
-        if (message.sender === 'assistant') {
-          currentViewedMessages.add(message.id);
-        }
-      });
-      
-      set({ 
-        messages: data || [],
-        viewedMessages: currentViewedMessages
-      });
+      set({ messages: data || [] });
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Error fetching messages' });
     } finally {
@@ -321,7 +301,7 @@ INSTRUCTIONS: Le texte ci-dessus contient le contenu complet du document "${doc.
 
       const documentContext = formattedDocuments.join('\n\n---\n\n');
 
-      let aiResponse = '';
+      // Create empty assistant message first
       const { data: aiMessage, error: aiError } = await supabase
         .from('messages')
         .insert([{
@@ -334,30 +314,36 @@ INSTRUCTIONS: Le texte ci-dessus contient le contenu complet du document "${doc.
 
       if (aiError) throw aiError;
 
+      // Add empty message to state
+      set({ messages: [...get().messages, aiMessage] });
+
       // Stream the response
+      let streamedContent = '';
       await generateChatResponseStreaming(
         [...chatHistory, { role: 'user', content }],
         documentContext,
         async (chunk) => {
-          aiResponse += chunk;
+          streamedContent += chunk;
           
+          // Update message in database
           const { error: updateError } = await supabase
             .from('messages')
-            .update({ content: aiResponse })
+            .update({ content: streamedContent })
             .eq('id', aiMessage.id);
             
           if (updateError) throw updateError;
           
+          // Update message in state
           set({ 
-            messages: [...get().messages.filter(m => m.id !== aiMessage.id), 
-              { ...aiMessage, content: aiResponse }
-            ]
+            messages: get().messages.map(m => 
+              m.id === aiMessage.id ? { ...m, content: streamedContent } : m
+            )
           });
         }
       );
 
-      // Don't mark as viewed immediately - wait for streaming to complete
-      set({ messages: [...get().messages] });
+      // Mark message as streamed
+      get().markMessageAsStreamed(aiMessage.id);
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Error sending message' });
     } finally {
@@ -374,19 +360,6 @@ INSTRUCTIONS: Le texte ci-dessus contient le contenu complet du document "${doc.
 
     set({ loading: true, error: null });
     try {
-      const { data: existing, error: checkError } = await supabase
-        .from('conversation_documents')
-        .select('*')
-        .eq('conversation_id', conversation.id)
-        .eq('document_id', documentId);
-
-      if (checkError) throw checkError;
-
-      if (existing && existing.length > 0) {
-        set({ error: 'Document already linked to this conversation' });
-        return;
-      }
-
       const { error } = await supabase
         .from('conversation_documents')
         .insert([{
@@ -398,39 +371,20 @@ INSTRUCTIONS: Le texte ci-dessus contient le contenu complet du document "${doc.
       
       await get().fetchConversationDocuments(conversation.id);
 
-      const currentMessages = get().messages;
-      if (currentMessages.length === 0) {
-        const doc = get().documents.find(d => d.document_id === documentId);
-        if (doc) {
-          const { data: welcomeMessage, error: messageError } = await supabase
-            .from('messages')
-            .insert([{
-              conversation_id: conversation.id,
-              sender: 'assistant',
-              content: `Je vois que vous avez ajouté le document "${doc.documents.name}". Je suis prêt à analyser son contenu. Que souhaitez-vous savoir ?`
-            }])
-            .select()
-            .single();
+      const doc = get().documents.find(d => d.document_id === documentId);
+      if (doc) {
+        const { data: acknowledgmentMessage, error: messageError } = await supabase
+          .from('messages')
+          .insert([{
+            conversation_id: conversation.id,
+            sender: 'assistant',
+            content: `J'ai bien reçu le document "${doc.documents.name}". Je suis prêt à l'analyser avec les autres documents.`
+          }])
+          .select()
+          .single();
 
-          if (messageError) throw messageError;
-          set({ messages: [welcomeMessage] });
-        }
-      } else {
-        const doc = get().documents.find(d => d.document_id === documentId);
-        if (doc) {
-          const { data: acknowledgmentMessage, error: messageError } = await supabase
-            .from('messages')
-            .insert([{
-              conversation_id: conversation.id,
-              sender: 'assistant',
-              content: `J'ai bien reçu le document "${doc.documents.name}". Je suis prêt à l'analyser avec les autres documents quand vous le souhaiterez.`
-            }])
-            .select()
-            .single();
-
-          if (messageError) throw messageError;
-          set({ messages: [...currentMessages, acknowledgmentMessage] });
-        }
+        if (messageError) throw messageError;
+        set({ messages: [...get().messages, acknowledgmentMessage] });
       }
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Error linking document' });
@@ -493,9 +447,9 @@ INSTRUCTIONS: Le texte ci-dessus contient le contenu complet du document "${doc.
     }
   },
 
-  markMessageAsViewed: (messageId) => {
+  markMessageAsStreamed: (messageId) => {
     set(state => ({
-      viewedMessages: new Set(state.viewedMessages).add(messageId)
+      streamedMessages: new Set(state.streamedMessages).add(messageId)
     }));
   },
 

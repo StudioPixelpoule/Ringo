@@ -69,18 +69,54 @@ function App() {
 
   const fetchUserRole = async (userId: string) => {
     try {
+      // First validate session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      if (!session) {
+        console.warn('No active session');
+        window.location.href = '/login';
+        return;
+      }
+
+      // Then fetch profile
       const { data, error } = await supabase
         .from('profiles')
-        .select('role')
+        .select('role, status')
         .eq('id', userId)
         .single();
 
-      if (error) throw error;
-      if (data?.role) {
-        setUserRole(data.role);
+      if (error) {
+        console.error('Error fetching user profile:', error);
+        // Check if it's an auth error
+        if (error.code === 'PGRST301' || error.code === '401') {
+          setSession(null);
+          window.location.href = '/login';
+          return;
+        }
+        throw error;
       }
+
+      if (!data) {
+        console.warn('No profile found for user');
+        return;
+      }
+
+      if (!data.status) {
+        console.warn('User profile is inactive');
+        await supabase.auth.signOut();
+        return;
+      }
+
+      setUserRole(data.role);
     } catch (error) {
-      console.error('Error fetching user role:', error);
+      console.error('Error in fetchUserRole:', error);
+      // Check if it's an auth error
+      if (error?.message?.includes('JWT expired') || 
+          error?.message?.includes('Invalid JWT')) {
+        setSession(null);
+        window.location.href = '/login';
+        return;
+      }
     }
   };
 

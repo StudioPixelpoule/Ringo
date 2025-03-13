@@ -15,13 +15,13 @@ export const MessageItem: React.FC<MessageItemProps> = ({
   isLatestAssistantMessage 
 }) => {
   const isAssistant = message.sender === 'assistant';
-  const viewedMessages = useConversationStore(state => state.viewedMessages);
+  const streamedMessages = useConversationStore(state => state.streamedMessages);
   
   // A message should stream only if it is:
   // 1. An assistant message
   // 2. The latest assistant message
-  // 3. Not already viewed (not in viewedMessages)
-  const shouldStream = isAssistant && isLatestAssistantMessage && !viewedMessages.has(message.id);
+  // 3. Not already streamed (not in streamedMessages)
+  const shouldStream = isAssistant && isLatestAssistantMessage && !streamedMessages.has(message.id);
   
   const formattedTime = new Date(message.created_at).toLocaleTimeString([], { 
     hour: '2-digit', 

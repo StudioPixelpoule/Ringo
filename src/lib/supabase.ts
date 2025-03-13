@@ -12,7 +12,10 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    flowType: 'pkce'
+    flowType: 'pkce',
+    storage: window.localStorage,
+    storageKey: 'ringo_auth',
+    debug: import.meta.env.DEV
   },
   db: {
     schema: 'public'
@@ -22,11 +25,72 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       'x-application-name': 'ringo'
     }
   },
-  storage: {
-    retryCount: 3,
-    retryInterval: 1000
+  realtime: {
+    params: {
+      eventsPerSecond: 10
+    }
   }
 });
+
+// Initialize auth state
+supabase.auth.getSession().catch(error => {
+  console.error('Failed to get initial session:', error);
+  if (error.message?.includes('refresh_token_not_found')) {
+    localStorage.clear();
+    window.location.href = '/login';
+  }
+});
+
+// Set up auth state change listener
+supabase.auth.onAuthStateChange((event, session) => {
+  console.log('Auth state changed:', event);
+  
+  if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+    // Clear any cached data
+    localStorage.clear();
+    // Redirect to login
+    window.location.href = '/login';
+  } else if (event === 'TOKEN_REFRESHED') {
+    console.log('Token refreshed successfully');
+  } else if (event === 'SIGNED_IN') {
+    console.log('User signed in successfully');
+  }
+});
+
+// Handle auth errors
+window.addEventListener('unhandledrejection', (event) => {
+  if (event.reason?.name === 'AuthApiError') {
+    console.error('Auth error:', event.reason);
+    if (
+      event.reason.message?.includes('refresh_token_not_found') ||
+      event.reason.message?.includes('Invalid Refresh Token')
+    ) {
+      console.warn('Session expired, redirecting to login');
+      localStorage.clear();
+      window.location.href = '/login';
+    }
+  }
+});
+
+// Helper function to check if response is an auth error
+function isAuthError(error: any): boolean {
+  return (
+    error?.message?.includes('JWT expired') ||
+    error?.message?.includes('Invalid JWT') ||
+    error?.message?.includes('refresh_token_not_found') ||
+    error?.code === 'PGRST301' ||
+    error?.code === '401'
+  );
+}
+
+// Helper function to handle auth errors
+async function handleAuthError(error: any): Promise<void> {
+  console.error('Auth error:', error);
+  if (isAuthError(error)) {
+    localStorage.clear();
+    window.location.href = '/login';
+  }
+}
 
 export async function uploadFile(
   bucket: string,
@@ -47,7 +111,13 @@ export async function uploadFile(
         },
       });
 
-    if (error) throw error;
+    if (error) {
+      if (isAuthError(error)) {
+        await handleAuthError(error);
+      }
+      throw error;
+    }
+    
     if (!data?.path) throw new Error('Upload failed: No path returned');
 
     // Get public URL
@@ -55,88 +125,36 @@ export async function uploadFile(
       .from(bucket)
       .getPublicUrl(data.path);
 
-    if (urlError) throw urlError;
+    if (urlError) {
+      if (isAuthError(urlError)) {
+        await handleAuthError(urlError);
+      }
+      throw urlError;
+    }
+    
     if (!urlData?.publicUrl) throw new Error('Failed to get public URL');
-
-    // Verify file is accessible
-    const response = await fetch(urlData.publicUrl, { method: 'HEAD' });
-    if (!response.ok) {
-      throw new Error(`File verification failed: ${response.statusText}`);
-    }
-
-    // Verify file size
-    const contentLength = response.headers.get('content-length');
-    if (contentLength && parseInt(contentLength, 10) !== file.size) {
-      throw new Error(`File size mismatch: expected ${file.size}, got ${contentLength}`);
-    }
 
     return urlData.publicUrl;
   } catch (error) {
-    // Clean up failed upload
-    if (path) {
-      await supabase.storage
-        .from(bucket)
-        .remove([path])
-        .catch(console.error);
+    console.error('Upload error:', error);
+    if (isAuthError(error)) {
+      await handleAuthError(error);
     }
-
     throw new Error(`Failed to upload file: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
-export async function deleteFile(bucket: string, path: string): Promise<void> {
+// Helper function to check if user session is valid
+export async function validateSession(): Promise<boolean> {
   try {
-    // Verify file exists before deletion
-    const { data: existingFile, error: existError } = await supabase.storage
-      .from(bucket)
-      .download(path);
-
-    if (existError || !existingFile) {
-      throw new Error('File not found');
-    }
-
-    const { error } = await supabase.storage
-      .from(bucket)
-      .remove([path]);
-
+    const { data: { session }, error } = await supabase.auth.getSession();
     if (error) throw error;
-
-    // Verify deletion
-    const { data: verifyData } = await supabase.storage
-      .from(bucket)
-      .download(path);
-
-    if (verifyData) {
-      throw new Error('File deletion verification failed: File still exists');
+    return !!session;
+  } catch (error) {
+    console.error('Session validation failed:', error);
+    if (isAuthError(error)) {
+      await handleAuthError(error);
     }
-  } catch (error) {
-    throw new Error(`Failed to delete file: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
-}
-
-// Helper function to get file URL
-export async function getFileUrl(bucket: string, path: string): Promise<string | null> {
-  try {
-    const { data } = await supabase.storage
-      .from(bucket)
-      .createSignedUrl(path, 3600); // 1 hour expiry
-
-    return data?.signedUrl || null;
-  } catch (error) {
-    console.error('Failed to get file URL:', error);
-    return null;
-  }
-}
-
-// Helper function to check if file exists
-export async function fileExists(bucket: string, path: string): Promise<boolean> {
-  try {
-    const { data } = await supabase.storage
-      .from(bucket)
-      .download(path);
-
-    return !!data;
-  } catch {
     return false;
   }
 }
