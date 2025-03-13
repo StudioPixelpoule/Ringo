@@ -37,6 +37,7 @@
     "rehype-sanitize": "^6.0.0",
     "remark-gfm": "^4.0.0",
     "stream-browserify": "^3.0.0",
+    "terser": "^5.27.2",
     "tesseract.js": "^5.0.5",
     "util": "^0.12.5",
     "uuid": "^9.0.1",

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Logo } from '../components/Logo';
@@ -9,9 +9,6 @@ export function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
-
-  // Remove the useEffect that was causing the loop
-  // We don't need to call recoverAuth on the login page
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,21 +31,41 @@ export function Login() {
         throw new Error('Ce compte a été désactivé');
       }
 
-      // Then attempt to sign in
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
-        password
-      });
+      // Then attempt to sign in with retry logic
+      let attempts = 0;
+      const maxAttempts = 3;
+      let lastError;
 
-      if (signInError) {
-        if (signInError.message.includes('Invalid login credentials')) {
-          throw new Error('Email ou mot de passe incorrect');
+      while (attempts < maxAttempts) {
+        try {
+          const { error: signInError } = await supabase.auth.signInWithPassword({
+            email: email.trim().toLowerCase(),
+            password
+          });
+
+          if (!signInError) {
+            // Success - navigate to home
+            navigate('/');
+            return;
+          }
+
+          lastError = signInError;
+        } catch (e) {
+          lastError = e;
         }
-        throw signInError;
+
+        attempts++;
+        if (attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
+        }
       }
 
-      // If successful, navigate to home
-      navigate('/');
+      // If we get here, all attempts failed
+      if (lastError?.message?.includes('Invalid login credentials')) {
+        throw new Error('Email ou mot de passe incorrect');
+      }
+      throw lastError;
+
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Une erreur est survenue');
     } finally {
@@ -115,16 +132,6 @@ export function Login() {
               {loading ? 'Connexion...' : 'Allons-y !'}
             </button>
           </form>
-        </div>
-
-        <div className="mt-8 flex flex-col items-center text-white/80">
-          <span className="mb-2">Propulsé par</span>
-          <div className="w-64">
-            <svg viewBox="0 0 1000 200" fill="currentColor">
-              <text x="500" y="100" fontSize="60" fontFamily="Arial" fontWeight="300" textAnchor="middle">En mode</text>
-              <text x="500" y="180" fontSize="100" fontFamily="Arial" fontWeight="900" textAnchor="middle">SOLUTIONS</text>
-            </svg>
-          </div>
         </div>
       </div>
     </div>

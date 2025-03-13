@@ -15,33 +15,31 @@ export default {
     },
   },
   plugins: [],
-  // Purge options
-  purge: {
-    enabled: process.env.NODE_ENV === 'production',
-    content: [
-      './index.html',
-      './src/**/*.{js,ts,jsx,tsx}',
-    ],
-    options: {
-      safelist: [
-        // Classes that might be dynamically generated
-        /^prose-/,
-        /^message-/,
-        /^streaming-/,
-        /^typing-/,
-        /^neumorphic-/,
-        // Animation classes
-        'animate-spin',
-        'animate-pulse',
-        'animate-bounce',
-      ],
-      blocklist: [
-        // Classes we never want
-        'debug',
-        'outline',
-      ],
-      keyframes: true,
-      fontFace: true,
+  safelist: [
+    // Classes that might be dynamically generated
+    {
+      pattern: /^prose-/,
+      variants: ['hover', 'focus'],
     },
-  },
+    {
+      pattern: /^message-/,
+      variants: ['hover', 'focus'],
+    },
+    {
+      pattern: /^streaming-/,
+      variants: ['hover', 'focus'],
+    },
+    {
+      pattern: /^typing-/,
+      variants: ['hover', 'focus'],
+    },
+    {
+      pattern: /^neumorphic-/,
+      variants: ['hover', 'focus', 'active'],
+    },
+    // Animation classes
+    'animate-spin',
+    'animate-pulse',
+    'animate-bounce',
+  ],
 };

@@ -7,39 +7,44 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables');
 }
 
-// Fonction complète pour nettoyer l'état d'authentification
+// Function to clean up auth state
 export const recoverAuth = async (redirectToLogin = true) => {
   try {
     console.log('Recovering authentication state...');
     
-    // Nettoyage du stockage local
+    // Clear all auth-related storage
     const keysToRemove = [
       'sb-kitzhhrhlaevrtbqnbma-auth-token',
       'ringo_auth',
       'supabase.auth.token',
-      'supabase.auth.refreshToken',
       'supabase-auth-token'
     ];
     
     keysToRemove.forEach(key => {
       try {
         localStorage.removeItem(key);
+        sessionStorage.removeItem(key);
       } catch (e) {
-        console.warn(`Failed to remove ${key} from localStorage`, e);
+        console.warn(`Failed to remove ${key} from storage`, e);
       }
     });
     
-    // Déconnexion explicite avec scope global
+    // Sign out with global scope
     try {
       await supabase.auth.signOut({ scope: 'global' });
     } catch (e) {
       console.warn('Sign out failed, continuing with recovery', e);
     }
     
-    // Force le rafraîchissement des instances
-    await supabase.auth.initialize();
+    // Force refresh auth state
+    try {
+      await supabase.auth.refreshSession();
+      await supabase.auth.getSession();
+    } catch (e) {
+      console.warn('Session refresh failed, continuing with recovery', e);
+    }
     
-    // Redirection vers la page de connexion
+    // Redirect if needed
     if (redirectToLogin && window.location.pathname !== '/login') {
       window.location.href = '/login';
     }
@@ -61,7 +66,10 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     flowType: 'pkce',
     storage: window.localStorage,
     storageKey: 'ringo_auth',
-    debug: import.meta.env.DEV
+    debug: import.meta.env.DEV,
+    // Add retry options
+    retryAttempts: 3,
+    retryInterval: 2000
   },
   global: {
     headers: {
@@ -75,7 +83,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 });
 
-// Gestionnaire d'erreurs amélioré pour intercepter toutes les erreurs d'auth
+// Enhanced error handler for auth issues
 const handleAuthError = async (error: any) => {
   if (
     error?.message?.includes('refresh_token_not_found') ||
@@ -92,7 +100,7 @@ const handleAuthError = async (error: any) => {
   return false;
 };
 
-// Wrapper pour les requêtes Supabase
+// Safe query wrapper
 export const safeQuery = async <T>(fn: () => Promise<T>): Promise<T> => {
   try {
     return await fn();
@@ -104,24 +112,24 @@ export const safeQuery = async <T>(fn: () => Promise<T>): Promise<T> => {
   }
 };
 
-// Initialisation et configuration des écouteurs d'événements
+// Initialize auth state
 supabase.auth.onAuthStateChange((event, session) => {
   console.log('Auth state changed:', event);
   
   if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
-    if (window.location.pathname !== '/login') {
-      recoverAuth();
-    }
+    recoverAuth();
+  } else if (event === 'TOKEN_REFRESHED') {
+    console.log('Token refreshed successfully');
   }
 });
 
-// Vérification initiale de session
+// Initial session check
 supabase.auth.getSession().catch(error => {
   console.warn('Session check failed:', error);
   handleAuthError(error);
 });
 
-// Ajout d'un gestionnaire global pour les rejets non gérés
+// Global error handler
 window.addEventListener('unhandledrejection', (event) => {
   if (
     event.reason?.name === 'AuthApiError' || 

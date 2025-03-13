@@ -3,6 +3,10 @@
   publish = "dist"
   environment = { NODE_VERSION = "20" }
 
+[build.environment]
+  VITE_SUPABASE_URL = "https://kitzhhrhlaevrtbqnbma.supabase.co"
+  VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpdHpoaHJobGFldnJ0YnFuYm1hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDExMzY2NDIsImV4cCI6MjA1NjcxMjY0Mn0.KzyIR9sgiOAwaquxeLTvhx3j1Dc1auFzMS7ASih7cak"
+
 [build.processing]
   skip_processing = false
 [build.processing.css]
