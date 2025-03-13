@@ -22,7 +22,7 @@ export const DirectStreamingText: React.FC<DirectStreamingTextProps> = ({
   const streamingIdRef = useRef(messageId);
   
   useEffect(() => {
-    // If message ID changes, reset everything
+    // Reset if message ID changes
     if (messageId !== streamingIdRef.current) {
       setDisplayedContent('');
       setIsComplete(false);
@@ -156,10 +156,11 @@ export const DirectStreamingText: React.FC<DirectStreamingTextProps> = ({
         setDisplayedContent(prev => prev + chunk);
       }
       
+      // Natural delay with variation
       const delay = shouldPause ? 
-        currentChar === '.' || currentChar === '!' || currentChar === '?' ? 300 : 
-        currentChar === ',' || currentChar === ';' ? 150 :
-        currentChar === ' ' ? 50 : speed
+        currentChar === '.' || currentChar === '!' || currentChar === '?' ? 300 + Math.random() * 100 : 
+        currentChar === ',' || currentChar === ';' ? 150 + Math.random() * 50 :
+        currentChar === ' ' ? 50 + Math.random() * 30 : speed
         : speed;
       
       setTimeout(processNextChunk, delay);

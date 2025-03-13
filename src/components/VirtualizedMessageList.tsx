@@ -64,6 +64,7 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
         <MessageItem
           message={message}
           isLatestAssistantMessage={index === lastAssistantMessageIndex}
+          index={index}
         />
       </div>
     );
