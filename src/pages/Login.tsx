@@ -10,24 +10,8 @@ export function Login() {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    // Nettoyage des sessions potentiellement invalides
-    const cleanupSession = async () => {
-      try {
-        // Déconnexion explicite
-        await supabase.auth.signOut();
-        
-        // Suppression des tokens stockés localement
-        localStorage.removeItem('sb-kitzhhrhlaevrtbqnbma-auth-token');
-        localStorage.removeItem('ringo_auth');
-        localStorage.removeItem('supabase.auth.token');
-      } catch (error) {
-        console.error('Session cleanup error:', error);
-      }
-    };
-    
-    cleanupSession();
-  }, []);
+  // Remove the useEffect that was causing the loop
+  // We don't need to call recoverAuth on the login page
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();

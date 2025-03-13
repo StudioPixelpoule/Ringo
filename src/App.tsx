@@ -1,10 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Session } from '@supabase/supabase-js';
 import { Login } from './pages/Login';
 import { Chat } from './pages/Chat';
-import { ReportTemplateManager } from './components/ReportTemplateManager';
 import { supabase, recoverAuth } from './lib/supabase';
+
+// Lazy load the ReportTemplateManager component
+const ReportTemplateManager = lazy(() => 
+  import('./components/ReportTemplateManager')
+    .then(module => ({ default: module.ReportTemplateManager }))
+);
 
 function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -155,7 +160,21 @@ function App() {
         {userRole === 'admin' && (
           <Route
             path="/admin/report-templates"
-            element={session ? <ReportTemplateManager /> : <Navigate to="/login" replace />}
+            element={
+              session ? (
+                <Suspense 
+                  fallback={
+                    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+                      <div className="text-gray-600">Chargement du gestionnaire de modèles...</div>
+                    </div>
+                  }
+                >
+                  <ReportTemplateManager />
+                </Suspense>
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
           />
         )}
       </Routes>

@@ -7,22 +7,49 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables');
 }
 
-// Fonction pour nettoyer l'état d'authentification
-export const recoverAuth = async () => {
+// Fonction complète pour nettoyer l'état d'authentification
+export const recoverAuth = async (redirectToLogin = true) => {
   try {
-    // Déconnexion explicite
-    await supabase.auth.signOut();
+    console.log('Recovering authentication state...');
     
     // Nettoyage du stockage local
-    localStorage.removeItem('sb-kitzhhrhlaevrtbqnbma-auth-token');
-    localStorage.removeItem('ringo_auth');
-    localStorage.removeItem('supabase.auth.token');
+    const keysToRemove = [
+      'sb-kitzhhrhlaevrtbqnbma-auth-token',
+      'ringo_auth',
+      'supabase.auth.token',
+      'supabase.auth.refreshToken',
+      'supabase-auth-token'
+    ];
+    
+    keysToRemove.forEach(key => {
+      try {
+        localStorage.removeItem(key);
+      } catch (e) {
+        console.warn(`Failed to remove ${key} from localStorage`, e);
+      }
+    });
+    
+    // Déconnexion explicite avec scope global
+    try {
+      await supabase.auth.signOut({ scope: 'global' });
+    } catch (e) {
+      console.warn('Sign out failed, continuing with recovery', e);
+    }
+    
+    // Force le rafraîchissement des instances
+    await supabase.auth.initialize();
     
     // Redirection vers la page de connexion
-    window.location.href = '/login';
+    if (redirectToLogin && window.location.pathname !== '/login') {
+      window.location.href = '/login';
+    }
+    
+    console.log('Authentication state recovered');
   } catch (e) {
-    console.error('Recovery error:', e);
-    window.location.href = '/login';
+    console.error('Recovery failed:', e);
+    if (redirectToLogin && window.location.pathname !== '/login') {
+      window.location.href = '/login';
+    }
   }
 };
 
@@ -36,9 +63,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     storageKey: 'ringo_auth',
     debug: import.meta.env.DEV
   },
-  db: {
-    schema: 'public'
-  },
   global: {
     headers: {
       'x-application-name': 'ringo'
@@ -48,130 +72,62 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     params: {
       eventsPerSecond: 10
     }
-  },
-  storage: {
-    retryCount: 3,
-    retryInterval: 1000
   }
 });
 
-// Initialize auth state
-supabase.auth.getSession().catch(error => {
-  console.error('Failed to get initial session:', error);
-  if (error.message?.includes('refresh_token_not_found')) {
-    recoverAuth();
+// Gestionnaire d'erreurs amélioré pour intercepter toutes les erreurs d'auth
+const handleAuthError = async (error: any) => {
+  if (
+    error?.message?.includes('refresh_token_not_found') ||
+    error?.message?.includes('Invalid Refresh Token') ||
+    error?.message?.includes('JWT expired') ||
+    error?.message?.includes('Invalid JWT') ||
+    error?.status === 400 ||
+    error?.code === 'PGRST301'
+  ) {
+    console.warn('Authentication error detected, recovering session...', error);
+    await recoverAuth();
+    return true;
   }
-});
+  return false;
+};
 
-// Set up auth state change listener
+// Wrapper pour les requêtes Supabase
+export const safeQuery = async <T>(fn: () => Promise<T>): Promise<T> => {
+  try {
+    return await fn();
+  } catch (error: any) {
+    if (await handleAuthError(error)) {
+      throw new Error('Authentication error, please login again');
+    }
+    throw error;
+  }
+};
+
+// Initialisation et configuration des écouteurs d'événements
 supabase.auth.onAuthStateChange((event, session) => {
   console.log('Auth state changed:', event);
   
   if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
-    recoverAuth();
-  } else if (event === 'TOKEN_REFRESHED') {
-    console.log('Token refreshed successfully');
-  } else if (event === 'SIGNED_IN') {
-    console.log('User signed in successfully');
-  }
-});
-
-// Handle auth errors
-window.addEventListener('unhandledrejection', (event) => {
-  if (event.reason?.name === 'AuthApiError') {
-    console.error('Auth error:', event.reason);
-    if (
-      event.reason.message?.includes('refresh_token_not_found') ||
-      event.reason.message?.includes('Invalid Refresh Token') ||
-      event.reason.message?.includes('JWT expired') ||
-      event.reason.message?.includes('Invalid JWT')
-    ) {
+    if (window.location.pathname !== '/login') {
       recoverAuth();
     }
   }
 });
 
-// Helper function to check if response is an auth error
-function isAuthError(error: any): boolean {
-  return (
-    error?.message?.includes('JWT expired') ||
-    error?.message?.includes('Invalid JWT') ||
-    error?.message?.includes('refresh_token_not_found') ||
-    error?.code === 'PGRST301' ||
-    error?.code === '401'
-  );
-}
+// Vérification initiale de session
+supabase.auth.getSession().catch(error => {
+  console.warn('Session check failed:', error);
+  handleAuthError(error);
+});
 
-// Helper function to handle auth errors
-async function handleAuthError(error: any): Promise<void> {
-  console.error('Auth error:', error);
-  if (isAuthError(error)) {
-    await recoverAuth();
+// Ajout d'un gestionnaire global pour les rejets non gérés
+window.addEventListener('unhandledrejection', (event) => {
+  if (
+    event.reason?.name === 'AuthApiError' || 
+    event.reason?.code === 'PGRST301' ||
+    (event.reason?.error && event.reason.error.status === 400)
+  ) {
+    handleAuthError(event.reason);
   }
-}
-
-export async function validateSession(): Promise<boolean> {
-  try {
-    const { data: { session }, error } = await supabase.auth.getSession();
-    if (error) throw error;
-    return !!session;
-  } catch (error) {
-    console.error('Session validation failed:', error);
-    if (isAuthError(error)) {
-      await handleAuthError(error);
-    }
-    return false;
-  }
-}
-
-export async function uploadFile(
-  bucket: string,
-  path: string,
-  file: File,
-  onProgress?: (progress: number) => void
-): Promise<string> {
-  try {
-    // Upload file
-    const { data, error } = await supabase.storage
-      .from(bucket)
-      .upload(path, file, {
-        cacheControl: '3600',
-        upsert: false,
-        onUploadProgress: ({ loaded, total }) => {
-          const progress = (loaded / total) * 100;
-          onProgress?.(progress);
-        },
-      });
-
-    if (error) {
-      if (isAuthError(error)) {
-        await handleAuthError(error);
-      }
-      throw error;
-    }
-    
-    if (!data?.path) throw new Error('Upload failed: No path returned');
-
-    // Get public URL
-    const { data: urlData, error: urlError } = await supabase.storage
-      .from(bucket)
-      .getPublicUrl(data.path);
-
-    if (urlError) {
-      if (isAuthError(urlError)) {
-        await handleAuthError(urlError);
-      }
-      throw urlError;
-    }
-    
-    if (!urlData?.publicUrl) throw new Error('Failed to get public URL');
-
-    return urlData.publicUrl;
-  } catch (error) {
-    console.error('Upload error:', error);
-    if (isAuthError(error)) {
-      await handleAuthError(error);
-    }
-    throw new Error(`Failed to upload file: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
-}
+});

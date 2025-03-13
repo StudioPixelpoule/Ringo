@@ -1,6 +1,54 @@
 [build]
   command = "npm run build"
   publish = "dist"
+  environment = { NODE_VERSION = "20" }
+
+[build.processing]
+  skip_processing = false
+[build.processing.css]
+  bundle = true
+  minify = true
+[build.processing.js]
+  bundle = true
+  minify = true
+[build.processing.html]
+  pretty_urls = true
+[build.processing.images]
+  compress = true
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+    Content-Encoding = "br,gzip"
+
+[[headers]]
+  for = "/*.js"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+    Content-Encoding = "br,gzip"
+
+[[headers]]
+  for = "/*.css"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+    Content-Encoding = "br,gzip"
+
+[[headers]]
+  for = "/assets/img/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+    Content-Type = "image/webp"
+
+[[headers]]
+  for = "/assets/fonts/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
 
 [dev]
   command = "npm run dev"
@@ -9,8 +57,3 @@
   publish = "dist"
   framework = "vite"
   autoLaunch = true
-
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200

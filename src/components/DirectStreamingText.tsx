@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useConversationStore } from '../lib/conversationStore';
 import { EnhancedMarkdown } from './EnhancedMarkdown';
-import './DirectStreamingText.css';
 
 interface DirectStreamingTextProps {
   content: string;
