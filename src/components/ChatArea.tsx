@@ -18,6 +18,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({ setFileExplorerOpen }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const prevMessagesCountRef = useRef(0);
   
   const {
     messages,
@@ -33,15 +34,16 @@ export const ChatArea: React.FC<ChatAreaProps> = ({ setFileExplorerOpen }) => {
     const messageElement = document.getElementById(`message-${messageId}`);
     if (messageElement) {
       messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setUserHasScrolled(true);
     }
   };
   
-  // Détecter le défilement
+  // Improved scroll detection with larger threshold
   const handleScroll = () => {
     if (!messagesContainerRef.current) return;
     
     const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
-    const isScrolledToBottom = scrollHeight - scrollTop <= clientHeight + 100;
+    const isScrolledToBottom = scrollHeight - scrollTop - clientHeight < 150;
     
     setShowScrollButton(!isScrolledToBottom);
     if (isScrolledToBottom) {
@@ -51,14 +53,32 @@ export const ChatArea: React.FC<ChatAreaProps> = ({ setFileExplorerOpen }) => {
     }
   };
   
-  // Défilement automatique
+  // Improved automatic scroll behavior
   useEffect(() => {
-    if (userHasScrolled) return;
-    scrollToBottom();
-  }, [messages, isTyping, userHasScrolled]);
+    // Don't scroll if user has scrolled up, except for new user messages
+    const lastMessage = messages[messages.length - 1];
+    const isNewUserMessage = lastMessage && 
+                           lastMessage.sender === 'user' && 
+                           messages.length > prevMessagesCountRef.current;
+    
+    if (!userHasScrolled || isNewUserMessage) {
+      scrollToBottom();
+    }
+    
+    prevMessagesCountRef.current = messages.length;
+  }, [messages, isTyping]);
   
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (!messagesContainerRef.current) return;
+    
+    const { scrollHeight, clientHeight } = messagesContainerRef.current;
+    const maxScroll = scrollHeight - clientHeight;
+    
+    messagesContainerRef.current.scrollTo({
+      top: maxScroll,
+      behavior: 'smooth'
+    });
+    
     setShowScrollButton(false);
   };
 
@@ -73,7 +93,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({ setFileExplorerOpen }) => {
     try {
       await sendMessage(content);
       inputRef.current?.focus();
-      setTimeout(scrollToBottom, 100);
+      scrollToBottom();
     } catch (error) {
       console.error('Error sending message:', error);
     }
