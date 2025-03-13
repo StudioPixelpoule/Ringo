@@ -4,7 +4,7 @@ import { Session } from '@supabase/supabase-js';
 import { Login } from './pages/Login';
 import { Chat } from './pages/Chat';
 import { ReportTemplateManager } from './components/ReportTemplateManager';
-import { supabase } from './lib/supabase';
+import { supabase, recoverAuth } from './lib/supabase';
 
 function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -12,6 +12,32 @@ function App() {
   const [userRole, setUserRole] = useState<string>('user');
 
   useEffect(() => {
+    // Fonction de gestion améliorée des erreurs d'auth
+    const handleAuthError = async (error: any) => {
+      if (
+        error?.message?.includes('refresh_token_not_found') || 
+        error?.message?.includes('Invalid Refresh Token') ||
+        error?.message?.includes('JWT expired') ||
+        error?.message?.includes('Invalid JWT') ||
+        error?.code === 'refresh_token_not_found' ||
+        error?.status === 400
+      ) {
+        console.warn('Session expired, redirecting to login');
+        setSession(null);
+        setUserRole('user');
+        await recoverAuth();
+      }
+    };
+
+    // Écoute plus large des erreurs d'authentification
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      if (event.reason?.name === 'AuthApiError' || event.reason?.__isAuthError === true) {
+        handleAuthError(event.reason);
+      }
+    };
+
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -33,7 +59,7 @@ function App() {
       } else if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
         setSession(null);
         setUserRole('user');
-        window.location.href = '/login';
+        await recoverAuth();
       } else {
         setSession(session);
         if (session) {
@@ -43,27 +69,10 @@ function App() {
       setLoading(false);
     });
 
-    // Handle auth errors
-    const handleAuthError = (error: any) => {
-      if (error?.message?.includes('refresh_token_not_found') || 
-          error?.message?.includes('Invalid Refresh Token')) {
-        console.warn('Session expired, redirecting to login');
-        setSession(null);
-        window.location.href = '/login';
-      }
-    };
-
-    // Add error listener
-    window.addEventListener('unhandledrejection', (event) => {
-      if (event.reason?.name === 'AuthApiError') {
-        handleAuthError(event.reason);
-      }
-    });
-
     // Cleanup subscriptions
     return () => {
       subscription.unsubscribe();
-      window.removeEventListener('unhandledrejection', handleAuthError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
     };
   }, []);
 
@@ -74,7 +83,7 @@ function App() {
       if (sessionError) throw sessionError;
       if (!session) {
         console.warn('No active session');
-        window.location.href = '/login';
+        await recoverAuth();
         return;
       }
 
@@ -90,7 +99,7 @@ function App() {
         // Check if it's an auth error
         if (error.code === 'PGRST301' || error.code === '401') {
           setSession(null);
-          window.location.href = '/login';
+          await recoverAuth();
           return;
         }
         throw error;
@@ -108,13 +117,17 @@ function App() {
       }
 
       setUserRole(data.role);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error in fetchUserRole:', error);
       // Check if it's an auth error
-      if (error?.message?.includes('JWT expired') || 
-          error?.message?.includes('Invalid JWT')) {
+      if (
+        error?.message?.includes('JWT expired') || 
+        error?.message?.includes('Invalid JWT') ||
+        error?.message?.includes('refresh_token_not_found') ||
+        error?.message?.includes('Invalid Refresh Token')
+      ) {
         setSession(null);
-        window.location.href = '/login';
+        await recoverAuth();
         return;
       }
     }

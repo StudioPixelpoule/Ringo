@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Logo } from '../components/Logo';
@@ -9,6 +9,25 @@ export function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // Nettoyage des sessions potentiellement invalides
+    const cleanupSession = async () => {
+      try {
+        // Déconnexion explicite
+        await supabase.auth.signOut();
+        
+        // Suppression des tokens stockés localement
+        localStorage.removeItem('sb-kitzhhrhlaevrtbqnbma-auth-token');
+        localStorage.removeItem('ringo_auth');
+        localStorage.removeItem('supabase.auth.token');
+      } catch (error) {
+        console.error('Session cleanup error:', error);
+      }
+    };
+    
+    cleanupSession();
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
