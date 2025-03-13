@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useConversationStore } from '../lib/conversationStore';
 import { EnhancedMarkdown } from './EnhancedMarkdown';
+import './DirectStreamingText.css';
 
 interface DirectStreamingTextProps {
   content: string;
@@ -22,7 +23,7 @@ export const DirectStreamingText: React.FC<DirectStreamingTextProps> = ({
   const streamingIdRef = useRef(messageId);
   
   useEffect(() => {
-    // Reset if message ID changes
+    // If message ID changes, reset everything
     if (messageId !== streamingIdRef.current) {
       setDisplayedContent('');
       setIsComplete(false);
@@ -156,11 +157,10 @@ export const DirectStreamingText: React.FC<DirectStreamingTextProps> = ({
         setDisplayedContent(prev => prev + chunk);
       }
       
-      // Natural delay with variation
       const delay = shouldPause ? 
-        currentChar === '.' || currentChar === '!' || currentChar === '?' ? 300 + Math.random() * 100 : 
-        currentChar === ',' || currentChar === ';' ? 150 + Math.random() * 50 :
-        currentChar === ' ' ? 50 + Math.random() * 30 : speed
+        currentChar === '.' || currentChar === '!' || currentChar === '?' ? 300 : 
+        currentChar === ',' || currentChar === ';' ? 150 :
+        currentChar === ' ' ? 50 : speed
         : speed;
       
       setTimeout(processNextChunk, delay);

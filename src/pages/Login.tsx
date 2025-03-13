@@ -31,41 +31,21 @@ export function Login() {
         throw new Error('Ce compte a été désactivé');
       }
 
-      // Then attempt to sign in with retry logic
-      let attempts = 0;
-      const maxAttempts = 3;
-      let lastError;
+      // Then attempt to sign in
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password
+      });
 
-      while (attempts < maxAttempts) {
-        try {
-          const { error: signInError } = await supabase.auth.signInWithPassword({
-            email: email.trim().toLowerCase(),
-            password
-          });
-
-          if (!signInError) {
-            // Success - navigate to home
-            navigate('/');
-            return;
-          }
-
-          lastError = signInError;
-        } catch (e) {
-          lastError = e;
+      if (signInError) {
+        if (signInError.message.includes('Invalid login credentials')) {
+          throw new Error('Email ou mot de passe incorrect');
         }
-
-        attempts++;
-        if (attempts < maxAttempts) {
-          await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
-        }
+        throw signInError;
       }
 
-      // If we get here, all attempts failed
-      if (lastError?.message?.includes('Invalid login credentials')) {
-        throw new Error('Email ou mot de passe incorrect');
-      }
-      throw lastError;
-
+      // If successful, navigate to home
+      navigate('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Une erreur est survenue');
     } finally {
@@ -132,6 +112,16 @@ export function Login() {
               {loading ? 'Connexion...' : 'Allons-y !'}
             </button>
           </form>
+        </div>
+
+        <div className="mt-8 flex flex-col items-center text-white/80">
+          <span className="mb-2">Propulsé par</span>
+          <div className="w-64">
+            <svg viewBox="0 0 1000 200" fill="currentColor">
+              <text x="500" y="100" fontSize="60" fontFamily="Arial" fontWeight="300" textAnchor="middle">En mode</text>
+              <text x="500" y="180" fontSize="100" fontFamily="Arial" fontWeight="900" textAnchor="middle">SOLUTIONS</text>
+            </svg>
+          </div>
         </div>
       </div>
     </div>

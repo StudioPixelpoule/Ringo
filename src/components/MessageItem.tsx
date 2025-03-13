@@ -1,42 +1,43 @@
 import React from 'react';
-import { User, Bot } from 'lucide-react';
 import { Message } from '../lib/conversationStore';
 import { DirectStreamingText } from './DirectStreamingText';
 import { useConversationStore } from '../lib/conversationStore';
 import { EnhancedMarkdown } from './EnhancedMarkdown';
-import { useMessageAnimation } from '../lib/hooks/useMessageAnimation';
+import './MessageItem.css';
 
 interface MessageItemProps {
   message: Message;
   isLatestAssistantMessage: boolean;
-  index: number;
 }
 
-export const MessageItem = React.memo<MessageItemProps>(
-  ({ message, isLatestAssistantMessage, index }) => {
-    const isAssistant = message.sender === 'assistant';
-    const streamedMessages = useConversationStore(state => state.streamedMessages);
-    const shouldStream = isAssistant && isLatestAssistantMessage && !streamedMessages.has(message.id);
-    const { getAnimationStyle } = useMessageAnimation();
-    
-    const formattedTime = new Date(message.created_at).toLocaleTimeString([], { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
-    
+export const MessageItem: React.FC<MessageItemProps> = ({ 
+  message, 
+  isLatestAssistantMessage 
+}) => {
+  const isAssistant = message.sender === 'assistant';
+  const streamedMessages = useConversationStore(state => state.streamedMessages);
+  
+  // A message should stream only if it is:
+  // 1. An assistant message
+  // 2. The latest assistant message
+  // 3. Not already streamed (not in streamedMessages)
+  const shouldStream = isAssistant && isLatestAssistantMessage && !streamedMessages.has(message.id);
+  
+  const formattedTime = new Date(message.created_at).toLocaleTimeString([], { 
+    hour: '2-digit', 
+    minute: '2-digit' 
+  });
+  
+  if (isAssistant) {
     return (
-      <div 
-        className={`message-item ${isAssistant ? 'assistant-message' : 'user-message'}`}
-        style={getAnimationStyle(index)}
-      >
+      <div className="message-item">
         <div className="message-metadata">
           <span className="message-time">{formattedTime}</span>
-          <span>{isAssistant ? 'Assistant' : 'Vous'}</span>
+          <span>Assistant</span>
         </div>
-        
-        <div className={`message-content ${isAssistant ? 'assistant-message-content' : 'user-message-content'}`}>
-          {isAssistant ? (
-            shouldStream ? (
+        <div className="assistant-message">
+          <div className="assistant-message-content">
+            {shouldStream ? (
               <DirectStreamingText 
                 content={message.content} 
                 messageId={message.id}
@@ -44,14 +45,24 @@ export const MessageItem = React.memo<MessageItemProps>(
               />
             ) : (
               <EnhancedMarkdown content={message.content} />
-            )
-          ) : (
-            message.content
-          )}
+            )}
+          </div>
         </div>
       </div>
     );
   }
-);
-
-MessageItem.displayName = 'MessageItem';
+  
+  return (
+    <div className="message-item">
+      <div className="message-metadata">
+        <span className="message-time">{formattedTime}</span>
+        <span>Vous</span>
+      </div>
+      <div className="user-message">
+        <div className="user-message-content">
+          {message.content}
+        </div>
+      </div>
+    </div>
+  );
+};

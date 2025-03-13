@@ -56,7 +56,17 @@ export function Chat({ session }: ChatProps) {
   useEffect(() => {
     const fetchUserRole = async () => {
       try {
-        const { data: profile, error } = await supabase
+        // First validate session
+        const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw sessionError;
+        if (!currentSession) {
+          console.warn('No active session');
+          window.location.href = '/login';
+          return;
+        }
+
+        // Then fetch profile
+        const { data, error } = await supabase
           .from('profiles')
           .select('role, status')
           .eq('id', session.user.id)
@@ -64,17 +74,32 @@ export function Chat({ session }: ChatProps) {
 
         if (error) {
           console.error('Error fetching user profile:', error);
+          if (error.code === 'PGRST301' || error.code === '401') {
+            window.location.href = '/login';
+            return;
+          }
+          throw error;
+        }
+
+        if (!data) {
+          console.warn('No profile found for user');
           return;
         }
 
-        if (profile?.status) {
-          setUserRole(profile.role);
-        } else {
+        if (!data.status) {
           console.warn('User profile is inactive');
-          await handleLogout();
+          await supabase.auth.signOut();
+          return;
         }
+
+        setUserRole(data.role);
       } catch (error) {
         console.error('Error in fetchUserRole:', error);
+        if (error?.message?.includes('JWT expired') || 
+            error?.message?.includes('Invalid JWT')) {
+          window.location.href = '/login';
+          return;
+        }
       }
     };
 

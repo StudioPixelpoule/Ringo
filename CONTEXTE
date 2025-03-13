@@ -7,24 +7,19 @@ RINGO est une application web moderne qui permet aux utilisateurs d'analyser des
 
 ### Technologies Principales
 - Frontend : React 18.3.1 avec TypeScript 5.5.3
-- Build : Vite 5.4.2 avec optimisations avancées
-- Styles : Tailwind CSS 3.4.1 avec PostCSS
-- Base de données : Supabase PostgreSQL
-- Authentication : Supabase Auth avec sécurité renforcée
-- Stockage : Supabase Storage avec cache intelligent
-- IA : OpenAI GPT-4 Turbo avec streaming
-- Performance : React Window pour virtualisation
+- Build : Vite 5.4.2
+- Styles : Tailwind CSS 3.4.1
+- Base de données : Supabase
+- Authentication : Supabase Auth
+- Stockage : Supabase Storage
+- IA : OpenAI GPT-4 Turbo
 
 ### Structure du Projet
 ```
 src/
 ├── components/    # Composants React réutilisables
 ├── lib/          # Logique métier et utilitaires
-│   ├── pdf/      # Traitement PDF modulaire
-│   ├── store/    # Gestion d'état Zustand
-│   └── utils/    # Utilitaires communs
 ├── pages/        # Pages principales
-├── styles/       # Styles globaux
 └── main.tsx      # Point d'entrée
 ```
 
@@ -33,157 +28,143 @@ src/
 ### Tables Principales
 1. `profiles`
    - Gestion des utilisateurs et rôles
-   - Statut actif/inactif
-   - Horodatage des actions
+   - Champs : id, email, role, status, created_at, updated_at
 
 2. `folders`
    - Organisation hiérarchique des documents
-   - Support des sous-dossiers
-   - Métadonnées de gestion
+   - Champs : id, name, parent_id, created_at, updated_at
 
 3. `documents`
-   - Métadonnées des documents
-   - Statut de traitement
-   - Cache intelligent
-   - Support multi-formats
+   - Stockage des métadonnées des documents
+   - Champs : id, folder_id, name, type, group_name, description, url, processed, size, created_at, updated_at
 
 4. `document_contents`
-   - Contenu extrait des documents
-   - Indexation pour recherche
-   - Optimisation des requêtes
+   - Stockage du contenu extrait des documents
+   - Champs : id, document_id, content, created_at, updated_at
 
 5. `conversations`
    - Historique des conversations
-   - Liaison avec documents
-   - Statistiques en temps réel
+   - Champs : id, user_id, title, created_at
 
 6. `messages`
    - Messages des conversations
-   - Support du streaming
-   - Formatage Markdown
+   - Champs : id, conversation_id, sender, content, created_at
 
 7. `conversation_documents`
-   - Relations conversations-documents
-   - Traçabilité des analyses
-   - Optimisation des jointures
+   - Liaison entre conversations et documents
+   - Champs : id, conversation_id, document_id, created_at
 
 ### Sécurité
-- Row Level Security (RLS) sur toutes les tables
-- Politiques d'accès granulaires
-- Validation des données
-- Audit des actions
-- Protection contre les attaques
-- Gestion des sessions
-- Nettoyage automatique
+- Row Level Security (RLS) activé sur toutes les tables
+- Politiques d'accès basées sur l'authentification
+- Séparation des rôles (admin/user)
 
 ## Fonctionnalités Principales
 
 ### 1. Gestion des Documents
-- Upload multi-formats
-- Organisation hiérarchique
-- Traitement intelligent
-- Cache des résultats
-- Prévisualisation
-- Recherche avancée
-- Sélection multiple
+- Upload de documents (PDF, Word)
+- Organisation en dossiers hiérarchiques
+- Traitement automatique du contenu
+- Explorateur de fichiers intuitif
+- Support multi-formats (Word, PDF, JSON, CSV)
+- Prévisualisation des documents
+- Sélection multiple pour analyse
 
 ### 2. Traitement des Documents
-- PDF avec OCR intégré
-- Word avec structure
-- Audio avec transcription
-- Extraction intelligente
-- Cache des résultats
+- PDF : Extraction de texte avec OCR au besoin
+- Word : Conversion en texte structuré
+- JSON/CSV : Parsing et structuration des données
+- Métadonnées : Extraction et stockage
 - Traitement asynchrone
+- Barre de progression
 - Gestion des erreurs
 
 ### 3. Interface de Chat
 - Conversations contextuelles
-- Streaming en temps réel
+- Analyse des documents sélectionnés
+- Réponses IA basées sur le contenu
 - Support multi-documents
-- Historique persistant
-- Formatage Markdown
-- Virtualisation des messages
-- Performance optimisée
+- Historique des conversations
+- Formatage Markdown des réponses
+- Streaming des réponses en temps réel
 
 ### 4. Gestion des Utilisateurs
-- Authentification sécurisée
-- Rôles et permissions
-- Sessions multiples
-- Audit des actions
+- Authentification email/mot de passe
+- Rôles administrateur et utilisateur
+- Gestion des permissions
+- Statut actif/inactif
 - Interface d'administration
-- Statut des comptes
-- Notifications de sécurité
+- Création de comptes
+- Modification des rôles
 
 ## Interface Utilisateur
 
 ### Design
 - Style neumorphique moderne
-- Thème personnalisé
+- Thème personnalisé (orange #f15922, or #dba747)
 - Interface responsive
 - Animations fluides
-- Virtualisation
+- Icônes cohérentes
 - Feedback visuel
 - États de chargement
 
 ### Composants Principaux
-- Header avec navigation
+- Header avec navigation et recherche
 - Liste des conversations
-- Chat avec virtualisation
+- Zone de chat interactive
 - Explorateur de fichiers
 - Gestion des documents
-- Modales interactives
-- Indicateurs d'état
+- Modales de gestion
+- Indicateurs de statut
 
 ### Explorateur de Fichiers
-- Vue arborescente
-- Filtres dynamiques
-- Recherche instantanée
+- Vue arborescente des dossiers
+- Affichage des documents par type
+- Icônes spécifiques par format
 - Sélection multiple
-- Prévisualisation
-- Statistiques
-- Animations fluides
+- Barre de recherche
+- Compteurs de documents
+- Animation des transitions
 
 ## Processus de Traitement
 
 ### Documents Texte
-1. Upload sécurisé
-2. Vérification du cache
-3. Extraction intelligente
-4. Structuration des données
-5. Mise en cache
-6. Indexation pour recherche
-7. Notification de complétion
+1. Upload du fichier
+2. Extraction du contenu selon le type
+3. Structuration des données
+4. Stockage dans Supabase
+5. Indexation pour la recherche
 
 ## Intégration IA
 
 ### OpenAI GPT-4 Turbo
-- Analyse contextuelle
-- Streaming des réponses
-- Gestion du contexte
+- Analyse contextuelle des documents
+- Réponses aux questions utilisateur
+- Formatage structuré des réponses
+- Gestion du contexte conversationnel
 - Optimisation des tokens
-- Cache des résultats
-- Formatage intelligent
-- Réponses structurées
+- Gestion des limites de contexte
+- Streaming des réponses en temps réel
 
 ## Sécurité et Performance
 
 ### Sécurité
 - Authentification robuste
-- Sessions sécurisées
-- Validation des données
+- Contrôle d'accès granulaire
+- Validation des entrées
+- Sanitization des données
 - Protection des routes
-- Audit des actions
-- Nettoyage automatique
-- Notifications
+- Gestion des sessions
+- Logs de sécurité
 
 ### Performance
-- Virtualisation des listes
-- Cache intelligent
-- Chunking optimisé
-- Compression des assets
+- Traitement asynchrone
+- Chunking des gros fichiers
+- Mise en cache des résultats
+- Optimisation des requêtes
 - Lazy loading
-- Code splitting
-- Monitoring
+- Compression des assets
+- Monitoring des performances
 
 ## Environnement Technique
 
@@ -194,34 +175,34 @@ VITE_SUPABASE_ANON_KEY=clé_anonyme
 VITE_OPENAI_API_KEY=clé_api_openai
 ```
 
-### Dépendances Principales
+### Dépendances Clés
 - @supabase/supabase-js : Client Supabase
 - openai : API OpenAI
 - pdfjs-dist : Traitement PDF
 - mammoth : Traitement Word
 - tesseract.js : OCR
-- react-window : Virtualisation
 - framer-motion : Animations
 - lucide-react : Icônes
 - react-markdown : Rendu Markdown
+- react-syntax-highlighter : Coloration syntaxique
 - zustand : Gestion d'état
 
 ## Maintenance et Évolution
 
-### Monitoring
-- Logs structurés
+### Logs et Monitoring
+- Logs détaillés des opérations
 - Suivi des erreurs
 - Métriques de performance
 - État des traitements
 - Alertes système
 - Audit des accès
-- Statistiques d'usage
+- Statistiques d'utilisation
 
 ### Points d'Extension
-- Nouveaux formats
-- Intégrations
-- Collaboration
+- Nouveaux types de documents
+- Intégrations additionnelles
+- Fonctionnalités collaboratives
 - Analyses avancées
 - Export des données
 - API publique
-- Plugins
+- Plugins tiers
