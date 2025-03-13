@@ -1,76 +1,6 @@
 [build]
   command = "npm run build"
   publish = "dist"
-  environment = { NODE_VERSION = "20" }
-
-[build.environment]
-  VITE_SUPABASE_URL = "https://kitzhhrhlaevrtbqnbma.supabase.co"
-  VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpdHpoaHJobGFldnJ0YnFuYm1hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDExMzY2NDIsImV4cCI6MjA1NjcxMjY0Mn0.KzyIR9sgiOAwaquxeLTvhx3j1Dc1auFzMS7ASih7cak"
-
-[build.processing]
-  skip_processing = false
-[build.processing.css]
-  bundle = true
-  minify = true
-[build.processing.js]
-  bundle = true
-  minify = true
-[build.processing.html]
-  pretty_urls = true
-[build.processing.images]
-  compress = true
-
-[[headers]]
-  for = "/assets/*"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
-    Content-Encoding = "br,gzip"
-    X-Content-Type-Options = "nosniff"
-    X-Frame-Options = "DENY"
-    X-XSS-Protection = "1; mode=block"
-
-[[headers]]
-  for = "/*.js"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
-    Content-Encoding = "br,gzip"
-    Content-Type = "application/javascript; charset=utf-8"
-    X-Content-Type-Options = "nosniff"
-
-[[headers]]
-  for = "/*.css"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
-    Content-Encoding = "br,gzip"
-    Content-Type = "text/css; charset=utf-8"
-    X-Content-Type-Options = "nosniff"
-
-[[headers]]
-  for = "/assets/img/*"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
-    Content-Type = "image/webp"
-
-[[headers]]
-  for = "/assets/fonts/*"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
-    Access-Control-Allow-Origin = "*"
-
-[[headers]]
-  for = "/*"
-  [headers.values]
-    Content-Security-Policy = "default-src 'self' https://*.supabase.co https://*.openai.com; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://*.supabase.co https://*.openai.com wss://*.supabase.co;"
-    X-Content-Type-Options = "nosniff"
-    X-Frame-Options = "DENY"
-    X-XSS-Protection = "1; mode=block"
-    Referrer-Policy = "strict-origin-when-cross-origin"
-    Permissions-Policy = "camera=(), microphone=(), geolocation=(), interest-cohort=()"
-
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
 
 [dev]
   command = "npm run dev"
@@ -80,5 +10,7 @@
   framework = "vite"
   autoLaunch = true
 
-[functions]
-  node_bundler = "esbuild"
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

@@ -3,7 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Session } from '@supabase/supabase-js';
 import { Login } from './pages/Login';
 import { Chat } from './pages/Chat';
-import { supabase, recoverAuth } from './lib/supabase';
+import { supabase } from './lib/supabase';
+import { recoverAuth } from './lib/auth';
 
 // Lazy load the ReportTemplateManager component
 const ReportTemplateManager = lazy(() => 
