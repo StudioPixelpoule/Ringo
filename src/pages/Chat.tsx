@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, ArrowRight, LogOut, Database, FileText } from 'lucide-react';
+import { Users, ArrowRight, LogOut, Database, FileText, Globe } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 import { Logo } from '../components/Logo';
 import { SmallLogo } from '../components/SmallLogo';
@@ -17,6 +17,7 @@ import { ReportTemplateManager } from '../components/ReportTemplateManager';
 import { ReportGeneratorWidget } from '../components/ReportGeneratorWidget';
 import { FeedbackButton } from '../components/FeedbackButton';
 import { FeedbackManager } from '../components/FeedbackManager';
+import { WebContentImporter } from '../components/WebContentImporter';
 import { supabase } from '../lib/supabase';
 import { useUserStore } from '../lib/store';
 import { useDocumentStore } from '../lib/documentStore';
@@ -33,6 +34,7 @@ export function Chat({ session }: ChatProps) {
   const [isFileExplorerOpen, setFileExplorerOpen] = useState(false);
   const [isFileManagementOpen, setFileManagementOpen] = useState(false);
   const [isTemplateManagerOpen, setTemplateManagerOpen] = useState(false);
+  const [isWebsiteImportOpen, setWebsiteImportOpen] = useState(false);
   const [userHasScrolled, setUserHasScrolled] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -169,6 +171,7 @@ export function Chat({ session }: ChatProps) {
       setFileExplorerOpen(false);
       setFileManagementOpen(false);
       setTemplateManagerOpen(false);
+      setWebsiteImportOpen(false);
 
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
@@ -186,6 +189,10 @@ export function Chat({ session }: ChatProps) {
     }
   };
 
+  const handleWebsiteImport = () => {
+    setWebsiteImportOpen(true);
+  };
+
   const isAdminOrSuperAdmin = userRole === 'admin' || userRole === 'super_admin';
   const isSuperAdmin = userRole === 'super_admin';
 
@@ -197,14 +204,13 @@ export function Chat({ session }: ChatProps) {
             <Logo />
             <div className="flex items-center">
               <strong className="text-2xl">RINGO</strong>
-              <sup className="ml-1 flex items-center gap-0.5 text-sm text-white">
+              <sup className="ml-1 flex items-center gap-0.5 text-sm text-white/80">
                 <span>par</span>
                 <SmallLogo />
               </sup>
             </div>
           </h1>
           <div className="flex items-center gap-4">
-            <IrsstLogo />
             <button 
               onClick={handleLogout}
               className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
@@ -240,6 +246,13 @@ export function Chat({ session }: ChatProps) {
                 aria-label="Document import"
               >
                 <DocumentIcon />
+              </button>
+              <button 
+                onClick={handleWebsiteImport}
+                className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
+                aria-label="Website import"
+              >
+                <Globe size={18} strokeWidth={2.5} />
               </button>
               <button 
                 onClick={() => setFileManagementOpen(true)}
@@ -374,6 +387,10 @@ export function Chat({ session }: ChatProps) {
       <ReportTemplateManager
         isOpen={isTemplateManagerOpen}
         onClose={() => setTemplateManagerOpen(false)}
+      />
+      <WebContentImporter
+        isOpen={isWebsiteImportOpen}
+        onClose={() => setWebsiteImportOpen(false)}
       />
     </div>
   );
