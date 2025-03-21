@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from './supabase';
-import { processDocument } from './documentProcessor';
+import { processDocument } from './universalProcessor';
 
 export interface Folder {
   id: string;
@@ -99,6 +99,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   },
 
   uploadDocument: async (file, folderId, metadata) => {
+    const abortController = new AbortController();
+    
     set({
       loading: true,
       error: null,
@@ -112,44 +114,37 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     });
 
     let uploadedPath: string | null = null;
-    let documentId: string | null = null;
 
     try {
-      // Process document content first
-      const content = await processDocument(file, {
+      console.log("📄 Traitement du document:", file.name);
+
+      const result = await processDocument(file, {
+        openaiApiKey: import.meta.env.VITE_OPENAI_API_KEY,
         onProgress: (progress) => {
-          set({
-            processingStatus: {
-              isProcessing: true,
-              progress: progress.progress * 0.7, // 70% of total progress
-              stage: 'processing',
-              message: progress.message,
-              canCancel: true
-            }
-          });
-        }
+          set({ processingStatus: progress });
+        },
+        signal: abortController.signal
       });
 
-      if (!content) {
+      if (!result) {
         throw new Error('Échec du traitement du document');
       }
 
-      // Upload file to storage
-      set({
-        processingStatus: {
-          isProcessing: true,
-          progress: 70,
-          stage: 'upload',
-          message: 'Téléversement du fichier...',
-          canCancel: true
-        }
-      });
+      console.log("✅ Document traité");
+      set({ processingStatus: {
+        isProcessing: true,
+        progress: 75,
+        stage: 'upload',
+        message: 'Enregistrement...',
+        canCancel: true
+      }});
 
+      // Upload du fichier
       const fileExt = file.name.split('.').pop()?.toLowerCase() || '';
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
       const filePath = `documents/${fileName}`;
 
-      const { error: uploadError, data: uploadData } = await supabase.storage
+      const { error: uploadError, data } = await supabase.storage
         .from('documents')
         .upload(filePath, file, {
           cacheControl: '3600',
@@ -158,77 +153,44 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         });
 
       if (uploadError) throw uploadError;
-      if (!uploadData?.path) throw new Error('Échec upload: Pas de chemin retourné');
+      if (!data?.path) throw new Error('Échec upload: Pas de chemin retourné');
 
-      uploadedPath = uploadData.path;
+      uploadedPath = data.path;
+      console.log("✅ Fichier uploadé:", uploadedPath);
 
-      // Create document record
-      set({
-        processingStatus: {
-          isProcessing: true,
-          progress: 80,
-          stage: 'processing',
-          message: 'Création de l\'enregistrement...',
-          canCancel: true
-        }
-      });
-
+      // Création de l'enregistrement
       const { data: doc, error: dbError } = await supabase
         .from('documents')
         .insert([{
           folder_id: folderId,
           name: file.name,
-          type: fileExt,
-          url: uploadData.path,
+          type: file.type.startsWith('audio/') ? 'audio' : fileExt,
+          url: data.path,
           size: file.size,
-          ...metadata
+          ...metadata,
         }])
         .select()
         .single();
 
       if (dbError) throw dbError;
-      if (!doc) throw new Error('Aucune donnée retournée lors de la création');
-
-      documentId = doc.id;
 
       // Store document content
-      set({
-        processingStatus: {
-          isProcessing: true,
-          progress: 90,
-          stage: 'processing',
-          message: 'Enregistrement du contenu...',
-          canCancel: true
-        }
-      });
-
       const { error: contentError } = await supabase
         .from('document_contents')
         .insert([{
           document_id: doc.id,
-          content: content
+          content: JSON.stringify(result)
         }]);
 
       if (contentError) throw contentError;
 
-      // Update local state
+      console.log("✅ Document enregistré:", doc);
+
       const documents = get().documents;
-      const processedDoc = { ...doc, processed: true };
-      set({ documents: [...documents, processedDoc] });
+      set({ documents: [...documents, doc] });
 
-      set({
-        processingStatus: {
-          isProcessing: false,
-          progress: 100,
-          stage: 'complete',
-          message: 'Document traité avec succès !',
-          canCancel: false
-        }
-      });
-
-      return processedDoc;
+      return doc;
     } catch (error) {
-      // Clean up on error
       if (uploadedPath) {
         await supabase.storage
           .from('documents')
@@ -236,17 +198,12 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
           .catch(console.error);
       }
 
-      if (documentId) {
-        await supabase
-          .from('documents')
-          .delete()
-          .eq('id', documentId)
-          .catch(console.error);
-      }
-
-      console.error('🚨 Error in uploadDocument:', error);
-      set({ 
-        error: error instanceof Error ? error.message : 'Erreur lors du téléversement',
+      console.error("🚨 Erreur upload document:", error);
+      set({ error: error instanceof Error ? error.message : 'Erreur upload document' });
+      throw error;
+    } finally {
+      set({
+        loading: false,
         processingStatus: {
           isProcessing: false,
           progress: 0,
@@ -255,9 +212,6 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
           canCancel: false
         }
       });
-      throw error;
-    } finally {
-      set({ loading: false });
     }
   },
 

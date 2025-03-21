@@ -13,7 +13,8 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     detectSessionInUrl: true,
     flowType: 'pkce',
-    storage: window.localStorage
+    storage: window.localStorage,
+    storageKey: 'sb-auth-token'
   },
   global: {
     headers: {
@@ -63,13 +64,11 @@ window.addEventListener('focus', () => {
 
 // Add unhandled rejection listener for auth errors
 window.addEventListener('unhandledrejection', (event) => {
-  if (event.reason?.name === 'AuthApiError') {
+  if (event.reason?.name === 'AuthApiError' || 
+      event.reason?.message?.includes('JWT expired') ||
+      event.reason?.message?.includes('Invalid JWT')) {
     console.error('Auth API Error:', event.reason);
-    if (event.reason?.message?.includes('refresh_token_not_found') || 
-        event.reason?.message?.includes('JWT expired') || 
-        event.reason?.message?.includes('Invalid Refresh Token')) {
-      localStorage.clear();
-      window.location.href = '/login';
-    }
+    localStorage.clear();
+    window.location.href = '/login';
   }
 });

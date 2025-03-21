@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, ArrowRight, LogOut, Database, FileText, Globe } from 'lucide-react';
+import { Users, ArrowRight, LogOut, Database, FileText, Globe, AlertTriangle } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 import { Logo } from '../components/Logo';
 import { SmallLogo } from '../components/SmallLogo';
@@ -18,10 +18,12 @@ import { ReportGeneratorWidget } from '../components/ReportGeneratorWidget';
 import { FeedbackButton } from '../components/FeedbackButton';
 import { FeedbackManager } from '../components/FeedbackManager';
 import { WebContentImporter } from '../components/WebContentImporter';
+import { ErrorLogViewer } from '../components/ErrorLogViewer';
 import { supabase } from '../lib/supabase';
 import { useUserStore } from '../lib/store';
 import { useDocumentStore } from '../lib/documentStore';
 import { useConversationStore } from '../lib/conversationStore';
+import { logError } from '../lib/errorLogger';
 import './Chat.css';
 
 interface ChatProps {
@@ -36,6 +38,7 @@ export function Chat({ session }: ChatProps) {
   const [isTemplateManagerOpen, setTemplateManagerOpen] = useState(false);
   const [isWebsiteImportOpen, setWebsiteImportOpen] = useState(false);
   const [userHasScrolled, setUserHasScrolled] = useState(false);
+  const [isErrorLogOpen, setErrorLogOpen] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -58,6 +61,34 @@ export function Chat({ session }: ChatProps) {
     .map((m, i) => ({ ...m, index: i }))
     .filter(m => m.sender === 'assistant')
     .pop()?.index;
+
+  useEffect(() => {
+    const errorHandler = (event: ErrorEvent) => {
+      logError(event.error, {
+        location: window.location.href,
+        timestamp: new Date().toISOString()
+      });
+    };
+
+    const rejectionHandler = (event: PromiseRejectionEvent) => {
+      logError(
+        event.reason instanceof Error ? event.reason : new Error(String(event.reason)),
+        {
+          type: 'unhandled_rejection',
+          location: window.location.href,
+          timestamp: new Date().toISOString()
+        }
+      );
+    };
+
+    window.addEventListener('error', errorHandler);
+    window.addEventListener('unhandledrejection', rejectionHandler);
+
+    return () => {
+      window.removeEventListener('error', errorHandler);
+      window.removeEventListener('unhandledrejection', rejectionHandler);
+    };
+  }, []);
 
   useEffect(() => {
     const fetchUserRole = async () => {
@@ -235,13 +266,22 @@ export function Chat({ session }: ChatProps) {
           {isAdminOrSuperAdmin && (
             <>
               {isSuperAdmin && (
-                <button 
-                  onClick={() => setUserModalOpen(true)}
-                  className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
-                  aria-label="User management"
-                >
-                  <Users size={18} strokeWidth={2.5} />
-                </button>
+                <>
+                  <button 
+                    onClick={() => setErrorLogOpen(true)}
+                    className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white"
+                    title="Voir les erreurs système"
+                  >
+                    <AlertTriangle size={18} strokeWidth={2.5} />
+                  </button>
+                  <button 
+                    onClick={() => setUserModalOpen(true)}
+                    className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
+                    aria-label="User management"
+                  >
+                    <Users size={18} strokeWidth={2.5} />
+                  </button>
+                </>
               )}
               <button 
                 onClick={() => setDocumentModalOpen(true)}
@@ -395,6 +435,12 @@ export function Chat({ session }: ChatProps) {
         isOpen={isWebsiteImportOpen}
         onClose={() => setWebsiteImportOpen(false)}
       />
+      {isSuperAdmin && (
+        <ErrorLogViewer
+          isOpen={isErrorLogOpen}
+          onClose={() => setErrorLogOpen(false)}
+        />
+      )}
     </div>
   );
 }

@@ -5,8 +5,7 @@ import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 
 // Initialize PDF.js worker
-const workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`;
-pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
 
 interface ProcessingProgress {
   stage: 'preparation' | 'processing' | 'extraction' | 'complete';
@@ -191,11 +190,9 @@ async function processPDFDocument(file: File, options?: ProcessingOptions): Prom
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({
       data: arrayBuffer,
-      useSystemFonts: true,
-      standardFontDataUrl: `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/standard_fonts/`,
-      cMapUrl: `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/cmaps/`,
-      cMapPacked: true,
-      disableFontFace: false
+      useWorkerFetch: true,
+      isEvalSupported: true,
+      useSystemFonts: true
     }).promise;
 
     const numPages = pdf.numPages;
@@ -348,6 +345,6 @@ export async function processDocument(
     return result;
   } catch (error) {
     console.error('[Document Processing] Error:', error);
-    throw error instanceof Error ? error : new Error('Une erreur est survenue lors du traitement du document');
+    throw error;
   }
 }

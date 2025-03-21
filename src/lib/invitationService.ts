@@ -42,26 +42,67 @@ export async function createInvitation(email: string, role: UserInvitation['role
     if (inviteError) throw inviteError;
     if (!invitation) throw new Error('Failed to create invitation');
 
-    // Send invitation email using Edge Function
-    const response = await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-invitation`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+    // Send email notification through Supabase's built-in email service
+    const { error: authError } = await supabase.auth.signInWithOtp({
+      email: email.toLowerCase(),
+      options: {
+        emailRedirectTo: `${window.location.origin}/accept-invitation?token=${tokenData}`,
+        data: {
+          invitation_token: tokenData,
+          role: role
         },
-        body: JSON.stringify({
-          invitation,
-          appUrl: window.location.origin
-        }),
+        shouldCreateUser: false,
+        emailTemplate: {
+          subject: 'Invitation à rejoindre RINGO',
+          content: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+              <h1 style="color: #f15922; margin-bottom: 20px;">Bienvenue sur RINGO</h1>
+              
+              <p>Vous avez été invité(e) à rejoindre RINGO en tant que ${
+                role === 'super_admin' ? 'Super Administrateur' :
+                role === 'admin' ? 'Administrateur' : 
+                'Utilisateur'
+              }.</p>
+              
+              <p>Pour accepter cette invitation et créer votre compte, veuillez cliquer sur le bouton ci-dessous :</p>
+              
+              <div style="margin: 30px 0; text-align: center;">
+                <a href="${window.location.origin}/accept-invitation?token=${tokenData}"
+                   style="background-color: #f15922; 
+                          color: white; 
+                          padding: 12px 24px; 
+                          text-decoration: none; 
+                          border-radius: 4px;
+                          display: inline-block;
+                          font-weight: bold;">
+                  Créer mon compte
+                </a>
+              </div>
+              
+              <p style="color: #666; font-size: 14px;">
+                Cette invitation expirera dans 24 heures.<br>
+                Si vous n'êtes pas à l'origine de cette invitation, vous pouvez ignorer cet email.
+              </p>
+              
+              <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee;">
+                <p style="color: #888; font-size: 12px; text-align: center;">
+                  Cet email a été envoyé automatiquement, merci de ne pas y répondre.
+                </p>
+              </div>
+            </div>
+          `
+        }
       }
-    );
+    });
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Failed to send invitation email' }));
-      throw new Error(error.error || 'Failed to send invitation email');
+    if (authError) {
+      // If email fails, we should revoke the invitation
+      await supabase
+        .from('user_invitations')
+        .update({ status: 'revoked' })
+        .eq('id', invitation.id);
+      
+      throw authError;
     }
 
     return invitation;

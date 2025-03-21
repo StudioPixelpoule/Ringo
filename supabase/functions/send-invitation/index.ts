@@ -5,12 +5,18 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Max-Age': '86400',
 };
 
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response('ok', { 
+      headers: {
+        ...corsHeaders,
+        'Access-Control-Allow-Headers': req.headers.get('Access-Control-Request-Headers') || corsHeaders['Access-Control-Allow-Headers']
+      }
+    });
   }
 
   try {
@@ -94,8 +100,11 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error('Error sending invitation:', error);
+    
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        error: error instanceof Error ? error.message : 'An error occurred while sending the invitation'
+      }),
       { 
         headers: { 
           ...corsHeaders,

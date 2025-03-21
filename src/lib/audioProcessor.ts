@@ -1,5 +1,4 @@
 import { createChunkedStream, validateAudioChunk } from './streamUtils';
-import { supabase } from './supabase';
 
 interface ProcessingProgress {
   stage: 'upload' | 'processing' | 'complete';
@@ -44,6 +43,8 @@ async function processAudioChunk(chunk: Blob, apiKey: string): Promise<{
   formData.append('file', chunk);
   formData.append('model', 'whisper-1');
   formData.append('response_format', 'verbose_json');
+  formData.append('language', 'fr');
+  formData.append('prompt', 'Transcription en français. Respecter la ponctuation.');
 
   try {
     const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
@@ -98,7 +99,10 @@ export async function processAudioFile(
     }
 
     // Validate file type
-    const validTypes = ['audio/mpeg', 'audio/wav', 'audio/x-wav', 'audio/mp3'];
+    const validTypes = [
+      'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/wave', 
+      'audio/x-wav', 'audio/aac', 'audio/ogg', 'audio/webm'
+    ];
     if (!validTypes.includes(file.type)) {
       throw new Error(`Type de fichier audio non supporté: ${file.type}`);
     }

@@ -4,6 +4,7 @@ import { X, Upload, FileText, FolderPlus, ChevronRight, Edit2, Trash2, Check, Lo
 import { useDocumentStore, Document, Folder } from '../lib/documentStore';
 import { supabase } from '../lib/supabase';
 import { FileIcon } from './FileIcon';
+import { logError } from '../lib/errorLogger';
 
 interface ProcessingStatus {
   isProcessing: boolean;
@@ -175,6 +176,11 @@ export function DocumentImportModal() {
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
       'audio/mpeg': ['.mp3'],
       'audio/wav': ['.wav'],
+      'audio/wave': ['.wav'],
+      'audio/x-wav': ['.wav'],
+      'audio/aac': ['.aac'],
+      'audio/ogg': ['.ogg'],
+      'audio/webm': ['.webm'],
       'text/html': ['.html']
     },
     multiple: false,
@@ -238,16 +244,58 @@ export function DocumentImportModal() {
       const documentType = extension === 'pdf' ? 'pdf' :
                          ['doc', 'docx'].includes(extension || '') ? 'doc' :
                          ['json', 'csv', 'xlsx', 'xls'].includes(extension || '') ? 'data' :
-                         ['mp3', 'wav'].includes(extension || '') ? 'audio' :
+                         ['mp3', 'wav', 'wave', 'aac', 'ogg', 'webm'].includes(extension || '') ? 'audio' :
                          extension === 'html' ? 'report' : 'unknown';
 
       // Convert special characters to underscores
       const sanitizedDescription = description
-        .replace(/[^a-zA-Z0-9\s]/g, '_') // Replace special chars with underscore
-        .replace(/\s+/g, '_') // Replace spaces with underscore
-        .replace(/_+/g, '_') // Replace multiple underscores with single
-        .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+        .replace(/[^a-zA-Z0-9\s]/g, '_')
+        .replace(/\s+/g, '_')
+        .replace(/_+/g, '_')
+        .replace(/^_|_$/g, '');
 
+      // For audio files, store the original file
+      if (documentType === 'audio') {
+        const fileExt = selectedFile.name.split('.').pop()?.toLowerCase() || '';
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+        const filePath = `documents/${fileName}`;
+
+        const { error: uploadError, data: uploadData } = await supabase.storage
+          .from('documents')
+          .upload(filePath, selectedFile, {
+            cacheControl: '3600',
+            upsert: false,
+            contentType: selectedFile.type
+          });
+
+        if (uploadError) throw uploadError;
+        if (!uploadData?.path) throw new Error('Failed to upload file');
+
+        const doc = await uploadDocument(selectedFile, currentFolder.id, {
+          type: documentType,
+          description: sanitizedDescription,
+          processed: true,
+          size: selectedFile.size,
+          url: uploadData.path
+        });
+
+        setProcessingStatus({
+          isProcessing: false,
+          progress: 100,
+          stage: 'complete',
+          message: 'Document traité avec succès !'
+        });
+
+        setTimeout(() => {
+          setSelectedFile(null);
+          setDescription('');
+          setModalOpen(false);
+        }, 2000);
+
+        return;
+      }
+
+      // For other document types, process normally
       const doc = await uploadDocument(selectedFile, currentFolder.id, {
         type: documentType,
         description: sanitizedDescription,
@@ -263,15 +311,14 @@ export function DocumentImportModal() {
       });
 
       setTimeout(() => {
-        if (!processingStatus.isProcessing) {
-          setSelectedFile(null);
-          setDescription('');
-          setModalOpen(false);
-        }
+        setSelectedFile(null);
+        setDescription('');
+        setModalOpen(false);
       }, 2000);
 
     } catch (error) {
       console.error('Overall error:', error);
+      logError(error instanceof Error ? error : new Error(String(error)));
       setProcessingStatus({
         isProcessing: false,
         progress: 0,
