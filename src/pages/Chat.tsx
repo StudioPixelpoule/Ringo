@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Users, ArrowRight, LogOut, Database, FileText } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 import { Logo } from '../components/Logo';
+import { SmallLogo } from '../components/SmallLogo';
+import { IrsstLogo } from '../components/IrsstLogo';
 import { DocumentIcon } from '../components/DocumentIcon';
 import { DocumentListIcon } from '../components/DocumentListIcon';
 import { UserManagementModal } from '../components/UserManagementModal';
@@ -194,12 +195,16 @@ export function Chat({ session }: ChatProps) {
         <div className="flex items-center gap-6">
           <h1 className="text-2xl font-semibold text-white flex items-center gap-2">
             <Logo />
-            <div className="flex items-baseline">
+            <div className="flex items-center">
               <strong className="text-2xl">RINGO</strong>
-              <sup className="text-xs ml-1">by AI</sup>
+              <sup className="ml-1 flex items-center gap-0.5 text-sm text-white">
+                <span>par</span>
+                <SmallLogo />
+              </sup>
             </div>
           </h1>
           <div className="flex items-center gap-4">
+            <IrsstLogo />
             <button 
               onClick={handleLogout}
               className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"

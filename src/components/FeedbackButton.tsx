@@ -46,7 +46,7 @@ export function FeedbackButton() {
   };
 
   return (
-    <div className="fixed bottom-24 left-8 z-10">
+    <div className="fixed bottom-8 left-8 z-10">
       {/* Feedback button */}
       <button
         onClick={() => setIsOpen(!isOpen)}

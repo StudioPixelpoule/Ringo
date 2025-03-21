@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Logo } from '../components/Logo';
+import { SmallLogo } from '../components/SmallLogo';
+import { IrsstLogo } from '../components/IrsstLogo';
 
 export function Login() {
   const [email, setEmail] = useState('');
@@ -60,10 +62,16 @@ export function Login() {
           <div className="w-24 h-24 flex items-center justify-center -mb-2">
             <Logo />
           </div>
-          <h1 className="text-white text-4xl font-bold flex items-baseline">
+          <h1 className="text-white text-4xl font-bold flex items-center">
             RINGO
-            <sup className="text-sm ml-1">By AI</sup>
+            <sup className="ml-1 flex items-center gap-0.5 text-sm text-white">
+              <span>par</span>
+              <SmallLogo />
+            </sup>
           </h1>
+          <div className="mt-4">
+            <IrsstLogo />
+          </div>
         </div>
 
         <div className="bg-white/10 backdrop-blur-sm rounded-lg p-8 shadow-xl">
@@ -114,7 +122,7 @@ export function Login() {
           </form>
         </div>
 
-        <div className="mt-8 flex flex-col items-center text-white/80">
+        <div className="mt-8 flex flex-col items-center text-white">
           <span className="mb-2">Propulsé par</span>
           <div className="w-64">
             <svg viewBox="0 0 1000 200" fill="currentColor">

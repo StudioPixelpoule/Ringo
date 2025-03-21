@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronRight, Search, X, Send, Loader2 } from 'lucide-react';
+import { ChevronRight, Search, X, Send, Loader2, CheckSquare, Square } from 'lucide-react';
 import { useDocumentStore, Document, Folder } from '../lib/documentStore';
 import { useConversationStore } from '../lib/conversationStore';
 import { FileIcon } from './FileIcon';
@@ -36,6 +36,9 @@ const FileCard: React.FC<FileCardProps> = ({ document, isSelected, onSelect }) =
           <p className={`text-sm truncate ${isSelected ? 'text-white/80' : 'text-gray-500'}`}>
             {new Date(document.created_at).toLocaleDateString()}
           </p>
+        </div>
+        <div className="flex-shrink-0">
+          {isSelected ? <CheckSquare size={20} /> : <Square size={20} />}
         </div>
       </div>
     </motion.div>
@@ -224,6 +227,14 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
     );
   };
 
+  const handleSelectAll = () => {
+    if (selectedDocuments.length === filteredDocuments.length) {
+      setSelectedDocuments([]);
+    } else {
+      setSelectedDocuments(filteredDocuments.map(doc => doc.id));
+    }
+  };
+
   const importDocumentsToChat = async () => {
     if (selectedDocuments.length === 0 || isProcessing) return;
 
@@ -339,6 +350,30 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
           </div>
 
           <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="p-4 border-b flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSelectAll}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-gray-100"
+                >
+                  {selectedDocuments.length === filteredDocuments.length ? (
+                    <CheckSquare size={18} className="text-[#f15922]" />
+                  ) : (
+                    <Square size={18} className="text-gray-600" />
+                  )}
+                  <span className="text-sm font-medium">
+                    {selectedDocuments.length === filteredDocuments.length
+                      ? 'Tout désélectionner'
+                      : 'Tout sélectionner'}
+                  </span>
+                </button>
+                {selectedDocuments.length > 0 && (
+                  <span className="text-sm text-gray-500">
+                    {selectedDocuments.length} document{selectedDocuments.length > 1 ? 's' : ''} sélectionné{selectedDocuments.length > 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
+            </div>
             <div className="flex-1 p-4 overflow-y-auto">
               <div className="grid grid-cols-2 gap-4">
                 <AnimatePresence>
@@ -361,9 +396,9 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
                 initial={{ width: 0, opacity: 0 }}
                 animate={{ width: '300px', opacity: 1 }}
                 exit={{ width: 0, opacity: 0 }}
-                className="border-l bg-gray-50"
+                className="border-l bg-gray-50 flex flex-col"
               >
-                <div className="p-4">
+                <div className="p-4 flex flex-col h-full">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="font-medium text-gray-900">
                       Sélection ({selectedDocuments.length})
@@ -376,28 +411,30 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
                     </button>
                   </div>
 
-                  <div className="space-y-2 mb-4">
-                    {selectedDocuments.map(id => {
-                      const doc = documents.find(d => d.id === id);
-                      if (!doc) return null;
-                      return (
-                        <motion.div
-                          key={doc.id}
-                          initial={{ opacity: 0, x: 20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: -20 }}
-                          className="flex items-center justify-between bg-white p-2 rounded-lg shadow-sm"
-                        >
-                          <span className="truncate text-sm">{doc.name}</span>
-                          <button
-                            onClick={() => toggleDocumentSelection(doc.id)}
-                            className="text-gray-400 hover:text-gray-600"
+                  <div className="flex-1 overflow-y-auto mb-4">
+                    <div className="space-y-2">
+                      {selectedDocuments.map(id => {
+                        const doc = documents.find(d => d.id === id);
+                        if (!doc) return null;
+                        return (
+                          <motion.div
+                            key={doc.id}
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -20 }}
+                            className="flex items-center justify-between bg-white p-2 rounded-lg shadow-sm"
                           >
-                            <X size={14} />
-                          </button>
-                        </motion.div>
-                      );
-                    })}
+                            <span className="truncate text-sm">{doc.name}</span>
+                            <button
+                              onClick={() => toggleDocumentSelection(doc.id)}
+                              className="text-gray-400 hover:text-gray-600"
+                            >
+                              <X size={14} />
+                            </button>
+                          </motion.div>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   <button

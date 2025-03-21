@@ -113,8 +113,6 @@ export function DocumentImportModal() {
   } = useDocumentStore();
 
   const [selectedPath, setSelectedPath] = useState<Folder[]>([]);
-  const [documentType, setDocumentType] = useState('');
-  const [groupName, setGroupName] = useState('');
   const [description, setDescription] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [processingStatus, setProcessingStatus] = useState<ProcessingStatus>({
@@ -136,8 +134,6 @@ export function DocumentImportModal() {
           type: importData.type
         });
         setSelectedFile(file);
-        setDocumentType('report');
-        setGroupName('Rapports');
         setDescription('Rapport généré automatiquement');
         localStorage.removeItem('pendingReportImport');
       } else if (!processingStatus.isProcessing) {
@@ -148,8 +144,6 @@ export function DocumentImportModal() {
           message: ''
         });
         setSelectedFile(null);
-        setDocumentType('');
-        setGroupName('');
         setDescription('');
       }
     }
@@ -160,22 +154,6 @@ export function DocumentImportModal() {
       const file = acceptedFiles[0];
       setSelectedFile(file);
       
-      // Auto-detect document type
-      const extension = file.name.split('.').pop()?.toLowerCase();
-      if (['json', 'csv', 'xlsx', 'xls'].includes(extension || '')) {
-        setDocumentType('data');
-      } else if (file.type === 'application/pdf') {
-        setDocumentType('pdf');
-      } else if (file.type.includes('word')) {
-        setDocumentType('doc');
-      } else if (file.type.includes('audio')) {
-        setDocumentType('audio');
-      } else if (file.type === 'text/html') {
-        setDocumentType('report');
-        setGroupName('Rapports');
-        setDescription('Rapport généré automatiquement');
-      }
-
       setProcessingStatus({
         isProcessing: false,
         progress: 0,
@@ -255,10 +233,24 @@ export function DocumentImportModal() {
         message: 'Préparation du document...'
       });
 
+      // Auto-detect document type
+      const extension = selectedFile.name.split('.').pop()?.toLowerCase();
+      const documentType = extension === 'pdf' ? 'pdf' :
+                         ['doc', 'docx'].includes(extension || '') ? 'doc' :
+                         ['json', 'csv', 'xlsx', 'xls'].includes(extension || '') ? 'data' :
+                         ['mp3', 'wav'].includes(extension || '') ? 'audio' :
+                         extension === 'html' ? 'report' : 'unknown';
+
+      // Convert special characters to underscores
+      const sanitizedDescription = description
+        .replace(/[^a-zA-Z0-9\s]/g, '_') // Replace special chars with underscore
+        .replace(/\s+/g, '_') // Replace spaces with underscore
+        .replace(/_+/g, '_') // Replace multiple underscores with single
+        .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+
       const doc = await uploadDocument(selectedFile, currentFolder.id, {
-        type: documentType || selectedFile.type,
-        group_name: groupName,
-        description: description.replace(/\s+/g, '_'),
+        type: documentType,
+        description: sanitizedDescription,
         processed: true,
         size: selectedFile.size
       });
@@ -273,8 +265,6 @@ export function DocumentImportModal() {
       setTimeout(() => {
         if (!processingStatus.isProcessing) {
           setSelectedFile(null);
-          setDocumentType('');
-          setGroupName('');
           setDescription('');
           setModalOpen(false);
         }
@@ -392,63 +382,23 @@ export function DocumentImportModal() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Type de document
-                </label>
-                <select
-                  value={documentType}
-                  onChange={(e) => setDocumentType(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#f15922] focus:border-transparent"
-                  disabled={processingStatus.isProcessing}
-                >
-                  <option value="">Sélectionner un type</option>
-                  <option value="pdf">PDF</option>
-                  <option value="doc">Document Word</option>
-                  <option value="data">Données (JSON/CSV)</option>
-                  <option value="audio">Audio (MP3/WAV)</option>
-                  <option value="report">Rapport</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Groupe concerné
-                </label>
-                <select
-                  value={groupName}
-                  onChange={(e) => setGroupName(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#f15922] focus:border-transparent"
-                  disabled={processingStatus.isProcessing}
-                >
-                  <option value="">Sélectionner un groupe</option>
-                  <option value="groupe1">Groupe 1</option>
-                  <option value="groupe2">Groupe 2</option>
-                  <option value="groupe3">Groupe 3</option>
-                  <option value="Rapports">Rapports</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Description
                 </label>
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Description du document (utilisez _ au lieu des espaces)"
+                  placeholder="Décrivez le document pour améliorer la recherche"
                   className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#f15922] focus:border-transparent resize-none"
                   rows={4}
                   disabled={processingStatus.isProcessing}
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  Note: Les caractères spéciaux seront remplacés par des underscores (_).
-                </p>
               </div>
 
               <button
                 onClick={handleUpload}
-                disabled={!selectedFile || !currentFolder || !documentType || !groupName || processingStatus.isProcessing}
+                disabled={!selectedFile || !currentFolder || processingStatus.isProcessing}
                 className={`w-full mt-6 px-4 py-2 rounded-md flex items-center justify-center gap-2 ${
-                  !selectedFile || !currentFolder || !documentType || !groupName || processingStatus.isProcessing
+                  !selectedFile || !currentFolder || processingStatus.isProcessing
                     ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                     : 'bg-[#f15922] text-white hover:bg-[#f15922]/90'
                 }`}
