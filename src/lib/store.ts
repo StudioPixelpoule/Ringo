@@ -1,10 +1,11 @@
 import { create } from 'zustand';
 import { supabase } from './supabase';
+import { createInvitation, UserInvitation } from './invitationService';
 
 export interface Profile {
   id: string;
   email: string;
-  role: 'admin' | 'user';
+  role: 'super_admin' | 'admin' | 'user';
   status: boolean;
   created_at: string;
   updated_at: string;
@@ -17,10 +18,15 @@ interface UserStore {
   selectedUser: Profile | null;
   isModalOpen: boolean;
   isAddUserModalOpen: boolean;
+  userRole: string;
+  invitations: UserInvitation[];
+  
   fetchUsers: () => Promise<void>;
   updateUser: (id: string, data: Partial<Profile>) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
-  createUser: (email: string, password: string, role: 'admin' | 'user') => Promise<void>;
+  inviteUser: (email: string, role: Profile['role']) => Promise<void>;
+  fetchInvitations: () => Promise<void>;
+  revokeInvitation: (id: string) => Promise<void>;
   setSelectedUser: (user: Profile | null) => void;
   setModalOpen: (isOpen: boolean) => void;
   setAddUserModalOpen: (isOpen: boolean) => void;
@@ -34,6 +40,8 @@ export const useUserStore = create<UserStore>((set, get) => ({
   selectedUser: null,
   isModalOpen: false,
   isAddUserModalOpen: false,
+  userRole: 'user',
+  invitations: [],
 
   fetchUsers: async () => {
     set({ loading: true, error: null });
@@ -45,49 +53,80 @@ export const useUserStore = create<UserStore>((set, get) => ({
 
       if (error) throw error;
       set({ users: data as Profile[] });
+
+      // Get current user's role
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+        
+        if (profile) {
+          set({ userRole: profile.role });
+        }
+      }
     } catch (error) {
-      set({ error: (error as Error).message });
+      set({ error: error instanceof Error ? error.message : 'Failed to fetch users' });
     } finally {
       set({ loading: false });
     }
   },
 
-  createUser: async (email: string, password: string, role: 'admin' | 'user') => {
+  inviteUser: async (email: string, role: Profile['role']) => {
     set({ loading: true, error: null });
     try {
-      // First create the auth user
-      const { data: authData, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            role: role
-          }
-        }
-      });
-
-      if (signUpError) throw signUpError;
-      if (!authData.user) throw new Error('Failed to create user');
-
-      // Wait a moment for the trigger to create the profile
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      // Update the profile with the role
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ 
-          role,
-          status: true,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', authData.user.id);
-
-      if (updateError) throw updateError;
-
-      await get().fetchUsers();
+      const invitation = await createInvitation(email, role);
+      
+      // Update invitations list
+      const invitations = get().invitations;
+      set({ invitations: [invitation, ...invitations] });
+      
+      // Close modal
       set({ isAddUserModalOpen: false });
     } catch (error) {
-      set({ error: (error as Error).message });
+      set({ error: error instanceof Error ? error.message : 'Failed to invite user' });
+      throw error;
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  fetchInvitations: async () => {
+    set({ loading: true, error: null });
+    try {
+      const { data, error } = await supabase
+        .from('user_invitations')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      set({ invitations: data });
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to fetch invitations' });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  revokeInvitation: async (id: string) => {
+    set({ loading: true, error: null });
+    try {
+      const { error } = await supabase
+        .from('user_invitations')
+        .update({ status: 'revoked' })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      // Update local state
+      const invitations = get().invitations.map(inv =>
+        inv.id === id ? { ...inv, status: 'revoked' } : inv
+      );
+      set({ invitations });
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to revoke invitation' });
     } finally {
       set({ loading: false });
     }
@@ -104,7 +143,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
       if (error) throw error;
       await get().fetchUsers();
     } catch (error) {
-      set({ error: (error as Error).message });
+      set({ error: error instanceof Error ? error.message : 'Failed to update user' });
     } finally {
       set({ loading: false });
     }
@@ -113,15 +152,31 @@ export const useUserStore = create<UserStore>((set, get) => ({
   deleteUser: async (id: string) => {
     set({ loading: true, error: null });
     try {
-      const { error } = await supabase
+      // First deactivate the user
+      const { error: deactivateError } = await supabase
         .from('profiles')
-        .update({ status: false, updated_at: new Date().toISOString() })
+        .update({ 
+          status: false, 
+          updated_at: new Date().toISOString() 
+        })
         .eq('id', id);
 
-      if (error) throw error;
-      await get().fetchUsers();
+      if (deactivateError) throw deactivateError;
+
+      // Then delete the profile
+      const { error: deleteError } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', id);
+
+      if (deleteError) throw deleteError;
+
+      // Update local state
+      const users = get().users;
+      set({ users: users.filter(u => u.id !== id) });
     } catch (error) {
-      set({ error: (error as Error).message });
+      console.error('Error deleting user:', error);
+      set({ error: error instanceof Error ? error.message : 'Failed to delete user' });
     } finally {
       set({ loading: false });
     }

@@ -1,22 +1,33 @@
 import React, { useState } from 'react';
-import { X, UserPlus } from 'lucide-react';
+import { X, UserPlus, Send } from 'lucide-react';
 import { useUserStore } from '../lib/store';
 
 export function AddUserModal() {
-  const { isAddUserModalOpen, loading, error, createUser, setAddUserModalOpen, clearError } = useUserStore();
+  const { 
+    isAddUserModalOpen, 
+    loading, 
+    error, 
+    inviteUser,
+    setAddUserModalOpen, 
+    clearError,
+    userRole: currentUserRole 
+  } = useUserStore();
+  
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'user' | 'admin'>('user');
+  const [role, setRole] = useState<'user' | 'admin' | 'super_admin'>('user');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await createUser(email, password, role);
+    if (!email.trim()) return;
+
+    await inviteUser(email.trim(), role);
     if (!error) {
       setEmail('');
-      setPassword('');
       setRole('user');
     }
   };
+
+  const isSuperAdmin = currentUserRole === 'super_admin';
 
   if (!isAddUserModalOpen) return null;
 
@@ -26,7 +37,7 @@ export function AddUserModal() {
         <div className="bg-[#f15922] px-6 py-4 flex items-center justify-between">
           <h2 className="text-xl font-semibold text-white flex items-center gap-2">
             <UserPlus size={24} />
-            Ajouter un Utilisateur
+            Inviter un Utilisateur
           </h2>
           <button
             onClick={() => {
@@ -61,32 +72,20 @@ export function AddUserModal() {
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-              Mot de passe
-            </label>
-            <input
-              type="password"
-              id="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#f15922] focus:border-transparent"
-              required
-              minLength={6}
-            />
-          </div>
-
-          <div>
             <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-1">
               Rôle
             </label>
             <select
               id="role"
               value={role}
-              onChange={(e) => setRole(e.target.value as 'admin' | 'user')}
+              onChange={(e) => setRole(e.target.value as 'user' | 'admin' | 'super_admin')}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#f15922] focus:border-transparent"
             >
               <option value="user">Utilisateur</option>
               <option value="admin">Administrateur</option>
+              {isSuperAdmin && (
+                <option value="super_admin">S-Administrateur</option>
+              )}
             </select>
           </div>
 
@@ -104,9 +103,10 @@ export function AddUserModal() {
             <button
               type="submit"
               disabled={loading}
-              className="px-4 py-2 bg-[#f15922] text-white rounded-md hover:bg-[#f15922]/90 focus:outline-none focus:ring-2 focus:ring-[#f15922] disabled:opacity-50"
+              className="px-4 py-2 bg-[#f15922] text-white rounded-md hover:bg-[#f15922]/90 focus:outline-none focus:ring-2 focus:ring-[#f15922] disabled:opacity-50 flex items-center gap-2"
             >
-              {loading ? 'Création...' : 'Créer'}
+              <Send size={18} />
+              {loading ? 'Envoi...' : 'Envoyer l\'invitation'}
             </button>
           </div>
         </form>

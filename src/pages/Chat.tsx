@@ -208,6 +208,9 @@ export function Chat({ session }: ChatProps) {
                 <span>par</span>
                 <SmallLogo />
               </sup>
+              <div className="ml-2">
+                <IrsstLogo />
+              </div>
             </div>
           </h1>
           <div className="flex items-center gap-4">
@@ -221,7 +224,7 @@ export function Chat({ session }: ChatProps) {
             <div className="border-l border-white/20 pl-4 flex flex-col">
               <span className="text-white/90 text-sm">{session.user.email}</span>
               {userRole === 'super_admin' ? (
-                <span className="text-white/70 text-xs">super admin</span>
+                <span className="text-white/70 text-xs">S-Admin</span>
               ) : userRole === 'admin' ? (
                 <span className="text-white/70 text-xs">admin</span>
               ) : null}

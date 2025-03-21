@@ -15,17 +15,10 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     flowType: 'pkce',
     storage: window.localStorage
   },
-  db: {
-    schema: 'public'
-  },
   global: {
     headers: {
       'x-application-name': 'ringo'
     }
-  },
-  storage: {
-    retryCount: 3,
-    retryInterval: 1000
   }
 });
 
@@ -49,6 +42,34 @@ let refreshTimeout: NodeJS.Timeout;
 window.addEventListener('focus', () => {
   clearTimeout(refreshTimeout);
   refreshTimeout = setTimeout(() => {
-    supabase.auth.getSession().catch(console.error);
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        if (!session) {
+          // No valid session, redirect to login
+          window.location.href = '/login';
+        }
+      })
+      .catch((error) => {
+        console.error('Session refresh error:', error);
+        if (error?.message?.includes('refresh_token_not_found') || 
+            error?.message?.includes('JWT expired') || 
+            error?.message?.includes('Invalid Refresh Token')) {
+          localStorage.clear();
+          window.location.href = '/login';
+        }
+      });
   }, 1000);
+});
+
+// Add unhandled rejection listener for auth errors
+window.addEventListener('unhandledrejection', (event) => {
+  if (event.reason?.name === 'AuthApiError') {
+    console.error('Auth API Error:', event.reason);
+    if (event.reason?.message?.includes('refresh_token_not_found') || 
+        event.reason?.message?.includes('JWT expired') || 
+        event.reason?.message?.includes('Invalid Refresh Token')) {
+      localStorage.clear();
+      window.location.href = '/login';
+    }
+  }
 });

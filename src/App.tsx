@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Session } from '@supabase/supabase-js';
 import { Login } from './pages/Login';
 import { Chat } from './pages/Chat';
-import { ReportTemplateManager } from './components/ReportTemplateManager';
+import { AcceptInvitation } from './pages/AcceptInvitation';
 import { supabase } from './lib/supabase';
 
 function App() {
@@ -120,15 +120,13 @@ function App() {
           element={session ? <Navigate to="/" replace /> : <Login />}
         />
         <Route
+          path="/accept-invitation"
+          element={<AcceptInvitation />}
+        />
+        <Route
           path="/"
           element={session ? <Chat session={session} /> : <Navigate to="/login" replace />}
         />
-        {userRole === 'admin' && (
-          <Route
-            path="/admin/report-templates"
-            element={session ? <ReportTemplateManager /> : <Navigate to="/login" replace />}
-          />
-        )}
       </Routes>
     </BrowserRouter>
   );
