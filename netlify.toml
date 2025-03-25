@@ -10,9 +10,9 @@
 [build.environment]
   NODE_VERSION = "18"
 
-# Increase max body size to 100MB
 [functions]
   included_files = ["dist/**/*"]
+  node_bundler = "esbuild"
 
 [[headers]]
   for = "/*"
@@ -30,9 +30,20 @@
   autoLaunch = true
   command = "npm run dev"
 
-# Increase max body size to 100MB
-[[plugins]]
-  package = "@netlify/plugin-functions-core"
+# Configure max payload size
+[build.processing]
+  skip_processing = false
 
-  [plugins.inputs]
-    maxPayloadSize = "100mb"
+[build.processing.html]
+  pretty_urls = true
+
+[build.processing.css]
+  bundle = true
+  minify = true
+
+[build.processing.js]
+  bundle = true
+  minify = true
+
+[build.processing.images]
+  compress = true
