@@ -1,0 +1,160 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  /* Message styles */
+  .message-item {
+    @apply my-1.5 flex flex-col opacity-0 animate-[messageAppear_0.2s_ease_forwards];
+  }
+
+  .message-metadata {
+    @apply flex items-center gap-1 mb-0.5 px-3 text-xs text-gray-600;
+  }
+
+  .message-time {
+    @apply text-gray-400;
+  }
+
+  .user-message {
+    @apply self-end ml-12 mr-3;
+  }
+
+  .user-message-content {
+    @apply bg-[#f15922] text-white p-2 px-3 rounded-md shadow-sm text-sm leading-relaxed;
+  }
+
+  .assistant-message {
+    @apply self-start mr-12 ml-3;
+  }
+
+  .assistant-message-content {
+    @apply bg-gray-50 border border-gray-200 p-2 px-3 rounded-md shadow-sm;
+  }
+
+  /* Markdown styles */
+  .enhanced-markdown {
+    @apply text-gray-800 leading-relaxed break-words;
+  }
+
+  .markdown-h1 {
+    @apply text-2xl font-semibold text-[#f15922] mt-5 mb-2 pb-1 border-b border-gray-200;
+  }
+
+  .markdown-h2 {
+    @apply text-xl font-semibold text-[#dba747] mt-4 mb-2;
+  }
+
+  .markdown-h3 {
+    @apply text-lg font-semibold text-gray-800 mt-3 mb-2;
+  }
+
+  .markdown-p {
+    @apply my-2;
+  }
+
+  .markdown-link {
+    @apply text-blue-600 hover:underline;
+  }
+
+  .markdown-ul, .markdown-ol {
+    @apply my-2 pl-6;
+  }
+
+  .markdown-li {
+    @apply mb-1;
+  }
+
+  .markdown-blockquote {
+    @apply my-3 pl-4 py-1 border-l-[3px] border-[#dba747] bg-gray-50 text-gray-700;
+  }
+
+  .markdown-code {
+    @apply px-1.5 py-0.5 bg-gray-100 rounded text-sm font-mono;
+  }
+
+  .markdown-code-block {
+    @apply my-3 p-4 bg-gray-900 rounded-lg overflow-x-auto;
+  }
+
+  /* Streaming text */
+  .streaming-text-container {
+    @apply w-full overflow-x-hidden;
+  }
+
+  .streaming-text {
+    @apply relative w-full min-h-[20px] whitespace-pre-wrap break-words;
+  }
+
+  .typing-cursor {
+    @apply inline-block w-0.5 h-[1.2em] bg-[#f15922] align-middle ml-px animate-[blink_1s_step-end_infinite];
+  }
+
+  /* Document tag */
+  .document-tag {
+    @apply bg-[#f15922]/5 text-[#f15922] px-3 py-1.5 rounded-full text-sm inline-flex items-center gap-1 transition-all;
+  }
+
+  .document-tag:hover {
+    @apply bg-[#f15922]/10;
+  }
+
+  .document-tag button {
+    @apply opacity-0 transition-opacity;
+  }
+
+  .document-tag:hover button {
+    @apply opacity-100;
+  }
+
+  .document-tag button:hover {
+    @apply bg-[#f15922]/20 rounded-full;
+  }
+
+  /* Neumorphic buttons */
+  .neumorphic-button {
+    @apply bg-[#dba747] shadow-[6px_6px_12px_#b88d3c,-6px_-6px_12px_#fcc152] transition-all;
+  }
+
+  .neumorphic-button:hover {
+    @apply shadow-[4px_4px_8px_#b88d3c,-4px_-4px_8px_#fcc152] translate-y-0.5;
+  }
+
+  .neumorphic-button:active {
+    @apply shadow-[inset_4px_4px_8px_#b88d3c,inset_-4px_-4px_8px_#fcc152] translate-y-1;
+  }
+
+  .header-neumorphic-button {
+    @apply bg-[#f15922] shadow-[4px_4px_8px_#cc4b1d,-4px_-4px_8px_#ff6727] transition-all;
+  }
+
+  .header-neumorphic-button:hover {
+    @apply shadow-[3px_3px_6px_#cc4b1d,-3px_-3px_6px_#ff6727] translate-y-0.5;
+  }
+
+  .header-neumorphic-button:active {
+    @apply shadow-[inset_3px_3px_6px_#cc4b1d,inset_-3px_-3px_6px_#ff6727] translate-y-1;
+  }
+
+  .chat-neumorphic-button {
+    @apply bg-white shadow-[4px_4px_8px_#d1d1d1,-4px_-4px_8px_#ffffff,inset_1px_1px_2px_#ffffff,inset_-1px_-1px_2px_#d1d1d1] transition-all -mt-1;
+  }
+
+  .chat-neumorphic-button:hover {
+    @apply shadow-[3px_3px_6px_#d1d1d1,-3px_-3px_6px_#ffffff,inset_1px_1px_2px_#ffffff,inset_-1px_-1px_2px_#d1d1d1] translate-y-0.5;
+  }
+
+  .chat-neumorphic-button:active {
+    @apply shadow-[inset_4px_4px_8px_#d1d1d1,inset_-4px_-4px_8px_#ffffff] translate-y-1;
+  }
+}
+
+@keyframes messageAppear {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}

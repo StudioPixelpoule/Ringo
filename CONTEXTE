@@ -1,0 +1,220 @@
+# RINGO - Assistant IA pour l'Analyse de Documents
+
+## Vue d'Ensemble
+RINGO est une application web moderne qui permet aux utilisateurs d'analyser des documents grâce à l'intelligence artificielle. L'application offre une interface intuitive pour gérer, visualiser et interagir avec les documents via une interface de chat.
+
+## Architecture Technique
+
+### Technologies Principales
+- Frontend : React 18.3.1 avec TypeScript 5.5.3
+- Build : Vite 5.4.2
+- Styles : Tailwind CSS 3.4.1
+- Base de données : Supabase
+- Authentication : Supabase Auth
+- Stockage : Supabase Storage
+- IA : OpenAI GPT-4 Turbo
+
+### Structure du Projet
+```
+src/
+├── components/    # Composants React réutilisables
+├── lib/          # Logique métier et utilitaires
+├── pages/        # Pages principales
+└── main.tsx      # Point d'entrée
+```
+
+## Base de Données
+
+### Tables Principales
+1. `profiles`
+   - Gestion des utilisateurs et rôles (user, admin, super_admin)
+   - Champs : id, email, role, status, created_at, updated_at
+
+2. `folders`
+   - Organisation hiérarchique des documents
+   - Champs : id, name, parent_id, created_at, updated_at
+
+3. `documents`
+   - Stockage des métadonnées des documents
+   - Champs : id, folder_id, name, type, group_name, description, url, processed, size, created_at, updated_at
+
+4. `document_contents`
+   - Stockage du contenu extrait des documents
+   - Champs : id, document_id, content, created_at, updated_at
+
+5. `conversations`
+   - Historique des conversations
+   - Champs : id, user_id, title, created_at
+
+6. `messages`
+   - Messages des conversations
+   - Champs : id, conversation_id, sender, content, created_at
+
+7. `conversation_documents`
+   - Liaison entre conversations et documents
+   - Champs : id, conversation_id, document_id, created_at
+
+8. `user_feedback`
+   - Retours utilisateurs
+   - Champs : id, user_id, content, created_at, read_at, status
+
+### Sécurité
+- Row Level Security (RLS) activé sur toutes les tables
+- Politiques d'accès basées sur l'authentification
+- Séparation des rôles (super_admin/admin/user)
+- Vérification du statut actif des utilisateurs
+
+## Fonctionnalités Principales
+
+### 1. Gestion des Documents
+- Upload de documents (PDF, Word, JSON, CSV)
+- Organisation en dossiers hiérarchiques
+- Traitement automatique du contenu
+- Explorateur de fichiers intuitif
+- Prévisualisation des documents
+- Sélection multiple pour analyse
+- Gestion des permissions par rôle
+
+### 2. Traitement des Documents
+- PDF : Extraction de texte avec OCR au besoin
+- Word : Conversion en texte structuré
+- JSON/CSV : Parsing et structuration des données
+- Métadonnées : Extraction et stockage
+- Traitement asynchrone
+- Barre de progression
+- Gestion des erreurs
+
+### 3. Interface de Chat
+- Conversations contextuelles
+- Analyse des documents sélectionnés
+- Réponses IA basées sur le contenu
+- Support multi-documents
+- Historique des conversations
+- Formatage Markdown des réponses
+- Streaming des réponses en temps réel
+
+### 4. Gestion des Utilisateurs
+- Authentification email/mot de passe
+- Rôles super_admin, admin et utilisateur
+- Gestion des permissions
+- Statut actif/inactif
+- Interface d'administration
+- Création de comptes
+- Modification des rôles
+
+### 5. Système de Feedback
+- Retours utilisateurs
+- Gestion des statuts (unread, read, archived)
+- Interface admin dédiée
+- Notifications de nouveaux retours
+- Historique des retours
+
+## Interface Utilisateur
+
+### Design
+- Style neumorphique moderne
+- Thème personnalisé (orange #f15922, or #dba747)
+- Interface responsive
+- Animations fluides
+- Icônes cohérentes
+- Feedback visuel
+- États de chargement
+
+### Composants Principaux
+- Header avec navigation et contrôles
+- Liste des conversations
+- Zone de chat interactive
+- Explorateur de fichiers
+- Gestion des documents
+- Modales de gestion
+- Indicateurs de statut
+
+### Explorateur de Fichiers
+- Vue arborescente des dossiers
+- Affichage des documents par type
+- Icônes spécifiques par format
+- Sélection multiple
+- Barre de recherche
+- Compteurs de documents
+- Animation des transitions
+
+## Processus de Traitement
+
+### Documents Texte
+1. Upload du fichier
+2. Extraction du contenu selon le type
+3. Structuration des données
+4. Stockage dans Supabase
+5. Indexation pour la recherche
+
+## Intégration IA
+
+### OpenAI GPT-4 Turbo
+- Analyse contextuelle des documents
+- Réponses aux questions utilisateur
+- Formatage structuré des réponses
+- Gestion du contexte conversationnel
+- Optimisation des tokens
+- Gestion des limites de contexte
+- Streaming des réponses en temps réel
+
+## Sécurité et Performance
+
+### Sécurité
+- Authentification robuste
+- Contrôle d'accès granulaire
+- Validation des entrées
+- Sanitization des données
+- Protection des routes
+- Gestion des sessions
+- Logs de sécurité
+
+### Performance
+- Traitement asynchrone
+- Chunking des gros fichiers
+- Mise en cache des résultats
+- Optimisation des requêtes
+- Lazy loading
+- Compression des assets
+- Monitoring des performances
+
+## Environnement Technique
+
+### Variables d'Environnement
+```env
+VITE_SUPABASE_URL=url_supabase
+VITE_SUPABASE_ANON_KEY=clé_anonyme
+VITE_OPENAI_API_KEY=clé_api_openai
+```
+
+### Dépendances Clés
+- @supabase/supabase-js : Client Supabase
+- openai : API OpenAI
+- pdfjs-dist : Traitement PDF
+- mammoth : Traitement Word
+- tesseract.js : OCR
+- framer-motion : Animations
+- lucide-react : Icônes
+- react-markdown : Rendu Markdown
+- react-syntax-highlighter : Coloration syntaxique
+- zustand : Gestion d'état
+
+## Maintenance et Évolution
+
+### Logs et Monitoring
+- Logs détaillés des opérations
+- Suivi des erreurs
+- Métriques de performance
+- État des traitements
+- Alertes système
+- Audit des accès
+- Statistiques d'utilisation
+
+### Points d'Extension
+- Nouveaux types de documents
+- Intégrations additionnelles
+- Fonctionnalités collaboratives
+- Analyses avancées
+- Export des données
+- API publique
+- Plugins tiers
