@@ -10,13 +10,7 @@ import { FolderModal } from './FolderModal';
 import { DeleteConfirmationModal } from './DeleteConfirmationModal';
 import { processDocument } from '../lib/universalProcessor';
 import { validateFileSize } from '../lib/constants';
-
-interface ProcessingStatus {
-  isProcessing: boolean;
-  progress: number;
-  stage: 'preparation' | 'processing' | 'extraction' | 'complete' | 'upload';
-  message: string;
-}
+import { ProcessingProgress, ModalProps } from '../lib/types';
 
 interface FolderTreeItemProps {
   folder: Folder;
@@ -152,12 +146,16 @@ const FolderTreeItem: React.FC<FolderTreeItemProps> = ({
   );
 };
 
+interface DocumentImportModalProps extends ModalProps {
+  // Additional props if needed
+}
+
 export function DocumentImportModal() {
   const [selectedPath, setSelectedPath] = useState<Folder[]>([]);
   const [description, setDescription] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
-  const [processingStatus, setProcessingStatus] = useState<ProcessingStatus>({
+  const [processingStatus, setProcessingStatus] = useState<ProcessingProgress>({
     isProcessing: false,
     progress: 0,
     stage: 'preparation',

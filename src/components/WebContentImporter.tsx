@@ -6,6 +6,7 @@ import { extractWebContent } from '../lib/webContentExtractor';
 import { FolderModal } from './FolderModal';
 import { DeleteConfirmationModal } from './DeleteConfirmationModal';
 import { logError } from '../lib/errorLogger';
+import { ProcessingProgress, ModalProps } from '../lib/types';
 
 interface ProcessingStatus {
   isProcessing: boolean;
@@ -151,10 +152,7 @@ const FolderTreeItem: React.FC<FolderTreeItemProps> = ({
 export function WebContentImporter({ 
   isOpen, 
   onClose 
-}: { 
-  isOpen: boolean; 
-  onClose: () => void;
-}) {
+}: WebContentImporterProps) {
   const [url, setUrl] = useState('');
   const [description, setDescription] = useState('');
   const [selectedPath, setSelectedPath] = useState<Folder[]>([]);

@@ -1,25 +1,9 @@
-import { createChunkedStream, createStreamFromFile } from './streamUtils';
-import { processDocument as processDocumentBase } from './documentProcessor';
-import { processAudioFile } from './audioProcessor';
-import { logError } from './errorLogger';
-import { validateFileSize } from './constants';
-
-interface ProcessingProgress {
-  stage: 'preparation' | 'processing' | 'extraction' | 'complete';
-  progress: number;
-  message: string;
-}
-
-interface ProcessingOptions {
-  openaiApiKey?: string;
-  onProgress?: (progress: ProcessingProgress) => void;
-  signal?: AbortSignal;
-}
+import { ProcessingProgress, ProcessingOptions, ProcessingResult } from './types';
 
 export async function processDocument(
   file: File,
   options?: ProcessingOptions
-): Promise<string> {
+): Promise<ProcessingResult> {
   try {
     // Validate file size
     const validation = validateFileSize(file);

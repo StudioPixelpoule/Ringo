@@ -1,6 +1,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
+import { ModalProvider } from './components/ModalProvider';
 import './index.css';
 import { config } from './lib/config';
 
@@ -19,7 +20,9 @@ try {
 
   createRoot(rootElement).render(
     <React.StrictMode>
-      <App />
+      <ModalProvider>
+        <App />
+      </ModalProvider>
     </React.StrictMode>
   );
 } catch (error) {

@@ -5,6 +5,7 @@ import { Logo } from '../components/Logo';
 import { SmallLogo } from '../components/SmallLogo';
 import { IrsstLogo } from '../components/IrsstLogo';
 import { Loader2 } from 'lucide-react';
+import { config } from '../lib/config';
 
 export function Login() {
   const [email, setEmail] = useState('');
@@ -161,7 +162,8 @@ export function Login() {
             </svg>
           </div>
           <div className="mt-4 text-sm text-white/70 text-center">
-            En mode solutions - RINGO V1.04 mars 2025
+            {config.app.copyright}
+            <div className="text-xs mt-1">Version {config.app.version} ({config.app.buildDate})</div>
           </div>
         </div>
       </div>

@@ -1,4 +1,4 @@
-// Types d'erreurs spécifiques par domaine
+// Error types by domain
 export enum FileErrorType {
   INVALID_TYPE = 'INVALID_TYPE',
   SIZE_EXCEEDED = 'SIZE_EXCEEDED',
@@ -49,7 +49,7 @@ export enum ValidationErrorType {
   INVALID_REFERENCE = 'INVALID_REFERENCE'
 }
 
-// Interface pour les erreurs personnalisées
+// Interface for custom errors
 export interface AppErrorDetails {
   type: 
     | FileErrorType 
@@ -63,49 +63,49 @@ export interface AppErrorDetails {
   originalError?: Error;
 }
 
-// Messages d'erreur par type
+// Error messages
 export const ERROR_MESSAGES: Record<string, string> = {
-  // Erreurs de fichier
-  [FileErrorType.INVALID_TYPE]: "Type de fichier non supporté",
-  [FileErrorType.SIZE_EXCEEDED]: "Taille de fichier dépassée",
-  [FileErrorType.PROCESSING_FAILED]: "Échec du traitement du fichier",
-  [FileErrorType.UPLOAD_FAILED]: "Échec de l'envoi du fichier",
-  [FileErrorType.DOWNLOAD_FAILED]: "Échec du téléchargement du fichier",
-  [FileErrorType.CORRUPT_FILE]: "Fichier corrompu",
-  [FileErrorType.UNSUPPORTED_ENCODING]: "Encodage non supporté",
+  // File errors
+  [FileErrorType.INVALID_TYPE]: "File type not supported",
+  [FileErrorType.SIZE_EXCEEDED]: "File size exceeded",
+  [FileErrorType.PROCESSING_FAILED]: "File processing failed",
+  [FileErrorType.UPLOAD_FAILED]: "File upload failed",
+  [FileErrorType.DOWNLOAD_FAILED]: "File download failed",
+  [FileErrorType.CORRUPT_FILE]: "Corrupted file",
+  [FileErrorType.UNSUPPORTED_ENCODING]: "Unsupported encoding",
 
-  // Erreurs de document
-  [DocumentErrorType.EXTRACTION_FAILED]: "Échec de l'extraction du contenu",
-  [DocumentErrorType.OCR_FAILED]: "Échec de la reconnaissance de texte",
-  [DocumentErrorType.PARSING_FAILED]: "Échec de l'analyse du document",
-  [DocumentErrorType.INVALID_CONTENT]: "Contenu du document invalide",
-  [DocumentErrorType.MISSING_CONTENT]: "Contenu du document manquant",
+  // Document errors
+  [DocumentErrorType.EXTRACTION_FAILED]: "Content extraction failed",
+  [DocumentErrorType.OCR_FAILED]: "Text recognition failed",
+  [DocumentErrorType.PARSING_FAILED]: "Document parsing failed",
+  [DocumentErrorType.INVALID_CONTENT]: "Invalid document content",
+  [DocumentErrorType.MISSING_CONTENT]: "Missing document content",
 
-  // Erreurs d'authentification
-  [AuthErrorType.INVALID_CREDENTIALS]: "Identifiants invalides",
-  [AuthErrorType.SESSION_EXPIRED]: "Session expirée",
-  [AuthErrorType.UNAUTHORIZED]: "Accès non autorisé",
-  [AuthErrorType.ACCOUNT_DISABLED]: "Compte désactivé",
-  [AuthErrorType.TOKEN_EXPIRED]: "Token expiré",
+  // Authentication errors
+  [AuthErrorType.INVALID_CREDENTIALS]: "Invalid credentials",
+  [AuthErrorType.SESSION_EXPIRED]: "Session expired",
+  [AuthErrorType.UNAUTHORIZED]: "Unauthorized access",
+  [AuthErrorType.ACCOUNT_DISABLED]: "Account disabled",
+  [AuthErrorType.TOKEN_EXPIRED]: "Token expired",
 
-  // Erreurs de base de données
-  [DatabaseErrorType.CONNECTION_FAILED]: "Erreur de connexion à la base de données",
-  [DatabaseErrorType.QUERY_FAILED]: "Erreur lors de la requête",
-  [DatabaseErrorType.CONSTRAINT_VIOLATION]: "Violation de contrainte",
-  [DatabaseErrorType.TRANSACTION_FAILED]: "Échec de la transaction",
-  [DatabaseErrorType.PERMISSION_DENIED]: "Permission refusée",
+  // Database errors
+  [DatabaseErrorType.CONNECTION_FAILED]: "Database connection error",
+  [DatabaseErrorType.QUERY_FAILED]: "Query error",
+  [DatabaseErrorType.CONSTRAINT_VIOLATION]: "Constraint violation",
+  [DatabaseErrorType.TRANSACTION_FAILED]: "Transaction failed",
+  [DatabaseErrorType.PERMISSION_DENIED]: "Permission denied",
 
-  // Erreurs réseau
-  [NetworkErrorType.REQUEST_FAILED]: "Échec de la requête",
-  [NetworkErrorType.TIMEOUT]: "Délai d'attente dépassé",
-  [NetworkErrorType.CORS_ERROR]: "Erreur CORS",
-  [NetworkErrorType.API_ERROR]: "Erreur API",
-  [NetworkErrorType.RATE_LIMIT]: "Limite de requêtes atteinte",
+  // Network errors
+  [NetworkErrorType.REQUEST_FAILED]: "Request failed",
+  [NetworkErrorType.TIMEOUT]: "Request timeout",
+  [NetworkErrorType.CORS_ERROR]: "CORS error",
+  [NetworkErrorType.API_ERROR]: "API error",
+  [NetworkErrorType.RATE_LIMIT]: "Rate limit reached",
 
-  // Erreurs de validation
-  [ValidationErrorType.REQUIRED_FIELD]: "Champ requis manquant",
-  [ValidationErrorType.INVALID_FORMAT]: "Format invalide",
-  [ValidationErrorType.OUT_OF_RANGE]: "Valeur hors limites",
-  [ValidationErrorType.UNIQUE_CONSTRAINT]: "Valeur déjà utilisée",
-  [ValidationErrorType.INVALID_REFERENCE]: "Référence invalide"
+  // Validation errors
+  [ValidationErrorType.REQUIRED_FIELD]: "Required field missing",
+  [ValidationErrorType.INVALID_FORMAT]: "Invalid format",
+  [ValidationErrorType.OUT_OF_RANGE]: "Value out of range",
+  [ValidationErrorType.UNIQUE_CONSTRAINT]: "Value already in use",
+  [ValidationErrorType.INVALID_REFERENCE]: "Invalid reference"
 };

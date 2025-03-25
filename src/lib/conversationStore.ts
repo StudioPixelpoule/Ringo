@@ -1,39 +1,20 @@
 import { create } from 'zustand';
 import { supabase } from './supabase';
 import { generateChatResponse, generateChatResponseStreaming } from './openai';
-import { Document } from './documentStore';
 import { handleStoreError, withErrorHandling } from './errorHandler';
+import { 
+  Conversation, 
+  Message, 
+  ConversationDocument, 
+  Document,
+  StoreState 
+} from './types';
 
-export interface Conversation {
-  id: string;
-  title: string;
-  created_at: string;
-  user_id: string;
-}
-
-export interface Message {
-  id: string;
-  conversation_id: string;
-  sender: 'user' | 'assistant';
-  content: string;
-  created_at: string;
-}
-
-export interface ConversationDocument {
-  id: string;
-  conversation_id: string;
-  document_id: string;
-  created_at: string;
-  documents: Document;
-}
-
-interface ConversationStore {
+interface ConversationStore extends StoreState {
   conversations: Conversation[];
   currentConversation: Conversation | null;
   messages: Message[];
   documents: ConversationDocument[];
-  loading: boolean;
-  error: string | null;
   isTyping: boolean;
   streamedMessages: Set<string>;
 

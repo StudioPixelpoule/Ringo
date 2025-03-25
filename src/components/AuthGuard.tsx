@@ -7,6 +7,8 @@ import { Logo } from './Logo';
 import { SmallLogo } from './SmallLogo';
 import { IrsstLogo } from './IrsstLogo';
 import { useUserStore } from '../lib/store';
+import { handleError } from '../lib/errorHandler';
+import { AuthErrorType } from '../lib/errorTypes';
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -41,9 +43,7 @@ export function AuthGuard({ children, session }: AuthGuardProps) {
 
         if (profileError) {
           console.error('Error fetching profile:', profileError);
-          if (profileError.code === 'PGRST301' || profileError.code === '401') {
-            throw profileError;
-          }
+          throw profileError;
         }
 
         if (!profile || !profile.status) {
@@ -58,9 +58,17 @@ export function AuthGuard({ children, session }: AuthGuardProps) {
         setUserRole(profile.role);
         setIsAuthenticated(true);
       } catch (error) {
-        console.error('Auth check error:', error);
+        await handleError(error, {
+          component: 'AuthGuard',
+          action: 'checkAuth',
+          sessionId: session?.user?.id
+        });
+
         // Clear auth state on critical errors
-        if (error?.message?.includes('Session expired')) {
+        if (error instanceof Error && 
+            (error.message.includes('Session expired') || 
+             error.message.includes('JWT expired') ||
+             error.message.includes('Invalid JWT'))) {
           await supabase.auth.signOut();
           localStorage.clear();
         }

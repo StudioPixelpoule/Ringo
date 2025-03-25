@@ -2,43 +2,14 @@ import { create } from 'zustand';
 import { supabase } from './supabase';
 import { processDocument } from './universalProcessor';
 import { handleStoreError, withErrorHandling } from './errorHandler';
+import { Document, Folder, StoreState, ProcessingProgress } from './types';
 
-export interface Folder {
-  id: string;
-  name: string;
-  parent_id: string | null;
-  created_at: string;
-}
-
-export interface Document {
-  id: string;
-  folder_id: string;
-  name: string;
-  type: string;
-  group_name: string;
-  description: string;
-  url: string;
-  processed: boolean;
-  created_at: string;
-  size?: number;
-}
-
-interface ProcessingStatus {
-  isProcessing: boolean;
-  progress: number;
-  stage: 'upload' | 'processing' | 'complete';
-  message: string;
-  canCancel?: boolean;
-}
-
-interface DocumentStore {
+interface DocumentStore extends StoreState {
   folders: Folder[];
   documents: Document[];
   currentFolder: Folder | null;
   isModalOpen: boolean;
-  loading: boolean;
-  error: string | null;
-  processingStatus: ProcessingStatus;
+  processingStatus: ProcessingProgress;
   selectedDocuments: string[];
   
   setModalOpen: (isOpen: boolean) => void;
@@ -78,8 +49,6 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   createFolder: withErrorHandling(async (name, parentId) => {
     set({ loading: true, error: null });
     try {
-      console.log("📁 Creating folder:", { name, parentId });
-      
       const { data, error } = await supabase
         .from('folders')
         .insert([{ name, parent_id: parentId }])
@@ -90,8 +59,6 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       
       const folders = get().folders;
       set({ folders: [...folders, data] });
-      
-      console.log("✅ Folder created:", data);
     } finally {
       set({ loading: false });
     }
@@ -115,8 +82,6 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     let uploadedPath: string | null = null;
 
     try {
-      console.log("📄 Processing document:", file.name);
-
       const result = await processDocument(file, {
         openaiApiKey: process.env.VITE_OPENAI_API_KEY,
         onProgress: (progress) => {
@@ -129,7 +94,6 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         throw new Error('Document processing failed');
       }
 
-      console.log("✅ Document processed");
       set({ processingStatus: {
         isProcessing: true,
         progress: 75,
@@ -154,7 +118,6 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       if (!data?.path) throw new Error('Upload failed: No path returned');
 
       uploadedPath = data.path;
-      console.log("✅ File uploaded:", uploadedPath);
 
       const { data: doc, error: dbError } = await supabase
         .from('documents')
@@ -179,8 +142,6 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         }]);
 
       if (contentError) throw contentError;
-
-      console.log("✅ Document saved:", doc);
 
       const documents = get().documents;
       set({ documents: [...documents, doc] });
@@ -214,8 +175,6 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   fetchFolders: withErrorHandling(async () => {
     set({ loading: true, error: null });
     try {
-      console.log("📁 Fetching folders");
-      
       const { data, error } = await supabase
         .from('folders')
         .select('*')
@@ -223,7 +182,6 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
       if (error) throw error;
       
-      console.log("✅ Folders fetched:", data?.length || 0);
       set({ folders: data || [] });
     } finally {
       set({ loading: false });
@@ -233,8 +191,6 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   fetchDocuments: withErrorHandling(async (folderId) => {
     set({ loading: true, error: null });
     try {
-      console.log("📄 Fetching folder documents:", folderId);
-      
       const { data, error } = await supabase
         .from('documents')
         .select('*')
@@ -243,7 +199,6 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
       if (error) throw error;
       
-      console.log("✅ Documents fetched:", data?.length || 0);
       set({ documents: data || [] });
     } finally {
       set({ loading: false });
@@ -253,8 +208,6 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   fetchAllDocuments: withErrorHandling(async () => {
     set({ loading: true, error: null });
     try {
-      console.log("📄 Fetching all documents");
-      
       const { data, error } = await supabase
         .from('documents')
         .select('*')
@@ -262,7 +215,6 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
       if (error) throw error;
       
-      console.log("✅ Documents fetched:", data?.length || 0);
       set({ documents: data || [] });
     } finally {
       set({ loading: false });
@@ -274,8 +226,6 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   deleteFolder: withErrorHandling(async (id) => {
     set({ loading: true, error: null });
     try {
-      console.log("🗑️ Deleting folder:", id);
-      
       const { error } = await supabase
         .from('folders')
         .delete()
@@ -285,8 +235,6 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       
       const folders = get().folders;
       set({ folders: folders.filter((f) => f.id !== id) });
-      
-      console.log("✅ Folder deleted");
     } finally {
       set({ loading: false });
     }
@@ -295,8 +243,6 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   renameFolder: withErrorHandling(async (id, newName) => {
     set({ loading: true, error: null });
     try {
-      console.log("✏️ Renaming folder:", { id, newName });
-      
       const { error } = await supabase
         .from('folders')
         .update({ name: newName })
@@ -310,29 +256,24 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
           f.id === id ? { ...f, name: newName } : f
         ),
       });
-      
-      console.log("✅ Folder renamed");
     } finally {
       set({ loading: false });
     }
   }, { store: 'DocumentStore', action: 'renameFolder' }),
 
   selectDocument: (id) => {
-    console.log("📄 Selecting document:", id);
     set((state) => ({
       selectedDocuments: [...state.selectedDocuments, id]
     }));
   },
 
   unselectDocument: (id) => {
-    console.log("📄 Deselecting document:", id);
     set((state) => ({
       selectedDocuments: state.selectedDocuments.filter(docId => docId !== id)
     }));
   },
 
   clearSelectedDocuments: () => {
-    console.log("🧹 Clearing selection");
     set({ selectedDocuments: [] });
   },
 

@@ -24,7 +24,9 @@ import { supabase } from '../lib/supabase';
 import { useUserStore } from '../lib/store';
 import { useDocumentStore } from '../lib/documentStore';
 import { useConversationStore } from '../lib/conversationStore';
-import { logError } from '../lib/errorLogger';
+import { AppError } from '../lib/AppError';
+import { handleError } from '../lib/errorHandler';
+import { AuthErrorType } from '../lib/errorTypes';
 import './Chat.css';
 
 interface ChatProps {
@@ -66,22 +68,32 @@ export function Chat({ session }: ChatProps) {
 
   // Error handling effect
   useEffect(() => {
-    const errorHandler = (event: ErrorEvent) => {
-      logError(event.error, {
-        location: window.location.href,
-        timestamp: new Date().toISOString()
-      });
-    };
-
-    const rejectionHandler = (event: PromiseRejectionEvent) => {
-      logError(
-        event.reason instanceof Error ? event.reason : new Error(String(event.reason)),
-        {
-          type: 'unhandled_rejection',
+    const errorHandler = async (event: ErrorEvent) => {
+      try {
+        await handleError(event.error, {
+          component: 'Chat',
+          action: 'globalErrorHandler',
           location: window.location.href,
           timestamp: new Date().toISOString()
-        }
-      );
+        });
+      } catch (error) {
+        // If error handling itself fails, log to console as last resort
+        console.error('Critical error in error handler:', error);
+      }
+    };
+
+    const rejectionHandler = async (event: PromiseRejectionEvent) => {
+      try {
+        const error = event.reason instanceof Error ? event.reason : new Error(String(event.reason));
+        await handleError(error, {
+          component: 'Chat',
+          action: 'unhandledRejection',
+          location: window.location.href,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        console.error('Critical error in rejection handler:', error);
+      }
     };
 
     window.addEventListener('error', errorHandler);
@@ -95,8 +107,14 @@ export function Chat({ session }: ChatProps) {
 
   // Fetch conversations effect
   useEffect(() => {
-    fetchConversations();
-  }, [fetchConversations]);
+    fetchConversations().catch(async (error) => {
+      await handleError(error, {
+        component: 'Chat',
+        action: 'fetchConversations',
+        conversationId: currentConversation?.id
+      });
+    });
+  }, [fetchConversations, currentConversation?.id]);
 
   // Scroll handling effect
   useEffect(() => {
@@ -165,7 +183,12 @@ export function Chat({ session }: ChatProps) {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
       }, 100);
     } catch (error) {
-      console.error('Error sending message:', error);
+      await handleError(error, {
+        component: 'Chat',
+        action: 'sendMessage',
+        conversationId: currentConversation.id,
+        messageContent: content
+      });
     }
   }, [input, isTyping, currentConversation, sendMessage]);
 
@@ -183,7 +206,18 @@ export function Chat({ session }: ChatProps) {
       
       navigate('/login');
     } catch (error) {
-      console.error('Error during logout:', error);
+      // For auth errors, we want to force logout anyway
+      if (error instanceof AppError && error.type === AuthErrorType.SESSION_EXPIRED) {
+        navigate('/login');
+        return;
+      }
+
+      await handleError(error, {
+        component: 'Chat',
+        action: 'handleLogout'
+      });
+      
+      // Force logout as fallback
       navigate('/login');
     }
   }, [navigate]);
@@ -192,9 +226,14 @@ export function Chat({ session }: ChatProps) {
     try {
       await unlinkDocument(documentId);
     } catch (error) {
-      console.error('Error removing document:', error);
+      await handleError(error, {
+        component: 'Chat',
+        action: 'handleRemoveDocument',
+        documentId,
+        conversationId: currentConversation?.id
+      });
     }
-  }, [unlinkDocument]);
+  }, [unlinkDocument, currentConversation?.id]);
 
   const handleWebsiteImport = useCallback(() => {
     setWebsiteImportOpen(true);

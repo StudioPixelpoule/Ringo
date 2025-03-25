@@ -1,3 +1,4 @@
+import { ErrorContext } from './types';
 import { AppError } from './AppError';
 import { logError } from './errorLogger';
 import { 
@@ -72,7 +73,7 @@ function identifyErrorType(error: unknown): AppError {
 // Gestionnaire d'erreur principal
 export async function handleError(
   error: unknown,
-  context?: Record<string, any>
+  context?: ErrorContext
 ): Promise<AppError> {
   const appError = identifyErrorType(error);
 

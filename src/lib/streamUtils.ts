@@ -1,15 +1,8 @@
-import { logError } from './errorLogger';
-import { getChunkSize } from './constants';
-
-interface ChunkingOptions {
-  maxChunkSize?: number;
-  onProgress?: (progress: number) => void;
-  signal?: AbortSignal;
-}
+import { StreamingOptions } from './types';
 
 export async function createChunkedStream(
   file: File, 
-  options: ChunkingOptions = {}
+  options: StreamingOptions = {}
 ): Promise<Blob[]> {
   const {
     maxChunkSize = getChunkSize(file.type),
@@ -83,7 +76,7 @@ export async function validateAudioChunk(chunk: Blob): Promise<boolean> {
 
 export async function* createStreamFromFile(
   file: File,
-  options: ChunkingOptions = {}
+  options: StreamingOptions = {}
 ): AsyncGenerator<Blob, void, unknown> {
   const {
     maxChunkSize = getChunkSize(file.type),

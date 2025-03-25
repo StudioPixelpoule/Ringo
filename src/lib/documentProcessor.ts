@@ -1,28 +1,9 @@
-import * as pdfjsLib from 'pdfjs-dist';
-import mammoth from 'mammoth';
-import * as XLSX from 'xlsx';
-import { processCSV } from './csvProcessor';
-import { processPDF } from './pdfProcessor';
-import { logError } from './errorLogger';
-
-// Initialize PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
-
-interface ProcessingProgress {
-  stage: 'preparation' | 'processing' | 'extraction' | 'complete';
-  progress: number;
-  message: string;
-}
-
-interface ProcessingOptions {
-  onProgress?: (progress: ProcessingProgress) => void;
-  signal?: AbortSignal;
-}
+import { ProcessingProgress, ProcessingOptions, ProcessingResult } from './types';
 
 export async function processDocument(
   file: File,
   options?: ProcessingOptions
-): Promise<string> {
+): Promise<ProcessingResult> {
   try {
     options?.onProgress?.({
       stage: 'preparation',
