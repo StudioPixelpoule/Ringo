@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { supabase, initializeAuth } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 import { Logo } from '../components/Logo';
 import { SmallLogo } from '../components/SmallLogo';
 import { IrsstLogo } from '../components/IrsstLogo';
 import { Loader2 } from 'lucide-react';
 import { config } from '../lib/config';
+import { handleError } from '../lib/errorHandler';
+import { AuthErrorType } from '../lib/errorTypes';
 
 export function Login() {
   const [email, setEmail] = useState('');
@@ -29,26 +31,49 @@ export function Login() {
           }
         }, 5000);
 
-        await initializeAuth();
+        // Clear any stale auth state
+        await supabase.auth.signOut();
+        localStorage.clear();
+
+        // Check if there's an existing session
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
-        // Check current session
-        const { data: { session }, error } = await supabase.auth.getSession();
-        if (error) throw error;
-        
+        if (sessionError) {
+          console.debug('Session check error:', sessionError);
+          throw sessionError;
+        }
+
         if (session?.user) {
+          // Verify profile status
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('status')
+            .eq('id', session.user.id)
+            .single();
+
+          if (profileError || !profile?.status) {
+            throw new Error('Profile inactive or not found');
+          }
+
+          // Valid session, redirect
           const from = location.state?.from?.pathname || '/';
           navigate(from, { replace: true });
           return;
         }
+
+        // No valid session, show login form
+        setIsInitializing(false);
       } catch (error) {
-        console.error('Auth check error:', error);
+        console.debug('Auth check error:', error);
+        
         // Clear any stale auth state
         await supabase.auth.signOut();
         localStorage.clear();
+        
+        setIsInitializing(false);
       } finally {
         if (mounted) {
           clearTimeout(timeoutId);
-          setIsInitializing(false);
         }
       }
     };
@@ -111,8 +136,13 @@ export function Login() {
       const from = location.state?.from?.pathname || '/';
       navigate(from, { replace: true });
     } catch (err) {
-      console.error('Login error:', err);
-      setError(err instanceof Error ? err.message : 'Une erreur est survenue');
+      const error = await handleError(err, {
+        component: 'Login',
+        action: 'handleLogin',
+        email
+      });
+
+      setError(error.getUserMessage());
     } finally {
       setLoading(false);
     }
@@ -122,7 +152,7 @@ export function Login() {
     return (
       <div className="min-h-screen bg-[#f15922] flex flex-col items-center justify-center p-4">
         <div className="w-full max-w-md flex flex-col items-center">
-          <div className="flex flex-col items-center mb-8">
+          <div className="flex flex-col items-center mb-8 animate-pulse">
             <div className="w-24 h-24 flex items-center justify-center">
               <Logo />
             </div>

@@ -2,15 +2,16 @@ import { createClient } from '@supabase/supabase-js';
 import { config } from './config';
 import { handleError } from './errorHandler';
 import { AuthErrorType } from './errorTypes';
+import { adminUtils } from './adminUtils';
 
-// Singleton instance
+// Create singleton instance
 let supabaseInstance: ReturnType<typeof createClient>;
+let authInitialized = false;
+let authCheckPromise: Promise<void> | null = null;
 
 // Create Supabase client with retries and better error handling
 function createSupabaseClient() {
-  if (supabaseInstance) {
-    return supabaseInstance;
-  }
+  if (supabaseInstance) return supabaseInstance;
 
   supabaseInstance = createClient(config.supabase.url, config.supabase.anonKey, {
     auth: {
@@ -19,7 +20,9 @@ function createSupabaseClient() {
       detectSessionInUrl: true,
       storage: window.localStorage,
       storageKey: 'sb-auth-token',
-      flowType: 'pkce'
+      flowType: 'pkce',
+      retryAttempts: 3,
+      retryInterval: 2000
     },
     global: {
       headers: {
@@ -40,80 +43,11 @@ function createSupabaseClient() {
   return supabaseInstance;
 }
 
-// Create admin client with service role key
-function createAdminClient() {
-  return createClient(config.supabase.url, config.supabase.serviceKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-      storage: undefined // Prevent storage for admin client
-    }
-  });
-}
-
-// Export singleton instances
+// Export singleton instance and admin utils
 export const supabase = createSupabaseClient();
-const supabaseAdmin = createAdminClient();
-
-// Admin utilities
-export const adminUtils = {
-  async createUser(email: string, password: string, role: string) {
-    try {
-      // Create user with admin client
-      const { data: authData, error: signUpError } = await supabaseAdmin.auth.admin.createUser({
-        email: email.toLowerCase(),
-        password: password,
-        email_confirm: true,
-        user_metadata: { role }
-      });
-
-      if (signUpError) throw signUpError;
-      if (!authData.user) throw new Error('Error creating user account');
-
-      return { user: authData.user };
-    } catch (error) {
-      await handleError(error, {
-        component: 'adminUtils',
-        action: 'createUser',
-        email
-      });
-      throw error;
-    }
-  },
-
-  async deleteUser(userId: string) {
-    try {
-      // Call edge function to delete user
-      const response = await fetch(`${config.supabase.url}/functions/v1/delete-user`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${config.supabase.anonKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ user_id: userId })
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to delete user');
-      }
-
-      return { success: true };
-    } catch (error) {
-      await handleError(error, {
-        component: 'adminUtils',
-        action: 'deleteUser',
-        userId
-      });
-      throw error;
-    }
-  }
-};
+export { adminUtils };
 
 // Initialize auth state
-let authInitialized = false;
-let authCheckPromise: Promise<void> | null = null;
-
 export async function initializeAuth() {
   console.debug('🔐 Initializing auth...');
   
@@ -142,12 +76,24 @@ export async function initializeAuth() {
         // Try to refresh if token expired
         if (sessionError.message.includes('JWT expired')) {
           console.debug('🔄 Token expired, attempting refresh...');
-          const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
-          if (refreshError) throw refreshError;
-          if (!refreshData.session) throw new Error('Session refresh failed');
-          console.debug('✅ Session refreshed successfully');
+          try {
+            const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+            if (refreshError) {
+              console.warn("Failed to refresh session:", refreshError);
+              return; // Don't throw error, just return
+            }
+            if (!refreshData.session) {
+              console.warn("Session refresh did not return a session");
+              return; // Don't throw error, just return
+            }
+            console.debug('✅ Session refreshed successfully');
+          } catch (e) {
+            console.warn("Error during refresh:", e);
+            return; // Don't throw error
+          }
         } else {
-          throw sessionError;
+          console.warn("Session error but not JWT expired:", sessionError);
+          return; // Don't throw error
         }
       }
 
@@ -156,52 +102,54 @@ export async function initializeAuth() {
         console.debug('🔍 Validating session...');
         
         // Verify user exists
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
-        if (userError) throw userError;
-        if (!user) throw new Error('User not found');
+        try {
+          const { data: { user }, error: userError } = await supabase.auth.getUser();
+          if (userError) {
+            console.warn("User error:", userError);
+            return; // Don't throw error
+          }
+          if (!user) {
+            console.warn("User not found");
+            return; // Don't throw error
+          }
 
-        console.debug('👤 User found:', user.email);
+          console.debug('👤 User found:', user.email);
 
-        // Check profile status
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('status, role')
-          .eq('id', user.id)
-          .single();
+          // Check profile status
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('status, role')
+            .eq('id', user.id)
+            .single();
 
-        if (profileError) {
-          console.debug('❌ Profile error:', profileError);
-          throw profileError;
+          if (profileError) {
+            console.debug('❌ Profile error:', profileError);
+            return; // Don't throw error
+          }
+          
+          if (!profile?.status) {
+            console.debug('❌ Profile inactive');
+            return; // Don't throw error
+          }
+
+          console.debug('✅ Profile validated:', { status: profile.status, role: profile.role });
+
+          // Store role in localStorage for quick access
+          localStorage.setItem('userRole', profile.role);
+          authInitialized = true;
+        } catch (e) {
+          console.warn("Error during user/profile validation:", e);
+          return; // Don't throw error  
         }
-        
-        if (!profile?.status) {
-          console.debug('❌ Profile inactive');
-          throw new Error('Profile inactive');
-        }
-
-        console.debug('✅ Profile validated:', { status: profile.status, role: profile.role });
-
-        // Store role in localStorage for quick access
-        localStorage.setItem('userRole', profile.role);
       } else {
         console.debug('⚠️ No session found');
       }
 
       console.debug('✅ Auth initialization complete');
-      authInitialized = true;
     } catch (error) {
       console.error('❌ Auth initialization error:', error);
-      
-      // Clear auth state on critical errors
-      await supabase.auth.signOut();
-      localStorage.clear();
+      // Don't automatically clear localStorage
       authInitialized = false;
-
-      await handleError(error, {
-        component: 'supabase',
-        action: 'initializeAuth'
-      });
-
       throw error;
     } finally {
       authCheckPromise = null;
@@ -211,81 +159,55 @@ export async function initializeAuth() {
   return authCheckPromise;
 }
 
-// Set up auth state change listener
-supabase.auth.onAuthStateChange(async (event, session) => {
-  console.debug('🔄 Auth state change:', event);
-  
-  try {
-    if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
-      console.debug('👋 User signed out or deleted');
-      localStorage.clear();
-      authInitialized = false;
-      window.location.href = '/login';
-    } else if (event === 'SIGNED_IN') {
-      console.debug('🎉 User signed in, initializing auth...');
-      await initializeAuth();
-    } else if (event === 'TOKEN_REFRESHED') {
-      console.debug('🔄 Token refreshed');
-      authInitialized = true;
-    }
-  } catch (error) {
-    console.error('❌ Auth state change error:', error);
-    
-    await handleError(error, {
-      component: 'supabase',
-      action: 'authStateChange',
-      event
-    });
-    
-    localStorage.clear();
-    authInitialized = false;
-    window.location.href = '/login';
-  }
-});
-
-// Add session refresh on focus
+// Add session refresh on focus with network check
 let refreshTimeout: NodeJS.Timeout;
 window.addEventListener('focus', () => {
   clearTimeout(refreshTimeout);
   refreshTimeout = setTimeout(async () => {
     try {
-      console.debug('🔍 Checking session on focus...');
-      
-      if (!authInitialized) {
-        console.debug('🔄 Auth not initialized, initializing...');
-        await initializeAuth();
+      // Skip token check if device is offline
+      if (!navigator.onLine) {
+        console.debug('🌐 Device offline, skipping token check');
         return;
+      }
+
+      // Check connection quality if available
+      if ('connection' in navigator) {
+        const connection = (navigator as any).connection;
+        if (connection?.effectiveType === 'slow-2g' || connection?.effectiveType === '2g') {
+          console.debug('🌐 Poor network connection, delaying token check');
+          return;
+        }
       }
 
       const { data: { session }, error } = await supabase.auth.getSession();
-      if (error) throw error;
-      
-      if (!session) {
-        console.debug('⚠️ No session found on focus');
-        localStorage.clear();
-        authInitialized = false;
-        window.location.href = '/login';
-        return;
+      if (error) {
+        // Check if it's a network error
+        if (error.message?.includes('network') || !navigator.onLine) {
+          console.warn('Network issue during token refresh, will retry on next focus');
+          return;
+        }
+        throw error;
       }
 
-      // Try to refresh session
-      console.debug('🔄 Refreshing session...');
-      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
-      if (refreshError) throw refreshError;
-      if (!refreshData.session) throw new Error('Session refresh failed');
-      
-      console.debug('✅ Session refreshed successfully');
+      if (!session) {
+        throw new Error('No valid session');
+      }
     } catch (error) {
-      console.error('❌ Session refresh error:', error);
-      
       await handleError(error, {
         component: 'supabase',
-        action: 'refreshSession'
+        action: 'refreshSession',
+        isOnline: navigator.onLine,
+        connectionType: ('connection' in navigator) ? (navigator as any).connection?.effectiveType : 'unknown'
       });
-      
-      localStorage.clear();
-      authInitialized = false;
-      window.location.href = '/login';
+
+      if (error instanceof Error && 
+          (error.message.includes('refresh_token_not_found') || 
+           error.message.includes('JWT expired') || 
+           error.message.includes('Invalid JWT'))) {
+        localStorage.clear();
+        window.location.href = '/login';
+      }
     }
   }, 1000);
 });
@@ -296,22 +218,17 @@ window.addEventListener('unhandledrejection', async (event) => {
     if (event.reason?.name === 'AuthApiError' || 
         event.reason?.message?.includes('JWT expired') ||
         event.reason?.message?.includes('Invalid JWT')) {
-      console.error('❌ Unhandled auth error:', event.reason);
-      
       await handleError(event.reason, {
         component: 'supabase',
         action: 'unhandledAuthError',
         type: AuthErrorType.SESSION_EXPIRED
       });
-      
       localStorage.clear();
-      authInitialized = false;
       window.location.href = '/login';
     }
   } catch (error) {
-    console.error('❌ Critical error in unhandled rejection handler:', error);
+    console.error('Critical error in unhandled rejection handler:', error);
     localStorage.clear();
-    authInitialized = false;
     window.location.href = '/login';
   }
 });

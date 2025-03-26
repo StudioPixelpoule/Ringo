@@ -8,9 +8,10 @@ import { FileIcon } from './FileIcon';
 import { logError } from '../lib/errorLogger';
 import { FolderModal } from './FolderModal';
 import { DeleteConfirmationModal } from './DeleteConfirmationModal';
-import { processDocument } from '../lib/universalProcessor';
+import { processDocument } from '../lib/documentProcessor';
 import { validateFileSize } from '../lib/constants';
 import { ProcessingProgress, ModalProps } from '../lib/types';
+import { config } from '../lib/config';
 
 interface FolderTreeItemProps {
   folder: Folder;
@@ -490,7 +491,7 @@ export function DocumentImportModal() {
 
       // For other document types, process normally
       const result = await processDocument(selectedFile, {
-        openaiApiKey: process.env.VITE_OPENAI_API_KEY,
+        openaiApiKey: config.openai.apiKey,
         onProgress: (progress) => {
           setProcessingStatus(progress);
         }
@@ -523,7 +524,7 @@ export function DocumentImportModal() {
 
     } catch (error) {
       console.error('Overall error:', error);
-      logError(error instanceof Error ? error : new Error(String(error)));
+      await logError(error instanceof Error ? error : new Error(String(error)));
       setProcessingStatus({
         isProcessing: false,
         progress: 0,

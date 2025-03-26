@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { Session } from '@supabase/supabase-js';
-import { supabase, initializeAuth } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 import { Loader2 } from 'lucide-react';
 import { Logo } from './Logo';
 import { SmallLogo } from './SmallLogo';
 import { IrsstLogo } from './IrsstLogo';
 import { useUserStore } from '../lib/store';
 import { handleError } from '../lib/errorHandler';
+import { AuthErrorType } from '../lib/errorTypes';
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -23,6 +24,9 @@ export function AuthGuard({ children, session }: AuthGuardProps) {
   useEffect(() => {
     let mounted = true;
     let timeoutId: NodeJS.Timeout;
+    let retryCount = 0;
+    const maxRetries = 3;
+    const retryDelay = 2000;
 
     const checkAuth = async () => {
       try {
@@ -32,27 +36,47 @@ export function AuthGuard({ children, session }: AuthGuardProps) {
             setLoading(false);
             setIsAuthenticated(false);
           }
-        }, 5000);
+        }, 10000); // 10 seconds timeout
 
-        // Initialize auth
-        await initializeAuth();
-
-        // Get current session
+        // First validate session
         const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) throw sessionError;
-        if (!currentSession) throw new Error('No session found');
+        
+        // Handle session errors gracefully
+        if (sessionError || !currentSession) {
+          console.warn("Session not found or session error:", sessionError || "No session");
+          clearTimeout(timeoutId);
+          
+          if (mounted) {
+            setIsAuthenticated(false);
+            setLoading(false);
+          }
+          return;
+        }
 
-        // Get user role from localStorage (set during initializeAuth)
-        const role = localStorage.getItem('userRole');
-        if (!role) throw new Error('User role not found');
+        // Then check profile status and role
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('status, role')
+          .eq('id', currentSession.user.id)
+          .single();
 
-        // Set role in store
-        setUserRole(role);
+        if (profileError) {
+          if (profileError.code === 'PGRST301' || profileError.code === '401') {
+            throw new Error('Invalid session');
+          }
+          throw profileError;
+        }
+
+        if (!profile || !profile.status) {
+          throw new Error('Profile inactive or not found');
+        }
 
         // Clear timeout since auth succeeded
         clearTimeout(timeoutId);
 
         if (mounted) {
+          // Set user role in global store
+          setUserRole(profile.role);
           setIsAuthenticated(true);
           setLoading(false);
         }
@@ -62,15 +86,34 @@ export function AuthGuard({ children, session }: AuthGuardProps) {
         await handleError(error, {
           component: 'AuthGuard',
           action: 'checkAuth',
-          sessionId: session?.user?.id
+          sessionId: session?.user?.id,
+          retryCount,
+          maxRetries,
+          networkStatus: {
+            online: navigator.onLine,
+            connectionType: ('connection' in navigator) 
+              ? (navigator as any).connection?.effectiveType 
+              : 'unknown'
+          }
         });
 
-        // Clear auth state on critical errors
-        await supabase.auth.signOut();
-        localStorage.clear();
+        clearTimeout(timeoutId);
+        
+        if (mounted) {
+          setIsAuthenticated(false);
+          setLoading(false);
 
-        setIsAuthenticated(false);
-        setLoading(false);
+          // Retry on network errors
+          if (retryCount < maxRetries && 
+              (error.message?.includes('network') || !navigator.onLine)) {
+            setTimeout(() => {
+              if (mounted) {
+                retryCount++;
+                checkAuth();
+              }
+            }, retryDelay * Math.pow(2, retryCount));
+          }
+        }
       }
     };
 

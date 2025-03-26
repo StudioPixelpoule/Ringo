@@ -1,4 +1,8 @@
 import { ProcessingProgress, ProcessingOptions, ProcessingResult } from './types';
+import { config } from './config';
+import { logError } from './errorLogger';
+import { handleError } from './errorHandler';
+import { AuthErrorType } from './errorTypes';
 
 export async function processDocument(
   file: File,
@@ -11,8 +15,15 @@ export async function processDocument(
       message: 'Préparation du document...'
     });
 
+    // Process based on file type
     const extension = file.name.split('.').pop()?.toLowerCase();
     let content: string;
+
+    // Check auth state first
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session) {
+      throw new Error('Session expirée, veuillez vous reconnecter');
+    }
 
     // Process based on file type
     if (extension === 'pdf') {
@@ -63,9 +74,30 @@ export async function processDocument(
       message: 'Traitement terminé'
     });
 
-    return content;
+    return {
+      content,
+      metadata: {
+        fileName: file.name,
+        fileType: file.type,
+        size: file.size,
+        timestamp: new Date().toISOString()
+      }
+    };
   } catch (error) {
-    logError(error, {
+    // Handle auth errors specifically
+    if (error instanceof Error && 
+        (error.message.includes('JWT expired') || 
+         error.message.includes('Invalid JWT') ||
+         error.message.includes('session'))) {
+      throw await handleError(error, {
+        component: 'documentProcessor',
+        action: 'processDocument',
+        type: AuthErrorType.SESSION_EXPIRED
+      });
+    }
+
+    // Log and handle other errors
+    await logError(error, {
       component: 'documentProcessor',
       action: 'processDocument',
       fileType: file.type,

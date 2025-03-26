@@ -22,7 +22,9 @@ export enum AuthErrorType {
   SESSION_EXPIRED = 'SESSION_EXPIRED',
   UNAUTHORIZED = 'UNAUTHORIZED',
   ACCOUNT_DISABLED = 'ACCOUNT_DISABLED',
-  TOKEN_EXPIRED = 'TOKEN_EXPIRED'
+  TOKEN_EXPIRED = 'TOKEN_EXPIRED',
+  INITIALIZATION_FAILED = 'INITIALIZATION_FAILED',
+  NETWORK_ERROR = 'NETWORK_ERROR'
 }
 
 export enum DatabaseErrorType {
@@ -38,7 +40,9 @@ export enum NetworkErrorType {
   TIMEOUT = 'TIMEOUT',
   CORS_ERROR = 'CORS_ERROR',
   API_ERROR = 'API_ERROR',
-  RATE_LIMIT = 'RATE_LIMIT'
+  RATE_LIMIT = 'RATE_LIMIT',
+  OFFLINE = 'OFFLINE',
+  POOR_CONNECTION = 'POOR_CONNECTION'
 }
 
 export enum ValidationErrorType {
@@ -65,47 +69,38 @@ export interface AppErrorDetails {
 
 // Error messages
 export const ERROR_MESSAGES: Record<string, string> = {
-  // File errors
-  [FileErrorType.INVALID_TYPE]: "File type not supported",
-  [FileErrorType.SIZE_EXCEEDED]: "File size exceeded",
-  [FileErrorType.PROCESSING_FAILED]: "File processing failed",
-  [FileErrorType.UPLOAD_FAILED]: "File upload failed",
-  [FileErrorType.DOWNLOAD_FAILED]: "File download failed",
-  [FileErrorType.CORRUPT_FILE]: "Corrupted file",
-  [FileErrorType.UNSUPPORTED_ENCODING]: "Unsupported encoding",
-
-  // Document errors
-  [DocumentErrorType.EXTRACTION_FAILED]: "Content extraction failed",
-  [DocumentErrorType.OCR_FAILED]: "Text recognition failed",
-  [DocumentErrorType.PARSING_FAILED]: "Document parsing failed",
-  [DocumentErrorType.INVALID_CONTENT]: "Invalid document content",
-  [DocumentErrorType.MISSING_CONTENT]: "Missing document content",
-
-  // Authentication errors
-  [AuthErrorType.INVALID_CREDENTIALS]: "Invalid credentials",
-  [AuthErrorType.SESSION_EXPIRED]: "Session expired",
-  [AuthErrorType.UNAUTHORIZED]: "Unauthorized access",
-  [AuthErrorType.ACCOUNT_DISABLED]: "Account disabled",
-  [AuthErrorType.TOKEN_EXPIRED]: "Token expired",
-
-  // Database errors
-  [DatabaseErrorType.CONNECTION_FAILED]: "Database connection error",
-  [DatabaseErrorType.QUERY_FAILED]: "Query error",
-  [DatabaseErrorType.CONSTRAINT_VIOLATION]: "Constraint violation",
-  [DatabaseErrorType.TRANSACTION_FAILED]: "Transaction failed",
-  [DatabaseErrorType.PERMISSION_DENIED]: "Permission denied",
+  // Auth errors
+  [AuthErrorType.INVALID_CREDENTIALS]: "Identifiants invalides",
+  [AuthErrorType.SESSION_EXPIRED]: "Session expirée, veuillez vous reconnecter",
+  [AuthErrorType.UNAUTHORIZED]: "Accès non autorisé",
+  [AuthErrorType.ACCOUNT_DISABLED]: "Compte désactivé",
+  [AuthErrorType.TOKEN_EXPIRED]: "Session expirée",
+  [AuthErrorType.INITIALIZATION_FAILED]: "Erreur d'initialisation de l'authentification",
+  [AuthErrorType.NETWORK_ERROR]: "Erreur réseau lors de l'authentification",
 
   // Network errors
-  [NetworkErrorType.REQUEST_FAILED]: "Request failed",
-  [NetworkErrorType.TIMEOUT]: "Request timeout",
-  [NetworkErrorType.CORS_ERROR]: "CORS error",
-  [NetworkErrorType.API_ERROR]: "API error",
-  [NetworkErrorType.RATE_LIMIT]: "Rate limit reached",
+  [NetworkErrorType.REQUEST_FAILED]: "La requête a échoué",
+  [NetworkErrorType.TIMEOUT]: "Délai d'attente dépassé",
+  [NetworkErrorType.CORS_ERROR]: "Erreur de sécurité CORS",
+  [NetworkErrorType.API_ERROR]: "Erreur API",
+  [NetworkErrorType.RATE_LIMIT]: "Trop de requêtes",
+  [NetworkErrorType.OFFLINE]: "Pas de connexion internet",
+  [NetworkErrorType.POOR_CONNECTION]: "Connexion internet instable",
+
+  // Database errors
+  [DatabaseErrorType.CONNECTION_FAILED]: "Erreur de connexion à la base de données",
+  [DatabaseErrorType.QUERY_FAILED]: "Erreur de requête",
+  [DatabaseErrorType.CONSTRAINT_VIOLATION]: "Violation de contrainte",
+  [DatabaseErrorType.TRANSACTION_FAILED]: "Transaction échouée",
+  [DatabaseErrorType.PERMISSION_DENIED]: "Permission refusée",
 
   // Validation errors
-  [ValidationErrorType.REQUIRED_FIELD]: "Required field missing",
-  [ValidationErrorType.INVALID_FORMAT]: "Invalid format",
-  [ValidationErrorType.OUT_OF_RANGE]: "Value out of range",
-  [ValidationErrorType.UNIQUE_CONSTRAINT]: "Value already in use",
-  [ValidationErrorType.INVALID_REFERENCE]: "Invalid reference"
+  [ValidationErrorType.REQUIRED_FIELD]: "Champ requis manquant",
+  [ValidationErrorType.INVALID_FORMAT]: "Format invalide",
+  [ValidationErrorType.OUT_OF_RANGE]: "Valeur hors limites",
+  [ValidationErrorType.UNIQUE_CONSTRAINT]: "Valeur déjà utilisée",
+  [ValidationErrorType.INVALID_REFERENCE]: "Référence invalide",
+
+  // Default error
+  'DEFAULT': "Une erreur est survenue"
 };
