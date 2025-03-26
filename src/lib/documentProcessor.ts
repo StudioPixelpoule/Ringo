@@ -3,7 +3,6 @@ import { config } from './config';
 import { logError } from './errorLogger';
 import { handleError } from './errorHandler';
 import { AuthErrorType } from './errorTypes';
-import { sessionManager } from './sessionManager';
 import { supabase } from './supabase';
 
 export async function processDocument(
@@ -18,8 +17,8 @@ export async function processDocument(
     });
 
     // Validate auth state first
-    const sessionState = sessionManager.getState();
-    if (!sessionState.session) {
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session) {
       throw await handleError(new Error('No valid session'), {
         component: 'documentProcessor',
         action: 'validateAuth',
@@ -31,7 +30,7 @@ export async function processDocument(
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('status')
-      .eq('id', sessionState.session.user.id)
+      .eq('id', session.user.id)
       .single();
 
     if (profileError || !profile?.status) {

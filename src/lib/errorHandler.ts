@@ -38,13 +38,13 @@ function identifyErrorType(error: unknown): AppError {
   }
 
   // Check for auth errors
-  if (originalError.message.includes('Invalid API key') ||
-      originalError.message.includes('Invalid login credentials') ||
-      originalError.message.includes('JWT') || 
+  if (originalError.message.includes('JWT') || 
       originalError.message.includes('token') ||
       originalError.message.includes('session') ||
       originalError.message.includes('auth') ||
-      originalError.message.includes('Profile inactive')) {
+      originalError.message.includes('Profile inactive') ||
+      originalError.message.includes('User not found') ||
+      originalError.message.includes('Invalid login credentials')) {
     return new AppError({
       type: AuthErrorType.SESSION_EXPIRED,
       originalError,

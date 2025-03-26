@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Users, ArrowRight, LogOut, Database, FileText, Globe, AlertTriangle } from 'lucide-react';
+import { Users, ArrowRight, LogOut, Database, FileText, Globe, AlertTriangle, UserPlus, Settings, FileSpreadsheet } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 import { useNavigate } from 'react-router-dom';
 import { Logo } from '../components/Logo';
@@ -20,6 +20,8 @@ import { FeedbackButton } from '../components/FeedbackButton';
 import { FeedbackManager } from '../components/FeedbackManager';
 import { WebContentImporter } from '../components/WebContentImporter';
 import { ErrorLogViewer } from '../components/ErrorLogViewer';
+import { CreateUserModal } from '../components/CreateUserModal';
+import { AddUserModal } from '../components/AddUserModal';
 import { supabase } from '../lib/supabase';
 import { useUserStore } from '../lib/store';
 import { useDocumentStore } from '../lib/documentStore';
@@ -42,6 +44,8 @@ export function Chat({ session }: ChatProps) {
   const [isWebsiteImportOpen, setWebsiteImportOpen] = useState(false);
   const [userHasScrolled, setUserHasScrolled] = useState(false);
   const [isErrorLogOpen, setErrorLogOpen] = useState(false);
+  const [isCreateUserOpen, setCreateUserOpen] = useState(false);
+  const [isAddUserOpen, setAddUserOpen] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -257,46 +261,60 @@ export function Chat({ session }: ChatProps) {
               <button 
                 onClick={() => setErrorLogOpen(true)}
                 className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white"
-                title="Voir les erreurs système"
+                title="Journal des erreurs"
               >
                 <AlertTriangle size={18} strokeWidth={2.5} />
               </button>
               <button 
                 onClick={() => setUserModalOpen(true)}
-                className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
-                aria-label="User management"
+                className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white"
+                title="Gestion des utilisateurs"
               >
                 <Users size={18} strokeWidth={2.5} />
+              </button>
+              <button
+                onClick={() => setCreateUserOpen(true)}
+                className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white"
+                title="Créer un utilisateur"
+              >
+                <UserPlus size={18} strokeWidth={2.5} />
+              </button>
+              <button
+                onClick={() => setAddUserOpen(true)}
+                className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white"
+                title="Inviter un utilisateur"
+              >
+                <Settings size={18} strokeWidth={2.5} />
               </button>
             </>
           )}
           <button 
             onClick={() => setDocumentModalOpen(true)}
-            className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
-            aria-label="Document import"
+            className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white"
+            title="Importer un document"
           >
             <DocumentIcon />
           </button>
           <button 
             onClick={handleWebsiteImport}
-            className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
-            aria-label="Website import"
+            className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white"
+            title="Importer depuis le web"
           >
             <Globe size={18} strokeWidth={2.5} />
           </button>
           <button 
             onClick={() => setFileManagementOpen(true)}
-            className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
-            aria-label="File management"
+            className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white"
+            title="Gestion des fichiers"
           >
             <DocumentListIcon />
           </button>
           <button 
             onClick={() => setTemplateManagerOpen(true)}
-            className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
-            aria-label="Report templates"
+            className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white"
+            title="Modèles de rapports"
           >
-            <FileText size={18} strokeWidth={2.5} />
+            <FileSpreadsheet size={18} strokeWidth={2.5} />
           </button>
           {isSuperAdmin && <FeedbackManager />}
         </>
@@ -332,20 +350,22 @@ export function Chat({ session }: ChatProps) {
           <div className="flex items-center gap-4">
             <button 
               onClick={handleLogout}
-              className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
-              aria-label="Logout"
+              className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white"
+              title="Se déconnecter"
             >
               <LogOut size={18} strokeWidth={2.5} />
             </button>
             <div className="border-l border-white/20 pl-4 flex flex-col">
               <span className="text-white/90 text-sm">{session.user.email}</span>
               {userRole === 'super_admin' ? (
-                <span className="text-white/70 text-xs">S-Admin</span>
+                <span className="text-white/70 text-xs font-medium">S-Admin</span>
               ) : userRole === 'admin' ? (
-                <span className="text-white/70 text-xs">admin</span>
+                <span className="text-white/70 text-xs font-medium">Admin</span>
               ) : userRole === 'g_admin' ? (
-                <span className="text-white/70 text-xs">G-Admin</span>
-              ) : null}
+                <span className="text-white/70 text-xs font-medium">G-Admin</span>
+              ) : (
+                <span className="text-white/70 text-xs font-medium">Utilisateur</span>
+              )}
             </div>
           </div>
         </div>
@@ -464,10 +484,18 @@ export function Chat({ session }: ChatProps) {
         onClose={() => setWebsiteImportOpen(false)}
       />
       {isSuperAdmin && (
-        <ErrorLogViewer
-          isOpen={isErrorLogOpen}
-          onClose={() => setErrorLogOpen(false)}
-        />
+        <>
+          <ErrorLogViewer
+            isOpen={isErrorLogOpen}
+            onClose={() => setErrorLogOpen(false)}
+          />
+          <CreateUserModal
+            isOpen={isCreateUserOpen}
+            onClose={() => setCreateUserOpen(false)}
+            onSuccess={() => {}}
+          />
+          <AddUserModal />
+        </>
       )}
     </div>
   );

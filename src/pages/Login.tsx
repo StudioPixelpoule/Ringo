@@ -25,10 +25,6 @@ export function Login() {
     setError(null);
 
     try {
-      // Clear any existing session data
-      sessionStorage.clear();
-      localStorage.clear();
-
       // Check network status first
       if (!navigator.onLine) {
         throw new Error('Pas de connexion internet');
@@ -51,6 +47,10 @@ export function Login() {
       if (profile && !profile.status) {
         throw new Error('Ce compte a été désactivé');
       }
+
+      // Clear any existing session
+      sessionStorage.clear();
+      localStorage.clear();
 
       // Then attempt to sign in
       const { data, error: signInError } = await supabase.auth.signInWithPassword({
