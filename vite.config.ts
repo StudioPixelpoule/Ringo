@@ -75,6 +75,13 @@ export default defineConfig({
           proxy.on('error', (err) => {
             console.error('OpenAI proxy error:', err);
           });
+          proxy.on('proxyReq', (proxyReq, req) => {
+            // Forward Authorization header
+            const authHeader = req.headers['authorization'];
+            if (authHeader) {
+              proxyReq.setHeader('Authorization', authHeader);
+            }
+          });
         }
       }
     }

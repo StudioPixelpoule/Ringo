@@ -137,7 +137,7 @@ export async function initializeAuthState(): Promise<void> {
     const timeoutPromise = new Promise<never>((_, reject) => {
       authTimeout = setTimeout(() => {
         reject(new Error('Auth initialization timeout'));
-      }, 15000); // Increased timeout to 15 seconds
+      }, 15000); // 15 second timeout
     });
 
     // Create new check promise with retries
@@ -160,7 +160,7 @@ export async function initializeAuthState(): Promise<void> {
     await handleError(error, {
       component: 'authManager',
       action: 'initializeAuthState',
-      type: AuthErrorType.SESSION_EXPIRED,
+      type: AuthErrorType.INITIALIZATION_FAILED,
       networkStatus: {
         online: navigator.onLine,
         connectionType: ('connection' in navigator) 

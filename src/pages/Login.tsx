@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Logo } from '../components/Logo';
@@ -7,93 +7,29 @@ import { IrsstLogo } from '../components/IrsstLogo';
 import { Loader2 } from 'lucide-react';
 import { config } from '../lib/config';
 import { handleError } from '../lib/errorHandler';
-import { AuthErrorType } from '../lib/errorTypes';
+import { AuthErrorType, NetworkErrorType } from '../lib/errorTypes';
 
 export function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isInitializing, setIsInitializing] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
 
-  useEffect(() => {
-    let mounted = true;
-    let timeoutId: NodeJS.Timeout;
-
-    const checkAuth = async () => {
-      try {
-        // Add timeout to prevent infinite loading
-        timeoutId = setTimeout(() => {
-          if (mounted) {
-            setIsInitializing(false);
-          }
-        }, 5000);
-
-        // Clear any stale auth state
-        await supabase.auth.signOut();
-        localStorage.clear();
-
-        // Check if there's an existing session
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        
-        if (sessionError) {
-          console.debug('Session check error:', sessionError);
-          throw sessionError;
-        }
-
-        if (session?.user) {
-          // Verify profile status
-          const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('status')
-            .eq('id', session.user.id)
-            .single();
-
-          if (profileError || !profile?.status) {
-            throw new Error('Profile inactive or not found');
-          }
-
-          // Valid session, redirect
-          const from = location.state?.from?.pathname || '/';
-          navigate(from, { replace: true });
-          return;
-        }
-
-        // No valid session, show login form
-        setIsInitializing(false);
-      } catch (error) {
-        console.debug('Auth check error:', error);
-        
-        // Clear any stale auth state
-        await supabase.auth.signOut();
-        localStorage.clear();
-        
-        setIsInitializing(false);
-      } finally {
-        if (mounted) {
-          clearTimeout(timeoutId);
-        }
-      }
-    };
-
-    checkAuth();
-
-    return () => {
-      mounted = false;
-      clearTimeout(timeoutId);
-    };
-  }, [navigate, location]);
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (loading) return;
+    if (loading || !email.trim() || !password) return;
 
     setLoading(true);
     setError(null);
 
     try {
+      // Check network status first
+      if (!navigator.onLine) {
+        throw new Error('Pas de connexion internet');
+      }
+
       // First check if user exists and is active
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
@@ -115,7 +51,7 @@ export function Login() {
       // Then attempt to sign in
       const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
-        password: password
+        password
       });
 
       if (signInError) {
@@ -135,46 +71,31 @@ export function Login() {
       // Get redirect path from location state or default to home
       const from = location.state?.from?.pathname || '/';
       navigate(from, { replace: true });
-    } catch (err) {
-      const error = await handleError(err, {
+    } catch (error) {
+      const appError = await handleError(error, {
         component: 'Login',
         action: 'handleLogin',
-        email
+        email: email.trim().toLowerCase(),
+        networkStatus: {
+          online: navigator.onLine,
+          connectionType: ('connection' in navigator) 
+            ? (navigator as any).connection?.effectiveType 
+            : 'unknown'
+        }
       });
 
-      setError(error.getUserMessage());
+      // Set user-friendly error message
+      if (appError.type === NetworkErrorType.OFFLINE) {
+        setError('Pas de connexion internet');
+      } else if (appError.type === AuthErrorType.INVALID_CREDENTIALS) {
+        setError('Email ou mot de passe incorrect');
+      } else {
+        setError(appError.getUserMessage());
+      }
     } finally {
       setLoading(false);
     }
   };
-
-  if (isInitializing) {
-    return (
-      <div className="min-h-screen bg-[#f15922] flex flex-col items-center justify-center p-4">
-        <div className="w-full max-w-md flex flex-col items-center">
-          <div className="flex flex-col items-center mb-8 animate-pulse">
-            <div className="w-24 h-24 flex items-center justify-center">
-              <Logo />
-            </div>
-            <h1 className="text-white text-4xl font-bold flex items-center">
-              RINGO
-              <sup className="ml-1 flex items-center gap-0.5 text-sm text-white">
-                <span>par</span>
-                <SmallLogo />
-              </sup>
-            </h1>
-            <div className="mt-4">
-              <IrsstLogo />
-            </div>
-          </div>
-          <div className="flex items-center justify-center text-white gap-2">
-            <Loader2 className="animate-spin" size={20} />
-            <span>Chargement...</span>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-[#f15922] flex flex-col items-center justify-center p-4">

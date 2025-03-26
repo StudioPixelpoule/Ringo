@@ -27,7 +27,7 @@ export class AppError extends Error {
     }
   }
 
-  // Méthodes utilitaires
+  // Utility methods
   public toJSON() {
     return {
       name: this.name,
@@ -52,13 +52,16 @@ export class AppError extends Error {
   }
 
   public isOperational(): boolean {
-    // Les erreurs opérationnelles sont celles qui peuvent être gérées
+    // Operational errors are those that can be handled
     return [
       'INVALID_TYPE',
       'SIZE_EXCEEDED',
       'REQUIRED_FIELD',
       'INVALID_FORMAT',
-      'UNIQUE_CONSTRAINT'
+      'UNIQUE_CONSTRAINT',
+      'SESSION_EXPIRED',
+      'NETWORK_ERROR',
+      'INITIALIZATION_FAILED'
     ].includes(this.type);
   }
 }

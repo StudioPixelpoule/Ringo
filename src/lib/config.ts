@@ -1,6 +1,5 @@
 import { AppError } from './AppError';
 import { logError } from './errorLogger';
-import { AuthErrorType } from './errorTypes';
 
 interface Config {
   supabase: {
@@ -27,7 +26,7 @@ interface Config {
 class ConfigError extends AppError {
   constructor(message: string) {
     super({
-      type: AuthErrorType.INITIALIZATION_FAILED,
+      type: 'CONFIG_ERROR',
       message,
       context: {
         component: 'config',
@@ -37,24 +36,28 @@ class ConfigError extends AppError {
   }
 }
 
+function getEnvVar(key: string, required: boolean = true): string {
+  const value = import.meta.env[key];
+  
+  if (!value && required) {
+    throw new ConfigError(`Required environment variable ${key} is missing`);
+  }
+  
+  return value || '';
+}
+
 function validateConfig(): Config {
   try {
+    // Determine environment
+    const mode = import.meta.env.MODE || 'development';
+    const isDev = mode === 'development';
+    const isProd = mode === 'production';
+    const isTest = mode === 'test';
+
     // Required variables in all environments
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-    const openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY;
-
-    if (!supabaseUrl) {
-      throw new ConfigError('VITE_SUPABASE_URL is required');
-    }
-
-    if (!supabaseAnonKey) {
-      throw new ConfigError('VITE_SUPABASE_ANON_KEY is required');
-    }
-
-    if (!openaiApiKey) {
-      throw new ConfigError('VITE_OPENAI_API_KEY is required');
-    }
+    const supabaseUrl = getEnvVar('VITE_SUPABASE_URL');
+    const supabaseAnonKey = getEnvVar('VITE_SUPABASE_ANON_KEY');
+    const openaiApiKey = getEnvVar('VITE_OPENAI_API_KEY');
 
     // Validate URLs
     try {
@@ -71,12 +74,6 @@ function validateConfig(): Config {
     if (!openaiApiKey.startsWith('sk-')) {
       throw new ConfigError('VITE_OPENAI_API_KEY must start with sk-');
     }
-
-    // Determine environment
-    const mode = import.meta.env.MODE || 'development';
-    const isDev = mode === 'development';
-    const isProd = mode === 'production';
-    const isTest = mode === 'test';
 
     // App version info
     const appVersion = '1.1.0';
@@ -114,7 +111,7 @@ function validateConfig(): Config {
 
     // Re-throw with safe message
     throw new ConfigError(
-      'Erreur de configuration. Veuillez vérifier les variables d\'environnement.'
+      'Application configuration error. Please check environment variables.'
     );
   }
 }

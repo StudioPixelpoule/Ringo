@@ -3,6 +3,8 @@ import { config } from './config';
 import { logError } from './errorLogger';
 import { handleError } from './errorHandler';
 import { AuthErrorType } from './errorTypes';
+import { supabase } from './supabase';
+import { initializeAuthState } from './authManager';
 
 export async function processDocument(
   file: File,
@@ -15,17 +17,53 @@ export async function processDocument(
       message: 'Préparation du document...'
     });
 
-    // Process based on file type
+    // Validate auth state first
+    try {
+      await initializeAuthState();
+    } catch (error) {
+      throw await handleError(error, {
+        component: 'documentProcessor',
+        action: 'validateAuth',
+        type: AuthErrorType.SESSION_EXPIRED
+      });
+    }
+
     const extension = file.name.split('.').pop()?.toLowerCase();
     let content: string;
 
-    // Check auth state first
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    if (sessionError || !session) {
-      throw new Error('Session expirée, veuillez vous reconnecter');
+    // Handle audio files
+    if (file.type.startsWith('audio/')) {
+      content = JSON.stringify({
+        type: 'audio',
+        fileName: file.name,
+        fileType: file.type,
+        fileSize: file.size,
+        duration: 'unknown',
+        processingDate: new Date().toISOString(),
+        metadata: {
+          format: extension,
+          source: 'upload'
+        }
+      }, null, 2);
+
+      options?.onProgress?.({
+        stage: 'complete',
+        progress: 100,
+        message: 'Traitement audio terminé'
+      });
+
+      return {
+        content,
+        metadata: {
+          fileName: file.name,
+          fileType: file.type,
+          size: file.size,
+          timestamp: new Date().toISOString()
+        }
+      };
     }
 
-    // Process based on file type
+    // Process other file types
     if (extension === 'pdf') {
       const arrayBuffer = await file.arrayBuffer();
       content = await processPDF(arrayBuffer, options);
@@ -84,6 +122,15 @@ export async function processDocument(
       }
     };
   } catch (error) {
+    // Log error with context
+    await logError(error, {
+      component: 'documentProcessor',
+      action: 'processDocument',
+      fileType: file.type,
+      fileName: file.name,
+      fileSize: file.size
+    });
+
     // Handle auth errors specifically
     if (error instanceof Error && 
         (error.message.includes('JWT expired') || 
@@ -96,14 +143,6 @@ export async function processDocument(
       });
     }
 
-    // Log and handle other errors
-    await logError(error, {
-      component: 'documentProcessor',
-      action: 'processDocument',
-      fileType: file.type,
-      fileName: file.name,
-      fileSize: file.size
-    });
     throw error;
   }
 }

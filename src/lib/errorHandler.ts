@@ -69,7 +69,7 @@ function identifyErrorType(error: unknown): AppError {
 
   // Default error
   return new AppError({
-    type: AuthErrorType.SESSION_EXPIRED,
+    type: NetworkErrorType.REQUEST_FAILED,
     originalError
   });
 }

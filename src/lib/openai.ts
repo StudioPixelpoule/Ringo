@@ -3,6 +3,7 @@ import { config } from './config';
 
 const openai = new OpenAI({
   apiKey: config.openai.apiKey,
+  baseURL: '/api/v1', // Use local proxy
   dangerouslyAllowBrowser: true
 });
 
@@ -19,29 +20,7 @@ Pour une meilleure lisibilité, structure tes réponses avec :
 - Des sous-titres en utilisant "###" pour les sous-sections
 - Des points importants en **gras**
 - Des listes à puces pour énumérer des éléments
-- Des sauts de ligne pour aérer le texte
-
-Pour les documents textuels :
-- Analyse le contenu et la structure
-- Identifie les sections principales
-- Met en évidence les informations importantes
-- Propose une synthèse claire
-
-Pour l'analyse croisée des documents :
-- Compare systématiquement les contenus
-- Identifie les points communs et les différences
-- Relève les éventuelles contradictions
-- Montre comment les documents se complètent
-- Propose une synthèse globale
-
-À la fin de chaque réponse, propose des suggestions pour approfondir l'analyse :
-
-## Pour approfondir...
-- "Souhaitez-vous des détails sur un point particulier ?"
-- "Je peux analyser plus en détail certains aspects, lesquels vous intéressent ?"
-- "Voulez-vous explorer d'autres perspectives ?"
-
-Sois concis et précis dans tes réponses.`;
+- Des sauts de ligne pour aérer le texte`;
 
 // Constants for token limits
 const MAX_TOKENS = 128000; // GPT-4 Turbo context window

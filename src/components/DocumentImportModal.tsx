@@ -1,8 +1,9 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, FileText, FolderPlus, ChevronRight, Edit2, Trash2, Loader2, CheckSquare, Square } from 'lucide-react';
+import { X, FileText, FolderPlus, ChevronRight, Edit2, Trash2, Send, Loader2, CheckSquare, Square } from 'lucide-react';
 import { useDocumentStore, Document, Folder } from '../lib/documentStore';
+import { useConversationStore } from '../lib/conversationStore';
 import { supabase } from '../lib/supabase';
 import { FileIcon } from './FileIcon';
 import { logError } from '../lib/errorLogger';
@@ -524,7 +525,12 @@ export function DocumentImportModal() {
 
     } catch (error) {
       console.error('Overall error:', error);
-      await logError(error instanceof Error ? error : new Error(String(error)));
+      await logError(error instanceof Error ? error : new Error(String(error)), {
+        component: 'DocumentImportModal',
+        action: 'handleUpload',
+        fileType: selectedFile.type,
+        fileName: selectedFile.name
+      });
       setProcessingStatus({
         isProcessing: false,
         progress: 0,
@@ -708,7 +714,7 @@ export function DocumentImportModal() {
                   </>
                 ) : (
                   <>
-                    <FileText size={20} />
+                    <Send size={20} />
                     Téléverser le document
                   </>
                 )}
