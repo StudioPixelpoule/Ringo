@@ -22,16 +22,25 @@ export function AuthGuard({ children, session }: AuthGuardProps) {
   const setUserRole = useUserStore(state => state.setUserRole);
 
   useEffect(() => {
+    let mounted = true;
+    let timeoutId: NodeJS.Timeout;
+
     const checkAuth = async () => {
       try {
+        // Add timeout to prevent infinite loading
+        timeoutId = setTimeout(() => {
+          if (mounted) {
+            setLoading(false);
+            setIsAuthenticated(false);
+          }
+        }, 5000);
+
         // First validate session
         const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
         if (sessionError) throw sessionError;
         
         if (!currentSession) {
-          setIsAuthenticated(false);
-          setLoading(false);
-          return;
+          throw new Error('No session found');
         }
 
         // Then check profile status and role
@@ -42,22 +51,28 @@ export function AuthGuard({ children, session }: AuthGuardProps) {
           .single();
 
         if (profileError) {
-          console.error('Error fetching profile:', profileError);
+          if (profileError.code === 'PGRST301' || profileError.code === '401') {
+            throw new Error('Invalid session');
+          }
           throw profileError;
         }
 
         if (!profile || !profile.status) {
-          console.warn('Profile inactive or not found');
-          await supabase.auth.signOut();
-          setIsAuthenticated(false);
-          setLoading(false);
-          return;
+          throw new Error('Profile inactive or not found');
         }
 
-        // Set user role in global store
-        setUserRole(profile.role);
-        setIsAuthenticated(true);
+        // Clear timeout since auth succeeded
+        clearTimeout(timeoutId);
+
+        if (mounted) {
+          // Set user role in global store
+          setUserRole(profile.role);
+          setIsAuthenticated(true);
+          setLoading(false);
+        }
       } catch (error) {
+        if (!mounted) return;
+
         await handleError(error, {
           component: 'AuthGuard',
           action: 'checkAuth',
@@ -66,19 +81,24 @@ export function AuthGuard({ children, session }: AuthGuardProps) {
 
         // Clear auth state on critical errors
         if (error instanceof Error && 
-            (error.message.includes('Session expired') || 
-             error.message.includes('JWT expired') ||
-             error.message.includes('Invalid JWT'))) {
+            (error.message.includes('No session found') ||
+             error.message.includes('Invalid session') ||
+             error.message.includes('Profile inactive'))) {
           await supabase.auth.signOut();
           localStorage.clear();
         }
+
         setIsAuthenticated(false);
-      } finally {
         setLoading(false);
       }
     };
 
     checkAuth();
+
+    return () => {
+      mounted = false;
+      clearTimeout(timeoutId);
+    };
   }, [session, setUserRole]);
 
   if (loading) {

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, UserPlus, Eye, EyeOff, RefreshCw } from 'lucide-react';
-import { supabase, supabaseAdmin } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
+import { adminUtils } from '../lib/supabase';
 
 interface CreateUserModalProps {
   isOpen: boolean;
@@ -60,25 +61,23 @@ export function CreateUserModal({ isOpen, onClose, onSuccess }: CreateUserModalP
         throw new Error('Un utilisateur avec cet email existe déjà');
       }
 
-      // Create the user using admin client
-      const { data: authData, error: signUpError } = await supabaseAdmin.auth.admin.createUser({
-        email: email.toLowerCase(),
-        password: password,
-        email_confirm: true,
-        user_metadata: { role }
-      });
+      // Create the user using admin utils
+      const { user } = await adminUtils.createUser(
+        email.toLowerCase(),
+        password,
+        role
+      );
 
-      if (signUpError) throw signUpError;
-      if (!authData.user) throw new Error('Erreur lors de la création du compte');
+      if (!user) throw new Error('Erreur lors de la création du compte');
 
       // Update the profile
-      const { error: updateError } = await supabaseAdmin
+      const { error: updateError } = await supabase
         .from('profiles')
         .update({ 
           role,
           status: true 
         })
-        .eq('id', authData.user.id);
+        .eq('id', user.id);
 
       if (updateError) throw updateError;
 
@@ -118,7 +117,7 @@ export function CreateUserModal({ isOpen, onClose, onSuccess }: CreateUserModalP
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="p-6">
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
               {error}
@@ -198,19 +197,19 @@ export function CreateUserModal({ isOpen, onClose, onSuccess }: CreateUserModalP
             </select>
           </div>
 
-          <div className="flex justify-end gap-3 pt-4">
+          <div className="mt-6 flex justify-end gap-3">
             <button
               type="button"
               onClick={onClose}
               disabled={loading}
-              className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-400 disabled:opacity-50"
+              className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-400 disabled:opacity-50 transition-colors"
             >
               Annuler
             </button>
             <button
               type="submit"
               disabled={loading || !email.trim() || !password}
-              className="px-4 py-2 bg-[#f15922] text-white rounded-lg hover:bg-[#f15922]/90 focus:outline-none focus:ring-2 focus:ring-[#f15922] disabled:opacity-50 flex items-center gap-2"
+              className="px-4 py-2 bg-[#f15922] text-white rounded-lg hover:bg-[#f15922]/90 focus:outline-none focus:ring-2 focus:ring-[#f15922] disabled:opacity-50 transition-colors flex items-center gap-2"
             >
               {loading ? (
                 <>

@@ -58,14 +58,7 @@ function validateConfig(): Config {
     // Required variables in all environments
     const supabaseUrl = getEnvVar('VITE_SUPABASE_URL');
     const supabaseAnonKey = getEnvVar('VITE_SUPABASE_ANON_KEY');
-
-    // Service role key only required in production
-    const supabaseServiceKey = getEnvVar(
-      'VITE_SUPABASE_SERVICE_ROLE_KEY',
-      isProd
-    );
-
-    // OpenAI key required in all environments
+    const supabaseServiceKey = getEnvVar('VITE_SUPABASE_SERVICE_ROLE_KEY');
     const openaiApiKey = getEnvVar('VITE_OPENAI_API_KEY');
 
     // Validate URLs
@@ -76,11 +69,11 @@ function validateConfig(): Config {
     }
 
     // Validate key formats
-    if (!/^[a-zA-Z0-9._-]+$/.test(supabaseAnonKey)) {
+    if (!/^[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*$/.test(supabaseAnonKey)) {
       throw new ConfigError('VITE_SUPABASE_ANON_KEY has invalid format');
     }
 
-    if (isProd && !/^[a-zA-Z0-9._-]+$/.test(supabaseServiceKey)) {
+    if (!/^[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*$/.test(supabaseServiceKey)) {
       throw new ConfigError('VITE_SUPABASE_SERVICE_ROLE_KEY has invalid format');
     }
 

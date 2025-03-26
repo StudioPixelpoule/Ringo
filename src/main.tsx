@@ -8,12 +8,14 @@ import { config } from './lib/config';
 // Validate environment variables before mounting app
 try {
   // Config validation happens on import
-  console.log('Environment validated, config loaded:', {
-    supabaseUrl: config.supabase.url,
-    hasAnonKey: !!config.supabase.anonKey,
-    hasServiceKey: !!config.supabase.serviceKey,
-    hasOpenAIKey: !!config.openai.apiKey
-  });
+  if (process.env.NODE_ENV === 'development') {
+    console.debug('Environment validated, config loaded:', {
+      supabaseUrl: config.supabase.url,
+      hasAnonKey: !!config.supabase.anonKey,
+      hasServiceKey: !!config.supabase.serviceKey,
+      hasOpenAIKey: !!config.openai.apiKey
+    });
+  }
 
   const rootElement = document.getElementById('root');
   if (!rootElement) throw new Error('Root element not found');

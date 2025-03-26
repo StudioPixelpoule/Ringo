@@ -43,14 +43,13 @@ export default defineConfig({
   },
   server: {
     host: true,
-    cors: {
-      origin: '*',
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Client-Info', 'apikey'],
-      credentials: true
-    },
+    port: 5173,
+    strictPort: true,
+    cors: true,
     headers: {
-      'Cache-Control': 'no-store',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, apikey',
       'Cross-Origin-Opener-Policy': 'same-origin',
       'Cross-Origin-Embedder-Policy': 'require-corp'
     },

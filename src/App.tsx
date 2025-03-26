@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Session } from '@supabase/supabase-js';
 import { Login } from './pages/Login';
@@ -6,12 +6,14 @@ import { Chat } from './pages/Chat';
 import { AcceptInvitation } from './pages/AcceptInvitation';
 import { AuthGuard } from './components/AuthGuard';
 import { supabase } from './lib/supabase';
+import { useModalStore } from './lib/modalStore';
 
 function App() {
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [session, setSession] = React.useState<Session | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const closeAllModals = useModalStore(state => state.closeAll);
   
-  useEffect(() => {
+  React.useEffect(() => {
     // Check session on startup
     const checkSession = async () => {
       try {
@@ -35,6 +37,7 @@ function App() {
       if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
         setSession(null);
         localStorage.clear();
+        closeAllModals();
       } else {
         setSession(session);
       }
@@ -45,7 +48,7 @@ function App() {
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [closeAllModals]);
 
   if (loading) {
     return (
@@ -56,7 +59,7 @@ function App() {
   }
 
   return (
-    <BrowserRouter>
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
         <Route
           path="/login"

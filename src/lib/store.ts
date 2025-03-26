@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { supabase, supabaseAdmin } from './supabase';
+import { supabase, adminUtils } from './supabase';
 import { handleStoreError } from './errorHandler';
 
 export interface Profile {
@@ -89,22 +89,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
   deleteUser: async (id: string) => {
     set({ loading: true, error: null });
     try {
-      // Delete user data using RPC function
-      const { error: rpcError } = await supabase
-        .rpc('delete_user_data', { user_id_param: id });
-
-      if (rpcError) {
-        if (rpcError.message.includes('Cannot delete the last super admin')) {
-          throw new Error('Impossible de supprimer le dernier super administrateur');
-        }
-        throw rpcError;
-      }
-
-      // Delete auth user using admin client
-      const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(id);
-      if (authError) throw authError;
-
-      // Update local state
+      await adminUtils.deleteUser(id);
       const users = get().users;
       set({ users: users.filter(u => u.id !== id) });
     } catch (error) {
