@@ -30,31 +30,39 @@ Pour une meilleure lisibilité, structure tes réponses avec :
 - Des sauts de ligne pour aérer le texte
 
 Pour les documents textuels :
-- Analyse le contenu et la structure
-- Identifie les sections principales
-- Met en évidence les informations importantes
-- Propose une synthèse claire
+- Analyse le contenu et la structure en profondeur
+- Identifie et explique les sections principales
+- Met en évidence les informations critiques
+- Propose une synthèse détaillée et argumentée
+- Fournis des exemples concrets tirés des documents
 
 Pour l'analyse croisée des documents :
-- Compare systématiquement les contenus
-- Identifie les points communs et les différences
-- Relève les éventuelles contradictions
-- Montre comment les documents se complètent
-- Propose une synthèse globale
+- Compare systématiquement les contenus de manière approfondie
+- Identifie et explique les points communs et les différences
+- Relève et analyse les éventuelles contradictions
+- Montre comment les documents se complètent et s'enrichissent
+- Propose une synthèse globale intégrant tous les aspects
+
+Pour chaque point important :
+- Cite les passages pertinents des documents
+- Explique le contexte et les implications
+- Fournis une analyse détaillée
+- Propose des recommandations concrètes
 
 À la fin de chaque réponse, propose des suggestions pour approfondir l'analyse :
 
 ## Pour approfondir...
-- "Souhaitez-vous des détails sur un point particulier ?"
-- "Je peux analyser plus en détail certains aspects, lesquels vous intéressent ?"
-- "Voulez-vous explorer d'autres perspectives ?"
+- "Souhaitez-vous des détails supplémentaires sur certains points ?"
+- "Je peux analyser plus en profondeur certains aspects, lesquels vous intéressent ?"
+- "Voulez-vous explorer d'autres perspectives ou angles d'analyse ?"
 
-Sois concis et précis dans tes réponses.`;
+Sois exhaustif et précis dans tes réponses tout en maintenant une structure claire.`;
 
 // Constants for token limits
 const MAX_TOKENS = 128000; // GPT-4 Turbo context window
-const MAX_TOKENS_PER_DOC = 32000;
-const MAX_TOKENS_PER_CHUNK = 8000;
+const MAX_TOKENS_PER_DOC = Math.floor(MAX_TOKENS * 0.7 / 10); // Allow up to 10 docs
+const MAX_SYSTEM_TOKENS = 2000;
+const MAX_HISTORY_TOKENS = 4000;
 
 function estimateTokens(text: string): number {
   // GPT models use ~4 characters per token on average
@@ -87,54 +95,130 @@ function truncateText(text: string, maxTokens: number): string {
 function findRelevantContent(query: string, content: string, maxTokens: number): string {
   const paragraphs = content.split('\n\n');
   
+  // Score paragraphs based on query relevance
   const scoredParagraphs = paragraphs.map(p => {
-    const score = query.toLowerCase().split(/\s+/).reduce((score, word) => 
-      score + (p.toLowerCase().includes(word) ? 1 : 0), 0
-    );
-    return { text: p, score };
+    // Split query into words and phrases
+    const queryTerms = [
+      ...query.toLowerCase().split(/\s+/),
+      ...query.toLowerCase().match(/".+?"/g)?.map(m => m.slice(1, -1)) || []
+    ];
+
+    // Calculate base score from term matches
+    const baseScore = queryTerms.reduce((score, term) => {
+      const regex = new RegExp(term, 'gi');
+      const matches = (p.match(regex) || []).length;
+      return score + matches;
+    }, 0);
+
+    // Apply content-based scoring factors
+    const hasHeader = /^#{1,3}\s/.test(p);
+    const hasNumbers = /\d+/.test(p);
+    const hasKeyPhrases = /(important|clé|critique|essentiel|conclusion|recommand|analyse|résultat)/i.test(p);
+    const isShortParagraph = p.length < 200; // Prefer concise paragraphs
+
+    // Calculate final score with weights
+    let finalScore = baseScore;
+    if (hasHeader) finalScore *= 1.5;
+    if (hasNumbers) finalScore *= 1.2;
+    if (hasKeyPhrases) finalScore *= 1.3;
+    if (isShortParagraph) finalScore *= 1.1;
+
+    return { text: p, score: finalScore };
   });
 
+  // Sort by relevance score
   scoredParagraphs.sort((a, b) => b.score - a.score);
 
+  // Build context with most relevant content
   let result = '';
   let tokens = 0;
+  let contextAdded = false;
 
+  // Always include high-scoring paragraphs
   for (const para of scoredParagraphs) {
+    if (para.score === 0) continue;
+    
     const paraTokens = estimateTokens(para.text);
-    if (tokens + paraTokens > maxTokens) break;
+    if (tokens + paraTokens > maxTokens) {
+      if (!contextAdded && result === '') {
+        result = para.text;
+      }
+      break;
+    }
+    
     result += (result ? '\n\n' : '') + para.text;
     tokens += paraTokens;
+    contextAdded = true;
+  }
+
+  // If no relevant content found, include introduction and conclusion
+  if (!result) {
+    const intro = paragraphs[0] || '';
+    const conclusion = paragraphs[paragraphs.length - 1] || '';
+    result = [intro, conclusion].filter(Boolean).join('\n\n');
+    if (estimateTokens(result) > maxTokens) {
+      result = truncateText(result, maxTokens);
+    }
   }
 
   return result;
 }
 
-function prepareMessages(messages: ChatMessage[], documentContent?: string): ChatMessage[] {
-  const MAX_SYSTEM_TOKENS = 2000;
-  const MAX_HISTORY_TOKENS = 4000;
-  const MAX_DOCUMENT_TOKENS = MAX_TOKENS - MAX_SYSTEM_TOKENS - MAX_HISTORY_TOKENS;
+function prepareDocumentContent(documents: string[], query: string): string {
+  // Calculate token budget per document
+  const maxTokensPerDoc = Math.floor(
+    (MAX_TOKENS - MAX_SYSTEM_TOKENS - MAX_HISTORY_TOKENS) / documents.length
+  );
+  
+  return documents.map((doc, index) => {
+    // Find relevant content for each document
+    const relevantContent = findRelevantContent(query, doc, maxTokensPerDoc);
+    
+    // Add document separator and metadata
+    return `
+====== DOCUMENT ${index + 1} ======
 
+${relevantContent}
+
+====== FIN DOCUMENT ${index + 1} ======
+
+INSTRUCTIONS: Le texte ci-dessus contient le contenu pertinent du document ${index + 1}. Utilise ce contenu pour répondre de manière détaillée à la question de l'utilisateur.
+`;
+  }).join('\n\n---\n\n');
+}
+
+function prepareMessages(messages: ChatMessage[], documentContent?: string): ChatMessage[] {
   const preparedMessages: ChatMessage[] = [
     { role: 'system', content: SYSTEM_PROMPT }
   ];
 
   if (documentContent) {
+    // Get the user's latest query
+    const latestQuery = messages[messages.length - 1]?.content || '';
+
     preparedMessages.push({
       role: 'system',
-      content: `Tu as reçu un ou plusieurs documents à analyser. Tu dois utiliser uniquement ces documents pour répondre aux questions de l'utilisateur. Si tu ne trouves pas l'information dans les documents, indique-le clairement.`
+      content: `Tu as reçu plusieurs documents à analyser. Tu dois :
+1. Analyser en profondeur le contenu de chaque document
+2. Identifier les points clés et les mettre en évidence
+3. Comparer et contraster les informations entre les documents
+4. Fournir une réponse détaillée et structurée
+5. Citer des passages pertinents pour appuyer ton analyse
+
+Si tu ne trouves pas l'information dans les documents, indique-le clairement.`
     });
 
     preparedMessages.push({
       role: 'system',
-      content: truncateText(`DOCUMENTS À ANALYSER:\n\n${documentContent}`, MAX_DOCUMENT_TOKENS)
+      content: prepareDocumentContent(documentContent.split('---\n\n'), latestQuery)
     });
   }
 
-  // Add conversation history
-  const relevantMessages = [...messages];
+  // Add recent conversation history for context
+  const historyMessages = messages.slice(-5); // Keep last 5 messages
   let historyTokens = 0;
 
-  for (const message of relevantMessages) {
+  for (const message of historyMessages) {
     const tokens = estimateTokens(message.content);
     if (historyTokens + tokens > MAX_HISTORY_TOKENS) break;
     preparedMessages.push(message);
@@ -238,7 +322,7 @@ export async function generateChatResponseStreaming(
       const content = chunk.choices[0]?.delta?.content || '';
       if (!content) continue;
 
-      // Détecter et gérer les éléments de formatage
+      // Detect and handle formatting elements
       if (content.includes('```')) {
         pendingFormatting.codeBlock = !pendingFormatting.codeBlock;
       }
@@ -265,10 +349,10 @@ export async function generateChatResponseStreaming(
         pendingFormatting.link = false;
       }
 
-      // Ajouter le contenu au texte complet
+      // Add content to full response
       fullResponse += content;
 
-      // Envoyer le chunk avec le formatage préservé
+      // Send chunk with formatting preserved
       onChunk(content);
     }
 

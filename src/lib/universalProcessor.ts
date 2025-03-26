@@ -1,6 +1,8 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import { createWorker } from 'tesseract.js';
 import mammoth from 'mammoth';
+import * as XLSX from 'xlsx';
+import Papa from 'papaparse';
 import { processAudioFile } from './audioProcessor';
 
 // Initialize PDF.js worker
@@ -38,10 +40,16 @@ export interface ProcessingResult {
 }
 
 interface ProcessingProgress {
-  stage: 'upload' | 'processing' | 'complete';
+  stage: 'upload' | 'processing' | 'extraction' | 'complete';
   progress: number;
   message: string;
   canCancel?: boolean;
+}
+
+interface ProcessingOptions {
+  onProgress?: (progress: ProcessingProgress) => void;
+  signal?: AbortSignal;
+  openaiApiKey?: string;
 }
 
 // Utilitaires
@@ -84,347 +92,484 @@ async function optimizeImageForOCR(imageData: ImageData): Promise<ImageData> {
   return new ImageData(newData, width, height);
 }
 
-// Traitement des documents PDF
-async function processPDFDocument(
-  file: File,
-  onProgress?: (progress: ProcessingProgress) => void,
-  signal?: AbortSignal
-): Promise<ProcessingResult> {
-  if (signal?.aborted) {
-    throw new Error('Traitement annulé');
-  }
-
-  onProgress?.({
-    stage: 'processing',
-    progress: 10,
-    message: 'Analyse du document PDF...',
-    canCancel: true
-  });
-
-  const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({
-    data: arrayBuffer,
-    useWorkerFetch: true,
-    isEvalSupported: true,
-    useSystemFonts: true
-  }).promise;
-  
-  const metadata = await pdf.getMetadata();
-
-  const pages: Array<{
-    text: string;
-    structure: {
-      headings: string[];
-      paragraphs: string[];
-    };
-  }> = [];
-
-  let totalConfidence = 0;
-
-  for (let i = 1; i <= pdf.numPages; i++) {
-    if (signal?.aborted) {
-      throw new Error('Traitement annulé');
-    }
-
-    onProgress?.({
-      stage: 'processing',
-      progress: 10 + (i / pdf.numPages) * 80,
-      message: `Traitement de la page ${i}/${pdf.numPages}...`,
-      canCancel: true
-    });
-
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    let pageText = '';
-    const structure = {
-      headings: [] as string[],
-      paragraphs: [] as string[]
-    };
-
-    // Extract text content
-    for (const item of content.items as any[]) {
-      const text = item.str.trim();
-      if (!text) continue;
-
-      // Improved heading detection
-      const isHeading = 
-        item.fontName?.toLowerCase().includes('bold') ||
-        item.fontSize > 12 ||
-        /^[A-Z0-9\s]{10,}$/.test(text) ||
-        /^[\d.]+\s+[A-Z]/.test(text) || // Numbered headings
-        text.length < 50 && text.toUpperCase() === text; // Short all-caps lines
-
-      if (isHeading) {
-        structure.headings.push(text);
-      } else {
-        structure.paragraphs.push(text);
-      }
-
-      pageText += text + ' ';
-    }
-
-    // Perform OCR if needed
-    if (pageText.length < 200 || /image|figure|tableau/i.test(pageText)) {
-      try {
-        const scale = 2.0; // Higher resolution for better OCR
-        const viewport = page.getViewport({ scale });
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d', {
-          willReadFrequently: true,
-          alpha: false
-        });
-
-        if (context) {
-          canvas.width = viewport.width;
-          canvas.height = viewport.height;
-
-          // Clear canvas with white background
-          context.fillStyle = 'white';
-          context.fillRect(0, 0, canvas.width, canvas.height);
-
-          // Render PDF page
-          await page.render({
-            canvasContext: context,
-            viewport,
-            background: 'white'
-          }).promise;
-
-          // Get image data and optimize for OCR
-          const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-          const optimizedImageData = await optimizeImageForOCR(imageData);
-          
-          // Put optimized image data back to canvas
-          const optimizedCanvas = document.createElement('canvas');
-          optimizedCanvas.width = imageData.width;
-          optimizedCanvas.height = imageData.height;
-          const optimizedContext = optimizedCanvas.getContext('2d');
-          
-          if (optimizedContext) {
-            optimizedContext.putImageData(optimizedImageData, 0, 0);
-
-            // Perform OCR
-            const worker = await createWorker();
-            await worker.loadLanguage('fra+eng');
-            await worker.initialize('fra+eng');
-            const { data: ocrResult } = await worker.recognize(optimizedCanvas);
-            await worker.terminate();
-
-            if (ocrResult.text.length > pageText.length * 0.5) {
-              const cleanedOCRText = cleanText(ocrResult.text);
-              
-              // Merge OCR text with existing text
-              const combinedText = new Set([
-                ...pageText.split(/[.!?]+/).map(s => s.trim()),
-                ...cleanedOCRText.split(/[.!?]+/).map(s => s.trim())
-              ]);
-              
-              pageText = Array.from(combinedText)
-                .filter(s => s.length > 10) // Remove fragments
-                .join('. ');
-              
-              totalConfidence += ocrResult.confidence / 100;
-            } else {
-              totalConfidence += pageText.length > 0 ? 1 : 0.5;
-            }
-          }
-        }
-      } catch (ocrError) {
-        console.warn(`OCR failed for page ${i}:`, ocrError);
-        totalConfidence += pageText.length > 0 ? 0.7 : 0.3;
-      }
-    } else {
-      totalConfidence += 1;
-    }
-
-    pages.push({
-      text: cleanText(pageText),
-      structure
-    });
-  }
-
-  onProgress?.({
-    stage: 'processing',
-    progress: 90,
-    message: 'Finalisation du traitement...',
-    canCancel: true
-  });
-
-  // Improved structure extraction
-  const sections = pages.flatMap((page, index) => {
-    const sections: Array<{
-      heading?: string;
-      content: string;
-      pageNumber: number;
-    }> = [];
-
-    let currentHeading = '';
-    let currentContent: string[] = [];
-
-    // Process headings and content
-    page.structure.headings.forEach((heading, i) => {
-      if (currentHeading) {
-        sections.push({
-          heading: currentHeading,
-          content: currentContent.join('\n'),
-          pageNumber: index + 1
-        });
-      }
-      currentHeading = heading;
-      currentContent = [page.structure.paragraphs[i] || ''];
-    });
-
-    // Add remaining content
-    if (currentHeading || currentContent.length > 0) {
-      sections.push({
-        heading: currentHeading,
-        content: currentContent.join('\n'),
-        pageNumber: index + 1
+async function processDataFile(file: File, options?: ProcessingOptions): Promise<ProcessingResult> {
+  try {
+    if (options?.onProgress) {
+      options.onProgress({
+        stage: 'processing',
+        progress: 10,
+        message: 'Lecture du fichier de données...',
+        canCancel: true
       });
     }
 
-    return sections;
-  });
+    let data: any;
+    const extension = file.name.split('.').pop()?.toLowerCase();
 
-  // Calculate final confidence score
-  const confidence = Math.min(1, totalConfidence / pdf.numPages);
-
-  return {
-    content: pages.map(p => p.text).join('\n\n'),
-    metadata: {
-      title: metadata.info?.Title || sections[0]?.heading,
-      author: metadata.info?.Author,
-      date: metadata.info?.CreationDate,
-      language: detectLanguage(pages[0]?.text || ''),
-      fileType: file.type,
-      fileName: file.name,
-      pageCount: pdf.numPages
-    },
-    structure: {
-      title: sections[0]?.heading,
-      abstract: pages[0]?.structure.paragraphs[0],
-      sections
-    },
-    confidence,
-    processingDate: new Date().toISOString()
-  };
-}
-
-// Traitement des documents Word
-async function processWordDocument(
-  file: File,
-  onProgress?: (progress: ProcessingProgress) => void,
-  signal?: AbortSignal
-): Promise<ProcessingResult> {
-  if (signal?.aborted) {
-    throw new Error('Traitement annulé');
-  }
-
-  onProgress?.({
-    stage: 'processing',
-    progress: 30,
-    message: 'Extraction du contenu Word...',
-    canCancel: true
-  });
-
-  const arrayBuffer = await file.arrayBuffer();
-  const result = await mammoth.extractRawText({ arrayBuffer });
-  const text = cleanText(result.value);
-
-  // Analyse de la structure
-  const lines = text.split('\n');
-  const sections: Array<{
-    heading?: string;
-    content: string;
-  }> = [];
-
-  let currentSection = { content: '' };
-  let abstract = '';
-
-  lines.forEach(line => {
-    const trimmedLine = line.trim();
-    if (!trimmedLine) return;
-
-    if (
-      trimmedLine.toUpperCase() === trimmedLine ||
-      /^\d+[.\s]/.test(trimmedLine)
-    ) {
-      if (currentSection.content) {
-        sections.push({ ...currentSection });
+    // Handle different file types
+    if (extension === 'json') {
+      const text = await file.text();
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        throw new Error('Le fichier JSON est invalide');
       }
-      currentSection = {
-        heading: trimmedLine,
-        content: ''
-      };
-    } else {
-      if (!abstract && !currentSection.heading) {
-        abstract = trimmedLine;
-      } else {
-        currentSection.content += (currentSection.content ? '\n' : '') + trimmedLine;
+    } else if (extension === 'csv') {
+      const text = await file.text();
+      const parseResult = await new Promise((resolve, reject) => {
+        Papa.parse(text, {
+          header: true,
+          dynamicTyping: true,
+          skipEmptyLines: true,
+          delimitersToGuess: [',', ';', '\t', '|'],
+          complete: resolve,
+          error: reject
+        });
+      });
+
+      if ('errors' in parseResult && parseResult.errors?.length > 0) {
+        console.warn('CSV parsing warnings:', parseResult.errors);
+      }
+
+      data = parseResult.data;
+    } else if (extension === 'xlsx' || extension === 'xls') {
+      if (options?.onProgress) {
+        options.onProgress({
+          stage: 'processing',
+          progress: 40,
+          message: 'Traitement du fichier Excel...',
+          canCancel: true
+        });
+      }
+      
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, {
+        type: 'array',
+        cellDates: true,
+        cellText: true
+      });
+      
+      // Extract all sheets
+      data = {};
+      workbook.SheetNames.forEach(sheetName => {
+        const worksheet = workbook.Sheets[sheetName];
+        // Convert each sheet to JSON
+        data[sheetName] = XLSX.utils.sheet_to_json(worksheet, {
+          defval: '',
+          raw: false
+        });
+      });
+      
+      // If no data was extracted
+      if (!data || Object.keys(data).length === 0) {
+        throw new Error('Aucune donnée trouvée dans le fichier Excel');
+      }
+      
+      if (options?.onProgress) {
+        options.onProgress({
+          stage: 'processing',
+          progress: 60,
+          message: 'Données Excel extraites avec succès',
+          canCancel: true
+        });
       }
     }
-  });
 
-  if (currentSection.content) {
-    sections.push(currentSection);
-  }
+    if (options?.onProgress) {
+      options.onProgress({
+        stage: 'processing',
+        progress: 70,
+        message: 'Structuration des données...',
+        canCancel: true
+      });
+    }
 
-  return {
-    content: text,
-    metadata: {
-      title: sections[0]?.heading,
-      fileType: file.type,
+    // Format data for storage
+    const formattedData = {
+      type: extension,
       fileName: file.name,
-      language: detectLanguage(text)
-    },
-    structure: {
-      title: sections[0]?.heading,
-      abstract,
-      sections
-    },
-    confidence: 1,
-    processingDate: new Date().toISOString()
-  };
+      data,
+      metadata: {
+        rowCount: Array.isArray(data) ? data.length : 
+                 typeof data === 'object' ? Object.values(data).reduce((sum: number, sheet: any[]) => sum + sheet.length, 0) : 1,
+        fields: Array.isArray(data) ? Object.keys(data[0] || {}) :
+                typeof data === 'object' ? Object.keys(data).map(sheet => ({
+                  sheet,
+                  fields: Object.keys(data[sheet][0] || {})
+                })) : Object.keys(data || {}),
+        size: file.size,
+        sheets: extension === 'xlsx' || extension === 'xls' ? Object.keys(data) : undefined
+      },
+      processingDate: new Date().toISOString()
+    };
+
+    if (options?.onProgress) {
+      options.onProgress({
+        stage: 'complete',
+        progress: 100,
+        message: 'Traitement terminé',
+        canCancel: false
+      });
+    }
+
+    return {
+      content: JSON.stringify(formattedData, null, 2),
+      metadata: {
+        fileName: file.name,
+        fileType: file.type,
+        language: 'unknown'
+      },
+      confidence: 1,
+      processingDate: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error('[Data Processing] Error:', error);
+    throw error;
+  }
+}
+
+async function processTextDocument(file: File, options?: ProcessingOptions): Promise<ProcessingResult> {
+  try {
+    if (options?.onProgress) {
+      options.onProgress({
+        stage: 'processing',
+        progress: 10,
+        message: 'Préparation du document texte...',
+        canCancel: true
+      });
+    }
+
+    let text: string;
+
+    if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer });
+      text = result.value;
+    } else {
+      text = await file.text();
+    }
+
+    if (!text?.trim()) {
+      throw new Error(`Aucun contenu extrait du document: ${file.name}`);
+    }
+
+    if (options?.onProgress) {
+      options.onProgress({
+        stage: 'processing',
+        progress: 50,
+        message: 'Nettoyage et structuration du texte...',
+        canCancel: true
+      });
+    }
+
+    // Clean and structure text
+    text = cleanText(text);
+
+    if (options?.onProgress) {
+      options.onProgress({
+        stage: 'complete',
+        progress: 100,
+        message: 'Traitement terminé',
+        canCancel: false
+      });
+    }
+
+    return {
+      content: text,
+      metadata: {
+        fileName: file.name,
+        fileType: file.type,
+        language: detectLanguage(text)
+      },
+      confidence: 1,
+      processingDate: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error('[Text Processing] Error:', error);
+    throw error;
+  }
+}
+
+async function processPDFDocument(file: File, options?: ProcessingOptions): Promise<ProcessingResult> {
+  try {
+    if (options?.onProgress) {
+      options.onProgress({
+        stage: 'processing',
+        progress: 10,
+        message: 'Chargement du PDF...',
+        canCancel: true
+      });
+    }
+
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({
+      data: arrayBuffer,
+      useWorkerFetch: true,
+      isEvalSupported: true,
+      useSystemFonts: true
+    }).promise;
+
+    const numPages = pdf.numPages;
+    let extractedText = '';
+    let currentPage = 1;
+    let totalConfidence = 0;
+
+    for (let i = 1; i <= numPages; i++) {
+      if (options?.signal?.aborted) {
+        throw new Error('Processing cancelled');
+      }
+
+      if (options?.onProgress) {
+        options.onProgress({
+          stage: 'processing',
+          progress: Math.round((i / numPages) * 80) + 10,
+          message: `Traitement de la page ${i}/${numPages}...`,
+          canCancel: true
+        });
+      }
+
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      let pageText = '';
+      const structure = {
+        headings: [] as string[],
+        paragraphs: [] as string[]
+      };
+
+      // Extract text content
+      for (const item of content.items as any[]) {
+        const text = item.str.trim();
+        if (!text) continue;
+
+        // Improved heading detection
+        const isHeading = 
+          item.fontName?.toLowerCase().includes('bold') ||
+          item.fontSize > 12 ||
+          /^[A-Z0-9\s]{10,}$/.test(text) ||
+          /^[\d.]+\s+[A-Z]/.test(text) || // Numbered headings
+          text.length < 50 && text.toUpperCase() === text; // Short all-caps lines
+
+        if (isHeading) {
+          structure.headings.push(text);
+        } else {
+          structure.paragraphs.push(text);
+        }
+        pageText += text + ' ';
+      }
+
+      // Perform OCR if needed
+      if (pageText.length < 200 || /image|figure|tableau/i.test(pageText)) {
+        try {
+          const scale = 2.0; // Higher resolution for better OCR
+          const viewport = page.getViewport({ scale });
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d', {
+            willReadFrequently: true,
+            alpha: false
+          });
+
+          if (context) {
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+
+            // Clear canvas with white background
+            context.fillStyle = 'white';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Render PDF page
+            await page.render({
+              canvasContext: context,
+              viewport,
+              background: 'white'
+            }).promise;
+
+            // Get image data and optimize for OCR
+            const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+            const optimizedImageData = await optimizeImageForOCR(imageData);
+            
+            // Put optimized image data back to canvas
+            const optimizedCanvas = document.createElement('canvas');
+            optimizedCanvas.width = imageData.width;
+            optimizedCanvas.height = imageData.height;
+            const optimizedContext = optimizedCanvas.getContext('2d');
+            
+            if (optimizedContext) {
+              optimizedContext.putImageData(optimizedImageData, 0, 0);
+
+              // Perform OCR
+              const worker = await createWorker();
+              await worker.loadLanguage('fra+eng');
+              await worker.initialize('fra+eng');
+              const { data: ocrResult } = await worker.recognize(optimizedCanvas);
+              await worker.terminate();
+
+              if (ocrResult.text.length > pageText.length * 0.5) {
+                const cleanedOCRText = cleanText(ocrResult.text);
+                
+                // Merge OCR text with existing text
+                const combinedText = new Set([
+                  ...pageText.split(/[.!?]+/).map(s => s.trim()),
+                  ...cleanedOCRText.split(/[.!?]+/).map(s => s.trim())
+                ]);
+                
+                pageText = Array.from(combinedText)
+                  .filter(s => s.length > 10) // Remove fragments
+                  .join('. ');
+                
+                totalConfidence += ocrResult.confidence / 100;
+              } else {
+                totalConfidence += pageText.length > 0 ? 1 : 0.5;
+              }
+            }
+          }
+        } catch (ocrError) {
+          console.warn(`OCR failed for page ${i}:`, ocrError);
+          totalConfidence += pageText.length > 0 ? 0.7 : 0.3;
+        }
+      } else {
+        totalConfidence += 1;
+      }
+
+      extractedText += pageText.trim() + '\n\n';
+      currentPage++;
+    }
+
+    if (options?.onProgress) {
+      options.onProgress({
+        stage: 'processing',
+        progress: 90,
+        message: 'Finalisation de l\'extraction...',
+        canCancel: true
+      });
+    }
+
+    const cleanedText = cleanText(extractedText);
+
+    if (!cleanedText) {
+      throw new Error(`Aucun texte extrait du PDF: ${file.name}`);
+    }
+
+    // Calculate final confidence score
+    const confidence = Math.min(1, totalConfidence / pdf.numPages);
+
+    if (options?.onProgress) {
+      options.onProgress({
+        stage: 'complete',
+        progress: 100,
+        message: 'Traitement terminé',
+        canCancel: false
+      });
+    }
+
+    return {
+      content: cleanedText,
+      metadata: {
+        title: metadata.info?.Title,
+        author: metadata.info?.Author,
+        date: metadata.info?.CreationDate,
+        language: detectLanguage(cleanedText),
+        fileType: file.type,
+        fileName: file.name,
+        pageCount: pdf.numPages
+      },
+      confidence,
+      processingDate: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error('[PDF Processing] Error:', error);
+    throw error;
+  }
 }
 
 // Fonction principale de traitement
 export async function processDocument(
   file: File,
-  options: {
-    openaiApiKey?: string;
-    onProgress?: (progress: ProcessingProgress) => void;
-    signal?: AbortSignal;
-  } = {}
+  options: ProcessingOptions = {}
 ): Promise<ProcessingResult> {
-  const { openaiApiKey, onProgress, signal } = options;
-
   try {
-    // Validation du type de fichier
-    const fileType = file.type.toLowerCase();
-    
-    // Traitement audio
-    if (fileType.startsWith('audio/')) {
-      if (!openaiApiKey) {
-        throw new Error('Clé API OpenAI requise pour le traitement audio');
-      }
-      return await processAudioFile(file, openaiApiKey, onProgress, signal);
-    }
-    
-    // Traitement PDF
-    if (fileType === 'application/pdf') {
-      return await processPDFDocument(file, onProgress, signal);
-    }
-    
-    // Traitement Word
-    if (
-      fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-      fileType === 'application/msword'
-    ) {
-      return await processWordDocument(file, onProgress, signal);
+    console.log('📄 Starting document processing:', {
+      name: file.name,
+      type: file.type,
+      size: file.size
+    });
+
+    // Validate file size
+    if (file.size > 100 * 1024 * 1024) { // 100MB limit
+      throw new Error('Le fichier est trop volumineux (limite: 100MB)');
     }
 
-    throw new Error(`Type de fichier non supporté: ${fileType}`);
+    let result: ProcessingResult;
+    const extension = file.name.split('.').pop()?.toLowerCase();
+
+    // Handle data files
+    if (['json', 'csv', 'xlsx', 'xls'].includes(extension || '')) {
+      result = await processDataFile(file, options);
+    }
+    // Handle documents
+    else {
+      switch (file.type.toLowerCase()) {
+        case 'application/pdf':
+          result = await processPDFDocument(file, options);
+          break;
+
+        case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+        case 'text/plain':
+          result = await processTextDocument(file, options);
+          break;
+
+        case 'text/html':
+          // For HTML reports, just return the content as is
+          const text = await file.text();
+          result = {
+            content: text,
+            metadata: {
+              fileName: file.name,
+              fileType: file.type,
+              language: detectLanguage(text)
+            },
+            confidence: 1,
+            processingDate: new Date().toISOString()
+          };
+          break;
+
+        case 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+        case 'application/vnd.ms-excel':
+        case 'text/csv':
+        case 'application/json':
+          result = await processDataFile(file, options);
+          break;
+
+        default:
+          if (file.type.startsWith('audio/')) {
+            if (!options.openaiApiKey) {
+              throw new Error('Clé API OpenAI requise pour le traitement audio');
+            }
+            const audioResult = await processAudioFile(file, options.openaiApiKey, options.onProgress, options.signal);
+            result = {
+              content: audioResult.content,
+              metadata: audioResult.metadata,
+              confidence: audioResult.confidence,
+              processingDate: audioResult.processingDate
+            };
+            break;
+          }
+          throw new Error(`Type de fichier non supporté: ${file.type}`);
+      }
+    }
+
+    if (!result?.content?.trim()) {
+      throw new Error(`Aucun contenu valide extrait de ${file.name}`);
+    }
+
+    console.log('✅ Document processing completed:', {
+      fileName: file.name,
+      contentLength: result.content.length,
+      excerpt: result.content.substring(0, 100) + '...'
+    });
+
+    return result;
   } catch (error) {
-    console.error('[Universal Processor] Erreur:', error);
+    console.error('[Document Processing] Error:', error);
     throw error;
   }
 }

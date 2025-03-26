@@ -7,13 +7,14 @@ export interface ReportTemplate {
   icon: string;
   type: 'summary' | 'analysis' | 'comparison' | 'extraction';
   prompt: string;
-  structure?: {
+  structure?: string | {
     sections: Array<{
       title: string;
       required: boolean;
     }>;
   };
   is_active: boolean;
+  folder_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -26,11 +27,7 @@ export async function fetchReportTemplates(): Promise<ReportTemplate[]> {
       .eq('is_active', true)
       .order('name');
 
-    if (error) {
-      console.error('Error fetching report templates:', error);
-      throw error;
-    }
-
+    if (error) throw error;
     return data || [];
   } catch (error) {
     console.error('Failed to fetch report templates:', error);
@@ -40,38 +37,70 @@ export async function fetchReportTemplates(): Promise<ReportTemplate[]> {
 
 export async function createReportTemplate(template: Omit<ReportTemplate, 'id' | 'created_at' | 'updated_at'>): Promise<ReportTemplate | null> {
   try {
+    // Check if template with same name exists
+    const { data: existing } = await supabase
+      .from('report_templates')
+      .select('id')
+      .eq('name', template.name)
+      .single();
+
+    if (existing) {
+      throw new Error('Un modèle avec ce nom existe déjà');
+    }
+
+    // If structure is a string, parse it into the required format
+    const structureObject = typeof template.structure === 'string'
+      ? {
+          sections: template.structure.split('\n')
+            .map(line => line.trim())
+            .filter(line => line)
+            .map(line => ({
+              title: line.endsWith('*') ? line.slice(0, -1).trim() : line,
+              required: line.endsWith('*')
+            }))
+        }
+      : template.structure;
+
     const { data, error } = await supabase
       .from('report_templates')
-      .insert([template])
+      .insert([{ ...template, structure: structureObject }])
       .select()
       .single();
 
-    if (error) {
-      console.error('Error creating report template:', error);
-      throw error;
-    }
-
+    if (error) throw error;
     return data;
   } catch (error) {
     console.error('Failed to create report template:', error);
-    return null;
+    throw error;
   }
 }
 
 export async function updateReportTemplate(id: string, updates: Partial<ReportTemplate>): Promise<ReportTemplate | null> {
   try {
+    // If structure is being updated and is a string, parse it
+    const updatesWithParsedStructure = {
+      ...updates,
+      structure: typeof updates.structure === 'string'
+        ? {
+            sections: updates.structure.split('\n')
+              .map(line => line.trim())
+              .filter(line => line)
+              .map(line => ({
+                title: line.endsWith('*') ? line.slice(0, -1).trim() : line,
+                required: line.endsWith('*')
+              }))
+          }
+        : updates.structure
+    };
+
     const { data, error } = await supabase
       .from('report_templates')
-      .update(updates)
+      .update(updatesWithParsedStructure)
       .eq('id', id)
       .select()
       .single();
 
-    if (error) {
-      console.error('Error updating report template:', error);
-      throw error;
-    }
-
+    if (error) throw error;
     return data;
   } catch (error) {
     console.error('Failed to update report template:', error);
@@ -86,11 +115,7 @@ export async function deleteReportTemplate(id: string): Promise<boolean> {
       .delete()
       .eq('id', id);
 
-    if (error) {
-      console.error('Error deleting report template:', error);
-      throw error;
-    }
-
+    if (error) throw error;
     return true;
   } catch (error) {
     console.error('Failed to delete report template:', error);
@@ -105,11 +130,7 @@ export async function toggleReportTemplateStatus(id: string, isActive: boolean):
       .update({ is_active: isActive })
       .eq('id', id);
 
-    if (error) {
-      console.error('Error toggling report template status:', error);
-      throw error;
-    }
-
+    if (error) throw error;
     return true;
   } catch (error) {
     console.error('Failed to toggle report template status:', error);
@@ -125,11 +146,7 @@ export async function getReportTemplate(id: string): Promise<ReportTemplate | nu
       .eq('id', id)
       .single();
 
-    if (error) {
-      console.error('Error fetching report template:', error);
-      throw error;
-    }
-
+    if (error) throw error;
     return data;
   } catch (error) {
     console.error('Failed to fetch report template:', error);

@@ -4,9 +4,6 @@ import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 
-// Initialize PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-
 // Types communs
 export interface ProcessingResult {
   content: string;
@@ -43,11 +40,6 @@ interface ProcessingProgress {
   progress: number;
   message: string;
   canCancel?: boolean;
-}
-
-interface ProcessingOptions {
-  onProgress?: (progress: ProcessingProgress) => void;
-  signal?: AbortSignal;
 }
 
 async function processDataFile(file: File, options?: ProcessingOptions): Promise<string> {
@@ -162,7 +154,6 @@ async function processDataFile(file: File, options?: ProcessingOptions): Promise
   }
 }
 
-// Traitement des documents texte
 async function processTextDocument(file: File, options?: ProcessingOptions): Promise<string> {
   try {
     options?.onProgress?.({
@@ -212,14 +203,117 @@ async function processTextDocument(file: File, options?: ProcessingOptions): Pro
   }
 }
 
-// Fonction principale de traitement
+async function processPDFDocument(file: File, options?: ProcessingOptions): Promise<string> {
+  try {
+    options?.onProgress?.({
+      stage: 'upload',
+      progress: 10,
+      message: 'Chargement du PDF...'
+    });
+
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({
+      data: arrayBuffer,
+      useWorkerFetch: true,
+      isEvalSupported: true,
+      useSystemFonts: true
+    }).promise;
+
+    const numPages = pdf.numPages;
+    let extractedText = '';
+    let currentPage = 1;
+
+    for (let i = 1; i <= numPages; i++) {
+      if (options?.signal?.aborted) {
+        throw new Error('Processing cancelled');
+      }
+
+      options?.onProgress?.({
+        stage: 'processing',
+        progress: Math.round((i / numPages) * 80) + 10,
+        message: `Traitement de la page ${i}/${numPages}...`
+      });
+
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      let pageText = '';
+
+      // Extract text while preserving structure
+      for (const item of content.items as any[]) {
+        if (item.str?.trim()) {
+          pageText += item.str + ' ';
+        }
+      }
+
+      // If page has little text, try OCR
+      if (pageText.length < 100) {
+        try {
+          const scale = 2.0;
+          const viewport = page.getViewport({ scale });
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+
+          if (context) {
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+
+            await page.render({
+              canvasContext: context,
+              viewport
+            }).promise;
+
+            const worker = await createWorker();
+            await worker.loadLanguage('fra+eng');
+            await worker.initialize('fra+eng');
+            const { data } = await worker.recognize(canvas);
+            await worker.terminate();
+
+            if (data.text.length > pageText.length) {
+              pageText = data.text;
+            }
+          }
+        } catch (ocrError) {
+          console.warn(`OCR failed for page ${i}:`, ocrError);
+        }
+      }
+
+      extractedText += pageText.trim() + '\n\n';
+      currentPage++;
+    }
+
+    options?.onProgress?.({
+      stage: 'processing',
+      progress: 90,
+      message: 'Finalisation de l\'extraction...'
+    });
+
+    const cleanedText = extractedText
+      .replace(/\s+/g, ' ')
+      .replace(/[\n\r]+/g, '\n')
+      .replace(/[^\S\n]+/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
+    if (!cleanedText) {
+      throw new Error(`Aucun texte extrait du PDF: ${file.name}`);
+    }
+
+    options?.onProgress?.({
+      stage: 'complete',
+      progress: 100,
+      message: 'Traitement terminé'
+    });
+
+    return cleanedText;
+  } catch (error) {
+    console.error('[PDF Processing] Error:', error);
+    throw error;
+  }
+}
+
 export async function processDocument(
   file: File,
-  options: {
-    openaiApiKey?: string;
-    onProgress?: (progress: ProcessingProgress) => void;
-    signal?: AbortSignal;
-  } = {}
+  options?: ProcessingOptions
 ): Promise<string> {
   try {
     console.log('📄 Starting document processing:', {

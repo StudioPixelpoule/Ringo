@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Globe, FolderPlus, ChevronRight, Edit2, Trash2, Send, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDocumentStore, Folder } from '../lib/documentStore';
@@ -11,85 +11,173 @@ interface ProcessingStatus {
   message: string;
 }
 
-interface FolderColumnProps {
-  folders: Folder[];
+interface FolderTreeItemProps {
+  folder: Folder;
   level: number;
-  parentId: string | null;
-  selectedPath: Folder[];
-  onSelect: (folder: Folder, level: number) => void;
+  selectedFolder: Folder | null;
+  documentCounts: Record<string, number>;
+  onSelect: (folder: Folder) => void;
   onCreateFolder: (parentId: string | null) => void;
   onRenameFolder: (folder: Folder) => void;
   onDeleteFolder: (folder: Folder) => void;
 }
 
-const FolderColumn: React.FC<FolderColumnProps> = ({
-  folders,
+const FolderTreeItem: React.FC<FolderTreeItemProps> = ({
+  folder,
   level,
-  parentId,
-  selectedPath,
+  selectedFolder,
+  documentCounts,
   onSelect,
   onCreateFolder,
   onRenameFolder,
-  onDeleteFolder,
+  onDeleteFolder
 }) => {
-  const currentFolders = folders.filter(f => f.parent_id === parentId);
-  const selectedFolder = selectedPath[level];
+  const [isOpen, setIsOpen] = useState(level === 0);
+  const { folders } = useDocumentStore();
+  const hasChildren = folders.some(f => f.parent_id === folder.id);
+  const count = documentCounts[folder.id] || 0;
+
+  const getTotalCount = (folderId: string): number => {
+    const directCount = documentCounts[folderId] || 0;
+    const childFolders = folders.filter(f => f.parent_id === folderId);
+    const childCount = childFolders.reduce((sum, child) => sum + getTotalCount(child.id), 0);
+    return directCount + childCount;
+  };
+
+  const totalCount = getTotalCount(folder.id);
 
   return (
-    <div className="min-w-[200px] border-r border-gray-200 h-[400px] overflow-y-auto">
-      <div className="p-2 border-b border-gray-200 flex items-center justify-between">
-        <span className="font-medium text-sm text-gray-600">
-          {parentId ? folders.find(f => f.id === parentId)?.name : 'Racine'}
-        </span>
-        <button
-          onClick={() => onCreateFolder(parentId)}
-          className="p-1 text-[#f15922] hover:bg-[#f15922]/10 rounded-full"
-        >
-          <FolderPlus size={16} />
-        </button>
-      </div>
-      <div className="p-2">
-        {currentFolders.map(folder => (
-          <div
-            key={folder.id}
-            className={`group flex items-center justify-between p-2 rounded-md cursor-pointer ${
-              selectedFolder?.id === folder.id
-                ? 'bg-[#f15922] text-white'
-                : 'hover:bg-gray-100'
-            }`}
-            onClick={() => onSelect(folder, level)}
-          >
-            <div className="flex items-center gap-2">
-              <span className="truncate">{folder.name}</span>
-              {folders.some(f => f.parent_id === folder.id) && (
-                <ChevronRight size={16} className="flex-shrink-0" />
-              )}
-            </div>
-            <div className={`hidden group-hover:flex items-center gap-1 ${
-              selectedFolder?.id === folder.id ? 'text-white' : 'text-gray-500'
-            }`}>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRenameFolder(folder);
-                }}
-                className="p-1 hover:bg-black/10 rounded"
-              >
-                <Edit2 size={14} />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDeleteFolder(folder);
-                }}
-                className="p-1 hover:bg-black/10 rounded"
-              >
-                <Trash2 size={14} />
-              </button>
-            </div>
+    <div className="select-none">
+      <motion.div
+        className={`
+          flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer group text-sm
+          ${selectedFolder?.id === folder.id 
+            ? 'bg-[#f15922] text-white' 
+            : 'text-gray-700 hover:bg-[#f15922]/5 hover:text-[#f15922]'
+          }
+          ${level === 0 ? 'mb-0.5' : ''}
+        `}
+        onClick={() => onSelect(folder)}
+        style={{ marginLeft: `${level * 8}px` }}
+      >
+        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+          {hasChildren && (
+            <motion.button
+              initial={false}
+              animate={{ rotate: isOpen ? 90 : 0 }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsOpen(!isOpen);
+              }}
+              className={`
+                p-0.5 rounded transition-colors
+                ${selectedFolder?.id === folder.id 
+                  ? 'hover:bg-white/20 text-white' 
+                  : 'text-[#dba747] hover:bg-[#dba747]/10'
+                }
+              `}
+            >
+              <ChevronRight size={14} />
+            </motion.button>
+          )}
+          <span className="truncate text-xs">{folder.name}</span>
+        </div>
+        
+        {totalCount > 0 && (
+          <div className={`
+            flex items-center gap-1 text-xs
+            ${selectedFolder?.id === folder.id 
+              ? 'bg-white/20 text-white' 
+              : level === 0 
+                ? 'bg-[#dba747]/10 text-[#dba747]' 
+                : 'bg-gray-100 text-gray-500'
+            }
+            px-1.5 py-0.5 rounded-full font-medium transition-colors
+          `}>
+            {count > 0 && (
+              <span className={
+                selectedFolder?.id === folder.id 
+                  ? 'text-white' 
+                  : level === 0 
+                    ? 'text-[#dba747]' 
+                    : ''
+              }>
+                {count}
+              </span>
+            )}
+            {count > 0 && totalCount > count && ' + '}
+            {totalCount > count && (
+              <span className={
+                selectedFolder?.id === folder.id 
+                  ? 'text-white/70' 
+                  : 'text-gray-400'
+              }>
+                {totalCount - count}
+              </span>
+            )}
           </div>
-        ))}
-      </div>
+        )}
+
+        <div className={`
+          flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity
+          ${selectedFolder?.id === folder.id ? 'text-white' : 'text-gray-500'}
+        `}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onCreateFolder(folder.id);
+            }}
+            className="p-1 hover:bg-black/10 rounded"
+          >
+            <FolderPlus size={14} />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onRenameFolder(folder);
+            }}
+            className="p-1 hover:bg-black/10 rounded"
+          >
+            <Edit2 size={14} />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDeleteFolder(folder);
+            }}
+            className="p-1 hover:bg-black/10 rounded"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      </motion.div>
+
+      <AnimatePresence>
+        {isOpen && hasChildren && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            {folders
+              .filter(f => f.parent_id === folder.id)
+              .map(childFolder => (
+                <FolderTreeItem
+                  key={childFolder.id}
+                  folder={childFolder}
+                  level={level + 1}
+                  selectedFolder={selectedFolder}
+                  documentCounts={documentCounts}
+                  onSelect={onSelect}
+                  onCreateFolder={onCreateFolder}
+                  onRenameFolder={onRenameFolder}
+                  onDeleteFolder={onDeleteFolder}
+                />
+              ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
@@ -103,7 +191,6 @@ export function WebContentImporter({
 }) {
   const [url, setUrl] = useState('');
   const [description, setDescription] = useState('');
-  const [selectedPath, setSelectedPath] = useState<Folder[]>([]);
   const [processingStatus, setProcessingStatus] = useState<ProcessingStatus>({
     isProcessing: false,
     progress: 0,
@@ -126,11 +213,47 @@ export function WebContentImporter({
     setError
   } = useDocumentStore();
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (isOpen) {
       fetchFolders();
     }
   }, [isOpen, fetchFolders]);
+
+  // Calculate document counts for each folder
+  const documentCounts = folders.reduce((acc, folder) => {
+    acc[folder.id] = 0; // Web content doesn't affect document counts
+    return acc;
+  }, {} as Record<string, number>);
+
+  const handleFolderSelect = (folder: Folder) => {
+    setCurrentFolder(folder);
+  };
+
+  const handleCreateFolder = async (parentId: string | null) => {
+    const name = window.prompt('Nom du dossier:');
+    if (name) {
+      await createFolder(name, parentId);
+      await fetchFolders();
+    }
+  };
+
+  const handleRenameFolder = async (folder: Folder) => {
+    const newName = window.prompt('Nouveau nom:', folder.name);
+    if (newName && newName !== folder.name) {
+      await renameFolder(folder.id, newName);
+      await fetchFolders();
+    }
+  };
+
+  const handleDeleteFolder = async (folder: Folder) => {
+    if (window.confirm(`Supprimer le dossier "${folder.name}" ?`)) {
+      await deleteFolder(folder.id);
+      await fetchFolders();
+      if (currentFolder?.id === folder.id) {
+        setCurrentFolder(null);
+      }
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -352,40 +475,6 @@ Instructions:
     }
   };
 
-  const handleFolderSelect = (folder: Folder, level: number) => {
-    const newPath = selectedPath.slice(0, level);
-    newPath[level] = folder;
-    setSelectedPath(newPath);
-    setCurrentFolder(folder);
-  };
-
-  const handleCreateFolder = async (parentId: string | null) => {
-    const name = window.prompt('Nom du dossier:');
-    if (name) {
-      await createFolder(name, parentId);
-      await fetchFolders();
-    }
-  };
-
-  const handleRenameFolder = async (folder: Folder) => {
-    const newName = window.prompt('Nouveau nom:', folder.name);
-    if (newName && newName !== folder.name) {
-      await renameFolder(folder.id, newName);
-      await fetchFolders();
-    }
-  };
-
-  const handleDeleteFolder = async (folder: Folder) => {
-    if (window.confirm(`Supprimer le dossier "${folder.name}" ?`)) {
-      await deleteFolder(folder.id);
-      await fetchFolders();
-      if (currentFolder?.id === folder.id) {
-        setCurrentFolder(null);
-        setSelectedPath([]);
-      }
-    }
-  };
-
   if (!isOpen) return null;
 
   return (
@@ -410,8 +499,8 @@ Instructions:
           </button>
         </div>
 
-        <div className="grid grid-cols-3 gap-6 p-6 flex-1 overflow-hidden">
-          {/* Left column - URL input */}
+        <div className="grid grid-cols-4 gap-6 p-6">
+          {/* Left column - URL input (25%) */}
           <div className="space-y-4">
             <h3 className="text-lg font-medium text-gray-900">URL du site web</h3>
             <div className="relative">
@@ -431,39 +520,38 @@ Instructions:
             </div>
           </div>
 
-          {/* Middle column - Folder structure */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-medium text-gray-900">IRSST</h3>
-            <div className="border rounded-lg overflow-hidden">
-              <div className="flex overflow-x-auto">
-                <FolderColumn
-                  folders={folders}
-                  level={0}
-                  parentId={null}
-                  selectedPath={selectedPath}
-                  onSelect={handleFolderSelect}
-                  onCreateFolder={handleCreateFolder}
-                  onRenameFolder={handleRenameFolder}
-                  onDeleteFolder={handleDeleteFolder}
-                />
-                {selectedPath.map((folder, index) => (
-                  <FolderColumn
+          {/* Middle column - Folder structure (50%) */}
+          <div className="col-span-2 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-medium text-gray-900">IRSST</h3>
+              <button
+                onClick={() => handleCreateFolder(null)}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm text-[#f15922] hover:bg-[#f15922]/5 rounded-lg transition-colors"
+              >
+                <FolderPlus size={16} />
+                <span>Nouveau dossier</span>
+              </button>
+            </div>
+            <div className="border rounded-lg p-4 h-[400px] overflow-y-auto">
+              {folders
+                .filter(f => !f.parent_id)
+                .map(folder => (
+                  <FolderTreeItem
                     key={folder.id}
-                    folders={folders}
-                    level={index + 1}
-                    parentId={folder.id}
-                    selectedPath={selectedPath}
+                    folder={folder}
+                    level={0}
+                    selectedFolder={currentFolder}
+                    documentCounts={documentCounts}
                     onSelect={handleFolderSelect}
                     onCreateFolder={handleCreateFolder}
                     onRenameFolder={handleRenameFolder}
                     onDeleteFolder={handleDeleteFolder}
                   />
                 ))}
-              </div>
             </div>
           </div>
 
-          {/* Right column - Indexation */}
+          {/* Right column - Indexation (25%) */}
           <div className="space-y-4">
             <h3 className="text-lg font-medium text-gray-900">Indexation du site</h3>
             <div className="space-y-4">

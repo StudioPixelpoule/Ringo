@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { X, Upload, FileText, FolderPlus, ChevronRight, Edit2, Trash2, Check, Loader2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useDocumentStore, Document, Folder } from '../lib/documentStore';
 import { supabase } from '../lib/supabase';
 import { FileIcon } from './FileIcon';
@@ -14,85 +15,173 @@ interface ProcessingStatus {
   canCancel?: boolean;
 }
 
-interface FolderColumnProps {
-  folders: Folder[];
+interface FolderTreeItemProps {
+  folder: Folder;
   level: number;
-  parentId: string | null;
-  selectedPath: Folder[];
-  onSelect: (folder: Folder, level: number) => void;
+  selectedFolder: Folder | null;
+  documentCounts: Record<string, number>;
+  onSelect: (folder: Folder) => void;
   onCreateFolder: (parentId: string | null) => void;
   onRenameFolder: (folder: Folder) => void;
   onDeleteFolder: (folder: Folder) => void;
 }
 
-const FolderColumn: React.FC<FolderColumnProps> = ({
-  folders,
+const FolderTreeItem: React.FC<FolderTreeItemProps> = ({
+  folder,
   level,
-  parentId,
-  selectedPath,
+  selectedFolder,
+  documentCounts,
   onSelect,
   onCreateFolder,
   onRenameFolder,
-  onDeleteFolder,
+  onDeleteFolder
 }) => {
-  const currentFolders = folders.filter(f => f.parent_id === parentId);
-  const selectedFolder = selectedPath[level];
+  const [isOpen, setIsOpen] = useState(level === 0);
+  const { folders } = useDocumentStore();
+  const hasChildren = folders.some(f => f.parent_id === folder.id);
+  const count = documentCounts[folder.id] || 0;
+
+  const getTotalCount = (folderId: string): number => {
+    const directCount = documentCounts[folderId] || 0;
+    const childFolders = folders.filter(f => f.parent_id === folderId);
+    const childCount = childFolders.reduce((sum, child) => sum + getTotalCount(child.id), 0);
+    return directCount + childCount;
+  };
+
+  const totalCount = getTotalCount(folder.id);
 
   return (
-    <div className="min-w-[200px] border-r border-gray-200 h-[400px] overflow-y-auto">
-      <div className="p-2 border-b border-gray-200 flex items-center justify-between">
-        <span className="font-medium text-sm text-gray-600">
-          {parentId ? folders.find(f => f.id === parentId)?.name : 'Racine'}
-        </span>
-        <button
-          onClick={() => onCreateFolder(parentId)}
-          className="p-1 text-[#f15922] hover:bg-[#f15922]/10 rounded-full"
-        >
-          <FolderPlus size={16} />
-        </button>
-      </div>
-      <div className="p-2">
-        {currentFolders.map(folder => (
-          <div
-            key={folder.id}
-            className={`group flex items-center justify-between p-2 rounded-md cursor-pointer ${
-              selectedFolder?.id === folder.id
-                ? 'bg-[#f15922] text-white'
-                : 'hover:bg-gray-100'
-            }`}
-            onClick={() => onSelect(folder, level)}
-          >
-            <div className="flex items-center gap-2">
-              <span className="truncate">{folder.name}</span>
-              {folders.some(f => f.parent_id === folder.id) && (
-                <ChevronRight size={16} className="flex-shrink-0" />
-              )}
-            </div>
-            <div className={`hidden group-hover:flex items-center gap-1 ${
-              selectedFolder?.id === folder.id ? 'text-white' : 'text-gray-500'
-            }`}>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRenameFolder(folder);
-                }}
-                className="p-1 hover:bg-black/10 rounded"
-              >
-                <Edit2 size={14} />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDeleteFolder(folder);
-                }}
-                className="p-1 hover:bg-black/10 rounded"
-              >
-                <Trash2 size={14} />
-              </button>
-            </div>
+    <div className="select-none">
+      <motion.div
+        className={`
+          flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer group text-sm
+          ${selectedFolder?.id === folder.id 
+            ? 'bg-[#f15922] text-white' 
+            : 'text-gray-700 hover:bg-[#f15922]/5 hover:text-[#f15922]'
+          }
+          ${level === 0 ? 'mb-0.5' : ''}
+        `}
+        onClick={() => onSelect(folder)}
+        style={{ marginLeft: `${level * 8}px` }}
+      >
+        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+          {hasChildren && (
+            <motion.button
+              initial={false}
+              animate={{ rotate: isOpen ? 90 : 0 }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsOpen(!isOpen);
+              }}
+              className={`
+                p-0.5 rounded transition-colors
+                ${selectedFolder?.id === folder.id 
+                  ? 'hover:bg-white/20 text-white' 
+                  : 'text-[#dba747] hover:bg-[#dba747]/10'
+                }
+              `}
+            >
+              <ChevronRight size={14} />
+            </motion.button>
+          )}
+          <span className="truncate text-xs">{folder.name}</span>
+        </div>
+        
+        {totalCount > 0 && (
+          <div className={`
+            flex items-center gap-1 text-xs
+            ${selectedFolder?.id === folder.id 
+              ? 'bg-white/20 text-white' 
+              : level === 0 
+                ? 'bg-[#dba747]/10 text-[#dba747]' 
+                : 'bg-gray-100 text-gray-500'
+            }
+            px-1.5 py-0.5 rounded-full font-medium transition-colors
+          `}>
+            {count > 0 && (
+              <span className={
+                selectedFolder?.id === folder.id 
+                  ? 'text-white' 
+                  : level === 0 
+                    ? 'text-[#dba747]' 
+                    : ''
+              }>
+                {count}
+              </span>
+            )}
+            {count > 0 && totalCount > count && ' + '}
+            {totalCount > count && (
+              <span className={
+                selectedFolder?.id === folder.id 
+                  ? 'text-white/70' 
+                  : 'text-gray-400'
+              }>
+                {totalCount - count}
+              </span>
+            )}
           </div>
-        ))}
-      </div>
+        )}
+
+        <div className={`
+          flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity
+          ${selectedFolder?.id === folder.id ? 'text-white' : 'text-gray-500'}
+        `}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onCreateFolder(folder.id);
+            }}
+            className="p-1 hover:bg-black/10 rounded"
+          >
+            <FolderPlus size={14} />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onRenameFolder(folder);
+            }}
+            className="p-1 hover:bg-black/10 rounded"
+          >
+            <Edit2 size={14} />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDeleteFolder(folder);
+            }}
+            className="p-1 hover:bg-black/10 rounded"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      </motion.div>
+
+      <AnimatePresence>
+        {isOpen && hasChildren && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            {folders
+              .filter(f => f.parent_id === folder.id)
+              .map(childFolder => (
+                <FolderTreeItem
+                  key={childFolder.id}
+                  folder={childFolder}
+                  level={level + 1}
+                  selectedFolder={selectedFolder}
+                  documentCounts={documentCounts}
+                  onSelect={onSelect}
+                  onCreateFolder={onCreateFolder}
+                  onRenameFolder={onRenameFolder}
+                  onDeleteFolder={onDeleteFolder}
+                />
+              ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
@@ -108,30 +197,31 @@ export function DocumentImportModal() {
     message: ''
   });
 
-  // Create a ref for the AbortController
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const {
     isModalOpen,
     folders,
+    documents,
     currentFolder,
     loading,
     error,
-    setModalOpen,
-    createFolder,
     uploadDocument,
     fetchFolders,
-    setCurrentFolder,
+    fetchAllDocuments,
+    setModalOpen,
+    createFolder,
     deleteFolder,
     renameFolder,
+    setCurrentFolder,
     clearError,
   } = useDocumentStore();
 
   useEffect(() => {
     if (isModalOpen) {
       fetchFolders();
+      fetchAllDocuments();
 
-      // Check for pending report import
       const pendingImport = localStorage.getItem('pendingReportImport');
       if (pendingImport) {
         const importData = JSON.parse(pendingImport);
@@ -153,15 +243,13 @@ export function DocumentImportModal() {
       }
     }
 
-    // Cleanup function
     return () => {
-      // Only abort if processing is in progress
       if (processingStatus.isProcessing && abortControllerRef.current) {
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
       }
     };
-  }, [isModalOpen, fetchFolders, processingStatus.isProcessing]);
+  }, [isModalOpen, fetchFolders, fetchAllDocuments, processingStatus.isProcessing]);
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0 && !processingStatus.isProcessing) {
@@ -200,10 +288,13 @@ export function DocumentImportModal() {
     disabled: processingStatus.isProcessing
   });
 
-  const handleFolderSelect = (folder: Folder, level: number) => {
-    const newPath = selectedPath.slice(0, level);
-    newPath[level] = folder;
-    setSelectedPath(newPath);
+  // Calculate document counts for each folder
+  const documentCounts = folders.reduce((acc, folder) => {
+    acc[folder.id] = documents.filter(doc => doc.folder_id === folder.id).length;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const handleFolderSelect = (folder: Folder) => {
     setCurrentFolder(folder);
   };
 
@@ -229,7 +320,6 @@ export function DocumentImportModal() {
       await fetchFolders();
       if (currentFolder?.id === folder.id) {
         setCurrentFolder(null);
-        setSelectedPath([]);
       }
     }
   };
@@ -237,7 +327,6 @@ export function DocumentImportModal() {
   const handleUpload = async () => {
     if (!currentFolder || !selectedFile || processingStatus.isProcessing) return;
     
-    // Create new AbortController for this upload
     abortControllerRef.current = new AbortController();
     
     try {
@@ -248,7 +337,6 @@ export function DocumentImportModal() {
         message: 'Préparation du document...'
       });
 
-      // Auto-detect document type
       const extension = selectedFile.name.split('.').pop()?.toLowerCase();
       const documentType = extension === 'pdf' ? 'pdf' :
                          ['doc', 'docx'].includes(extension || '') ? 'doc' :
@@ -256,14 +344,12 @@ export function DocumentImportModal() {
                          ['mp3', 'wav', 'wave', 'aac', 'ogg', 'webm'].includes(extension || '') ? 'audio' :
                          extension === 'html' ? 'report' : 'unknown';
 
-      // Convert special characters to underscores
       const sanitizedDescription = description
         .replace(/[^a-zA-Z0-9\s]/g, '_')
         .replace(/\s+/g, '_')
         .replace(/_+/g, '_')
         .replace(/^_|_$/g, '');
 
-      // For audio files, store the original file
       if (documentType === 'audio') {
         const fileExt = selectedFile.name.split('.').pop()?.toLowerCase() || '';
         const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
@@ -294,7 +380,7 @@ export function DocumentImportModal() {
           message: 'Traitement du fichier audio...'
         });
 
-        const doc = await uploadDocument(selectedFile, currentFolder.id, {
+        await uploadDocument(selectedFile, currentFolder.id, {
           type: documentType,
           description: sanitizedDescription,
           processed: true,
@@ -306,7 +392,7 @@ export function DocumentImportModal() {
             if (typeof progress === 'object') {
               setProcessingStatus({
                 isProcessing: true,
-                progress: 60 + (progress.progress * 0.4), // Scale to remaining 40%
+                progress: 60 + (progress.progress * 0.4),
                 stage: 'processing',
                 message: progress.message
               });
@@ -330,8 +416,7 @@ export function DocumentImportModal() {
         return;
       }
 
-      // For other document types, process normally
-      const doc = await uploadDocument(selectedFile, currentFolder.id, {
+      await uploadDocument(selectedFile, currentFolder.id, {
         type: documentType,
         description: sanitizedDescription,
         processed: true,
@@ -366,7 +451,6 @@ export function DocumentImportModal() {
     } catch (error) {
       console.error('Overall error:', error);
       
-      // Check if the error was due to cancellation
       if (error instanceof Error && (error.name === 'AbortError' || error.message === 'Processing cancelled')) {
         setProcessingStatus({
           isProcessing: false,
@@ -386,7 +470,6 @@ export function DocumentImportModal() {
       
       setSelectedFile(null);
     } finally {
-      // Clear the AbortController
       abortControllerRef.current = null;
     }
   };
@@ -417,7 +500,8 @@ export function DocumentImportModal() {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-6 p-6">
+        <div className="grid grid-cols-4 gap-6 p-6">
+          {/* Left column - File upload (25%) */}
           <div className="space-y-4">
             <h3 className="text-lg font-medium text-gray-900">Téléverser un document</h3>
             <div
@@ -460,37 +544,38 @@ export function DocumentImportModal() {
             </div>
           </div>
 
-          <div className="space-y-4">
-            <h3 className="text-lg font-medium text-gray-900">IRSST</h3>
-            <div className="border rounded-lg overflow-hidden">
-              <div className="flex overflow-x-auto">
-                <FolderColumn
-                  folders={folders}
-                  level={0}
-                  parentId={null}
-                  selectedPath={selectedPath}
-                  onSelect={handleFolderSelect}
-                  onCreateFolder={handleCreateFolder}
-                  onRenameFolder={handleRenameFolder}
-                  onDeleteFolder={handleDeleteFolder}
-                />
-                {selectedPath.map((folder, index) => (
-                  <FolderColumn
+          {/* Middle column - Folder navigation (50%) */}
+          <div className="col-span-2 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-medium text-gray-900">IRSST</h3>
+              <button
+                onClick={() => handleCreateFolder(null)}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm text-[#f15922] hover:bg-[#f15922]/5 rounded-lg transition-colors"
+              >
+                <FolderPlus size={16} />
+                <span>Nouveau dossier</span>
+              </button>
+            </div>
+            <div className="border rounded-lg p-4 h-[400px] overflow-y-auto">
+              {folders
+                .filter(f => !f.parent_id)
+                .map(folder => (
+                  <FolderTreeItem
                     key={folder.id}
-                    folders={folders}
-                    level={index + 1}
-                    parentId={folder.id}
-                    selectedPath={selectedPath}
+                    folder={folder}
+                    level={0}
+                    selectedFolder={currentFolder}
+                    documentCounts={documentCounts}
                     onSelect={handleFolderSelect}
                     onCreateFolder={handleCreateFolder}
                     onRenameFolder={handleRenameFolder}
                     onDeleteFolder={handleDeleteFolder}
                   />
                 ))}
-              </div>
             </div>
           </div>
 
+          {/* Right column - Document indexing (25%) */}
           <div className="space-y-4">
             <h3 className="text-lg font-medium text-gray-900">Indexation du document</h3>
             <div className="space-y-4">
