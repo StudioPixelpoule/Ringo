@@ -17,6 +17,7 @@ class SessionManager {
     error: null
   };
   private listeners: Set<(state: SessionState) => void> = new Set();
+  private refreshTimeout: NodeJS.Timeout | null = null;
 
   private constructor() {
     this.initialize();
@@ -31,6 +32,8 @@ class SessionManager {
 
   private async initialize() {
     try {
+      console.debug('🔐 Initializing session manager...');
+      
       // Check initial session
       const { data: { session }, error } = await supabase.auth.getSession();
       if (error) throw error;
@@ -43,6 +46,8 @@ class SessionManager {
 
       // Listen for auth changes
       supabase.auth.onAuthStateChange(async (event, session) => {
+        console.debug('🔄 Auth state change:', event);
+        
         try {
           if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
             this.handleSignOut();
@@ -62,12 +67,16 @@ class SessionManager {
 
       // Add focus listener for session refresh
       window.addEventListener('focus', this.handleFocus);
+      
+      console.debug('✅ Session manager initialized');
     } catch (error) {
       await this.handleError(error);
     }
   }
 
   private async validateSession(session: Session | null) {
+    console.debug('🔍 Validating session...');
+    
     if (!session) {
       throw new Error('Invalid session');
     }
@@ -93,14 +102,19 @@ class SessionManager {
       loading: false,
       error: null
     });
+    
+    console.debug('✅ Session validated');
   }
 
   private handleFocus = () => {
-    let timeoutId: NodeJS.Timeout;
-    clearTimeout(timeoutId);
+    if (this.refreshTimeout) {
+      clearTimeout(this.refreshTimeout);
+    }
 
-    timeoutId = setTimeout(async () => {
+    this.refreshTimeout = setTimeout(async () => {
       try {
+        console.debug('🔍 Checking session on focus...');
+        
         const { data: { session }, error } = await supabase.auth.getSession();
         if (error) throw error;
         if (!session) throw new Error('No valid session');
@@ -113,6 +127,8 @@ class SessionManager {
   };
 
   private async handleError(error: unknown) {
+    console.error('❌ Session error:', error);
+    
     const appError = await handleError(error, {
       component: 'SessionManager',
       action: 'sessionManagement'
@@ -130,12 +146,14 @@ class SessionManager {
   }
 
   private handleSignOut() {
+    console.debug('👋 Handling sign out...');
     localStorage.clear();
     this.updateState({
       session: null,
       loading: false,
       error: null
     });
+    window.location.href = '/login';
   }
 
   private updateState(newState: Partial<SessionState>) {
@@ -162,6 +180,7 @@ class SessionManager {
 
   async signOut() {
     try {
+      console.debug('🚪 Signing out...');
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
       this.handleSignOut();
@@ -170,6 +189,14 @@ class SessionManager {
       // Force sign out on error
       this.handleSignOut();
     }
+  }
+
+  cleanup() {
+    if (this.refreshTimeout) {
+      clearTimeout(this.refreshTimeout);
+    }
+    window.removeEventListener('focus', this.handleFocus);
+    this.listeners.clear();
   }
 }
 

@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { Session } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
+import { supabase, initializeAuth } from '../lib/supabase';
 import { Loader2 } from 'lucide-react';
 import { Logo } from './Logo';
 import { SmallLogo } from './SmallLogo';
 import { IrsstLogo } from './IrsstLogo';
 import { useUserStore } from '../lib/store';
 import { handleError } from '../lib/errorHandler';
-import { AuthErrorType } from '../lib/errorTypes';
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -35,38 +34,25 @@ export function AuthGuard({ children, session }: AuthGuardProps) {
           }
         }, 5000);
 
-        // First validate session
+        // Initialize auth
+        await initializeAuth();
+
+        // Get current session
         const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
         if (sessionError) throw sessionError;
-        
-        if (!currentSession) {
-          throw new Error('No session found');
-        }
+        if (!currentSession) throw new Error('No session found');
 
-        // Then check profile status and role
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('status, role')
-          .eq('id', currentSession.user.id)
-          .single();
+        // Get user role from localStorage (set during initializeAuth)
+        const role = localStorage.getItem('userRole');
+        if (!role) throw new Error('User role not found');
 
-        if (profileError) {
-          if (profileError.code === 'PGRST301' || profileError.code === '401') {
-            throw new Error('Invalid session');
-          }
-          throw profileError;
-        }
-
-        if (!profile || !profile.status) {
-          throw new Error('Profile inactive or not found');
-        }
+        // Set role in store
+        setUserRole(role);
 
         // Clear timeout since auth succeeded
         clearTimeout(timeoutId);
 
         if (mounted) {
-          // Set user role in global store
-          setUserRole(profile.role);
           setIsAuthenticated(true);
           setLoading(false);
         }
@@ -80,13 +66,8 @@ export function AuthGuard({ children, session }: AuthGuardProps) {
         });
 
         // Clear auth state on critical errors
-        if (error instanceof Error && 
-            (error.message.includes('No session found') ||
-             error.message.includes('Invalid session') ||
-             error.message.includes('Profile inactive'))) {
-          await supabase.auth.signOut();
-          localStorage.clear();
-        }
+        await supabase.auth.signOut();
+        localStorage.clear();
 
         setIsAuthenticated(false);
         setLoading(false);

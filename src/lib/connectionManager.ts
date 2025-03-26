@@ -8,6 +8,8 @@ class ConnectionManager {
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 5;
   private reconnectDelay: number = 1000;
+  private networkType: string = 'unknown';
+  private isOnline: boolean = navigator.onLine;
 
   private constructor() {
     this.initialize();
@@ -25,33 +27,62 @@ class ConnectionManager {
     window.addEventListener('offline', this.handleOffline);
     window.addEventListener('focus', this.handleFocus);
     window.addEventListener('blur', this.handleBlur);
+
+    // Add network quality detection if available
+    if ('connection' in navigator) {
+      (navigator as any).connection?.addEventListener('change', this.handleNetworkChange);
+      this.networkType = (navigator as any).connection?.effectiveType || 'unknown';
+    }
+
+    // Initial connection check
+    this.checkConnection();
   }
 
+  private checkConnection = () => {
+    const isGoodConnection = this.networkType !== 'slow-2g' && this.networkType !== '2g';
+    if (this.isOnline && isGoodConnection) {
+      this.reconnectChannels();
+    }
+  };
+
+  private handleNetworkChange = () => {
+    const connection = (navigator as any).connection;
+    this.networkType = connection?.effectiveType || 'unknown';
+    this.checkConnection();
+  };
+
   private handleOnline = () => {
-    this.reconnectChannels();
+    this.isOnline = true;
+    this.checkConnection();
   };
 
   private handleOffline = () => {
+    this.isOnline = false;
     this.channels.forEach(channel => {
       channel.unsubscribe();
     });
   };
 
   private handleFocus = () => {
-    if (navigator.onLine) {
-      this.reconnectChannels();
+    if (this.isOnline) {
+      this.checkConnection();
     }
   };
 
   private handleBlur = () => {
     // Optionally reduce connection activity when tab is not focused
+    this.channels.forEach(channel => {
+      channel.presence.leave();
+    });
   };
 
   private async reconnectChannels() {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       await handleError(new Error('Max reconnection attempts reached'), {
         component: 'ConnectionManager',
-        action: 'reconnectChannels'
+        action: 'reconnectChannels',
+        networkType: this.networkType,
+        isOnline: this.isOnline
       });
       return;
     }
@@ -61,6 +92,7 @@ class ConnectionManager {
         await channel.subscribe((status) => {
           if (status === 'SUBSCRIBED') {
             this.reconnectAttempts = 0;
+            console.debug(`Channel ${name} reconnected successfully`);
           } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
             setTimeout(() => {
               this.reconnectAttempts++;
@@ -72,7 +104,9 @@ class ConnectionManager {
     } catch (error) {
       await handleError(error, {
         component: 'ConnectionManager',
-        action: 'reconnectChannels'
+        action: 'reconnectChannels',
+        attempts: this.reconnectAttempts,
+        networkType: this.networkType
       });
     }
   }
@@ -93,7 +127,13 @@ class ConnectionManager {
           // Handle changes
           console.debug(`Channel ${name} received:`, payload);
         })
-        .subscribe();
+        .subscribe((status) => {
+          console.debug(`Channel ${name} status:`, status);
+          
+          if (status === 'SUBSCRIBED') {
+            this.reconnectAttempts = 0;
+          }
+        });
 
       this.channels.set(name, channel);
       return channel;
@@ -101,7 +141,8 @@ class ConnectionManager {
       handleError(error, {
         component: 'ConnectionManager',
         action: 'subscribeToChannel',
-        channel: name
+        channel: name,
+        networkType: this.networkType
       });
       return null;
     }
@@ -123,11 +164,23 @@ class ConnectionManager {
     }
   }
 
+  getConnectionStatus() {
+    return {
+      isOnline: this.isOnline,
+      networkType: this.networkType,
+      reconnectAttempts: this.reconnectAttempts
+    };
+  }
+
   cleanup() {
     window.removeEventListener('online', this.handleOnline);
     window.removeEventListener('offline', this.handleOffline);
     window.removeEventListener('focus', this.handleFocus);
     window.removeEventListener('blur', this.handleBlur);
+
+    if ('connection' in navigator) {
+      (navigator as any).connection?.removeEventListener('change', this.handleNetworkChange);
+    }
 
     this.channels.forEach(channel => {
       channel.unsubscribe();

@@ -60,8 +60,9 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     } catch (error) {
       const errorMessage = await handleStoreError(error, 'ConversationStore', 'fetchConversations');
       set({ error: errorMessage });
+      throw error; // Propager l'erreur
     } finally {
-      set({ loading: false });
+      set({ loading: false }); // Garantir que loading est remis à false
     }
   }, { store: 'ConversationStore', action: 'fetchConversations' }),
 
@@ -128,6 +129,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     } catch (error) {
       const errorMessage = await handleStoreError(error, 'ConversationStore', 'createConversationWithDocument');
       set({ error: errorMessage });
+      throw error;
     } finally {
       set({ loading: false });
     }
@@ -153,6 +155,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     } catch (error) {
       const errorMessage = await handleStoreError(error, 'ConversationStore', 'deleteConversation');
       set({ error: errorMessage });
+      throw error;
     } finally {
       set({ loading: false });
     }
@@ -190,6 +193,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     } catch (error) {
       const errorMessage = await handleStoreError(error, 'ConversationStore', 'updateConversationTitle');
       set({ error: errorMessage });
+      throw error;
     } finally {
       set({ loading: false });
     }
@@ -209,8 +213,9 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     } catch (error) {
       const errorMessage = await handleStoreError(error, 'ConversationStore', 'fetchMessages');
       set({ error: errorMessage });
+      throw error;
     } finally {
-      set({ loading: false });
+      set({ loading: false }); // Garantir que loading est remis à false
     }
   }, { store: 'ConversationStore', action: 'fetchMessages' }),
 
@@ -329,6 +334,7 @@ INSTRUCTIONS: Le texte ci-dessus contient le contenu complet du document "${doc.
     } catch (error) {
       const errorMessage = await handleStoreError(error, 'ConversationStore', 'sendMessage');
       set({ error: errorMessage });
+      throw error;
     } finally {
       set({ loading: false, isTyping: false });
     }
@@ -372,6 +378,7 @@ INSTRUCTIONS: Le texte ci-dessus contient le contenu complet du document "${doc.
     } catch (error) {
       const errorMessage = await handleStoreError(error, 'ConversationStore', 'linkDocument');
       set({ error: errorMessage });
+      throw error;
     } finally {
       set({ loading: false });
     }
@@ -398,6 +405,7 @@ INSTRUCTIONS: Le texte ci-dessus contient le contenu complet du document "${doc.
     } catch (error) {
       const errorMessage = await handleStoreError(error, 'ConversationStore', 'unlinkDocument');
       set({ error: errorMessage });
+      throw error;
     } finally {
       set({ loading: false });
     }
@@ -428,6 +436,7 @@ INSTRUCTIONS: Le texte ci-dessus contient le contenu complet du document "${doc.
     } catch (error) {
       const errorMessage = await handleStoreError(error, 'ConversationStore', 'fetchConversationDocuments');
       set({ error: errorMessage });
+      throw error;
     } finally {
       set({ loading: false });
     }

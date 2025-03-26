@@ -1,26 +1,25 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
 import { config } from './config';
 import { handleError } from './errorHandler';
 import { AuthErrorType } from './errorTypes';
 
-// Create singleton instance
-let supabaseInstance: SupabaseClient;
+// Singleton instance
+let supabaseInstance: ReturnType<typeof createClient>;
 
 // Create Supabase client with retries and better error handling
 function createSupabaseClient() {
-  if (supabaseInstance) return supabaseInstance;
+  if (supabaseInstance) {
+    return supabaseInstance;
+  }
 
   supabaseInstance = createClient(config.supabase.url, config.supabase.anonKey, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,
-      flowType: 'pkce',
       storage: window.localStorage,
       storageKey: 'sb-auth-token',
-      retryInterval: 1000,
-      retryIntervalMax: 5000,
-      retryAttempts: 3
+      flowType: 'pkce'
     },
     global: {
       headers: {
@@ -41,156 +40,205 @@ function createSupabaseClient() {
   return supabaseInstance;
 }
 
-// Admin utility functions
+// Create admin client with service role key
+function createAdminClient() {
+  return createClient(config.supabase.url, config.supabase.serviceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      storage: undefined // Prevent storage for admin client
+    }
+  });
+}
+
+// Export singleton instances
+export const supabase = createSupabaseClient();
+const supabaseAdmin = createAdminClient();
+
+// Admin utilities
 export const adminUtils = {
-  async deleteUser(userId: string) {
-    const headers = {
-      'Authorization': `Bearer ${config.supabase.serviceKey}`,
-      'apikey': config.supabase.serviceKey
-    };
-
-    try {
-      // Delete user data using RPC function
-      const { error: rpcError } = await supabase
-        .rpc('delete_user_data', { user_id_param: userId });
-
-      if (rpcError) {
-        if (rpcError.message.includes('Cannot delete the last super admin')) {
-          throw new Error('Impossible de supprimer le dernier super administrateur');
-        }
-        throw rpcError;
-      }
-
-      // Delete auth user using admin endpoint
-      const response = await fetch(
-        `${config.supabase.url}/auth/v1/admin/users/${userId}`,
-        {
-          method: 'DELETE',
-          headers
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to delete auth user');
-      }
-    } catch (error) {
-      throw error;
-    }
-  },
-
   async createUser(email: string, password: string, role: string) {
-    const headers = {
-      'Authorization': `Bearer ${config.supabase.serviceKey}`,
-      'apikey': config.supabase.serviceKey,
-      'Content-Type': 'application/json'
-    };
-
     try {
-      const response = await fetch(
-        `${config.supabase.url}/auth/v1/admin/users`,
-        {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            email,
-            password,
-            email_confirm: true,
-            user_metadata: { role }
-          })
-        }
-      );
+      // Create user with admin client
+      const { data: authData, error: signUpError } = await supabaseAdmin.auth.admin.createUser({
+        email: email.toLowerCase(),
+        password: password,
+        email_confirm: true,
+        user_metadata: { role }
+      });
 
-      if (!response.ok) {
-        throw new Error('Failed to create user');
-      }
+      if (signUpError) throw signUpError;
+      if (!authData.user) throw new Error('Error creating user account');
 
-      const data = await response.json();
-      return data;
+      return { user: authData.user };
     } catch (error) {
+      await handleError(error, {
+        component: 'adminUtils',
+        action: 'createUser',
+        email
+      });
       throw error;
     }
   },
 
-  async updateUserRole(userId: string, role: string) {
-    const headers = {
-      'Authorization': `Bearer ${config.supabase.serviceKey}`,
-      'apikey': config.supabase.serviceKey,
-      'Content-Type': 'application/json'
-    };
-
+  async deleteUser(userId: string) {
     try {
-      const response = await fetch(
-        `${config.supabase.url}/auth/v1/admin/users/${userId}`,
-        {
-          method: 'PUT',
-          headers,
-          body: JSON.stringify({
-            user_metadata: { role }
-          })
-        }
-      );
+      // Call edge function to delete user
+      const response = await fetch(`${config.supabase.url}/functions/v1/delete-user`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${config.supabase.anonKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ user_id: userId })
+      });
 
       if (!response.ok) {
-        throw new Error('Failed to update user role');
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to delete user');
       }
 
-      const data = await response.json();
-      return data;
+      return { success: true };
     } catch (error) {
+      await handleError(error, {
+        component: 'adminUtils',
+        action: 'deleteUser',
+        userId
+      });
       throw error;
     }
   }
 };
 
-// Export singleton instance
-export const supabase = createSupabaseClient();
-
 // Initialize auth state
-supabase.auth.getSession().catch(async error => {
-  try {
-    await handleError(error, {
-      component: 'supabase',
-      action: 'getInitialSession'
-    });
+let authInitialized = false;
+let authCheckPromise: Promise<void> | null = null;
 
-    // Clear session and redirect on auth errors
-    if (error instanceof Error && 
-        (error.message.includes('JWT expired') || 
-         error.message.includes('Invalid JWT') ||
-         error.message.includes('session_not_found'))) {
+export async function initializeAuth() {
+  console.debug('🔐 Initializing auth...');
+  
+  // Return existing promise if auth check is in progress
+  if (authCheckPromise) {
+    console.debug('🔄 Auth check already in progress, returning existing promise');
+    return authCheckPromise;
+  }
+
+  // Return immediately if already initialized
+  if (authInitialized) {
+    console.debug('✅ Auth already initialized');
+    return;
+  }
+
+  authCheckPromise = (async () => {
+    try {
+      console.debug('🔍 Checking session...');
+      
+      // First try to get session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        console.debug('❌ Session error:', sessionError);
+        
+        // Try to refresh if token expired
+        if (sessionError.message.includes('JWT expired')) {
+          console.debug('🔄 Token expired, attempting refresh...');
+          const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+          if (refreshError) throw refreshError;
+          if (!refreshData.session) throw new Error('Session refresh failed');
+          console.debug('✅ Session refreshed successfully');
+        } else {
+          throw sessionError;
+        }
+      }
+
+      // If we have a session, validate it
+      if (session) {
+        console.debug('🔍 Validating session...');
+        
+        // Verify user exists
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError) throw userError;
+        if (!user) throw new Error('User not found');
+
+        console.debug('👤 User found:', user.email);
+
+        // Check profile status
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('status, role')
+          .eq('id', user.id)
+          .single();
+
+        if (profileError) {
+          console.debug('❌ Profile error:', profileError);
+          throw profileError;
+        }
+        
+        if (!profile?.status) {
+          console.debug('❌ Profile inactive');
+          throw new Error('Profile inactive');
+        }
+
+        console.debug('✅ Profile validated:', { status: profile.status, role: profile.role });
+
+        // Store role in localStorage for quick access
+        localStorage.setItem('userRole', profile.role);
+      } else {
+        console.debug('⚠️ No session found');
+      }
+
+      console.debug('✅ Auth initialization complete');
+      authInitialized = true;
+    } catch (error) {
+      console.error('❌ Auth initialization error:', error);
+      
+      // Clear auth state on critical errors
       await supabase.auth.signOut();
       localStorage.clear();
-      window.location.href = '/login';
+      authInitialized = false;
+
+      await handleError(error, {
+        component: 'supabase',
+        action: 'initializeAuth'
+      });
+
+      throw error;
+    } finally {
+      authCheckPromise = null;
     }
-  } catch (err) {
-    console.error('Critical error during session check:', err);
-    localStorage.clear();
-    window.location.href = '/login';
-  }
-});
+  })();
+
+  return authCheckPromise;
+}
 
 // Set up auth state change listener
 supabase.auth.onAuthStateChange(async (event, session) => {
+  console.debug('🔄 Auth state change:', event);
+  
   try {
     if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+      console.debug('👋 User signed out or deleted');
       localStorage.clear();
+      authInitialized = false;
       window.location.href = '/login';
-    } else if (event === 'TOKEN_REFRESHED') {
-      // Silent refresh successful
     } else if (event === 'SIGNED_IN') {
-      // Validate session on sign in
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) {
-        throw new Error('Invalid session after sign in');
-      }
+      console.debug('🎉 User signed in, initializing auth...');
+      await initializeAuth();
+    } else if (event === 'TOKEN_REFRESHED') {
+      console.debug('🔄 Token refreshed');
+      authInitialized = true;
     }
   } catch (error) {
+    console.error('❌ Auth state change error:', error);
+    
     await handleError(error, {
       component: 'supabase',
       action: 'authStateChange',
       event
     });
+    
     localStorage.clear();
+    authInitialized = false;
     window.location.href = '/login';
   }
 });
@@ -201,23 +249,43 @@ window.addEventListener('focus', () => {
   clearTimeout(refreshTimeout);
   refreshTimeout = setTimeout(async () => {
     try {
-      const { data: { session }, error } = await supabase.auth.getSession();
-      if (error || !session) {
-        throw new Error('No valid session');
+      console.debug('🔍 Checking session on focus...');
+      
+      if (!authInitialized) {
+        console.debug('🔄 Auth not initialized, initializing...');
+        await initializeAuth();
+        return;
       }
+
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (error) throw error;
+      
+      if (!session) {
+        console.debug('⚠️ No session found on focus');
+        localStorage.clear();
+        authInitialized = false;
+        window.location.href = '/login';
+        return;
+      }
+
+      // Try to refresh session
+      console.debug('🔄 Refreshing session...');
+      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+      if (refreshError) throw refreshError;
+      if (!refreshData.session) throw new Error('Session refresh failed');
+      
+      console.debug('✅ Session refreshed successfully');
     } catch (error) {
+      console.error('❌ Session refresh error:', error);
+      
       await handleError(error, {
         component: 'supabase',
         action: 'refreshSession'
       });
-
-      if (error instanceof Error && 
-          (error.message.includes('refresh_token_not_found') || 
-           error.message.includes('JWT expired') || 
-           error.message.includes('Invalid JWT'))) {
-        localStorage.clear();
-        window.location.href = '/login';
-      }
+      
+      localStorage.clear();
+      authInitialized = false;
+      window.location.href = '/login';
     }
   }, 1000);
 });
@@ -228,17 +296,22 @@ window.addEventListener('unhandledrejection', async (event) => {
     if (event.reason?.name === 'AuthApiError' || 
         event.reason?.message?.includes('JWT expired') ||
         event.reason?.message?.includes('Invalid JWT')) {
+      console.error('❌ Unhandled auth error:', event.reason);
+      
       await handleError(event.reason, {
         component: 'supabase',
         action: 'unhandledAuthError',
         type: AuthErrorType.SESSION_EXPIRED
       });
+      
       localStorage.clear();
+      authInitialized = false;
       window.location.href = '/login';
     }
   } catch (error) {
-    console.error('Critical error in unhandled rejection handler:', error);
+    console.error('❌ Critical error in unhandled rejection handler:', error);
     localStorage.clear();
+    authInitialized = false;
     window.location.href = '/login';
   }
 });

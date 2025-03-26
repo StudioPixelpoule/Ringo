@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { supabase, initializeAuth } from '../lib/supabase';
 import { Logo } from '../components/Logo';
 import { SmallLogo } from '../components/SmallLogo';
 import { IrsstLogo } from '../components/IrsstLogo';
@@ -12,13 +12,54 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isInitializing, setIsInitializing] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
 
   useEffect(() => {
-    // Clear any stale auth state on mount
-    localStorage.clear();
-  }, []);
+    let mounted = true;
+    let timeoutId: NodeJS.Timeout;
+
+    const checkAuth = async () => {
+      try {
+        // Add timeout to prevent infinite loading
+        timeoutId = setTimeout(() => {
+          if (mounted) {
+            setIsInitializing(false);
+          }
+        }, 5000);
+
+        await initializeAuth();
+        
+        // Check current session
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        
+        if (session?.user) {
+          const from = location.state?.from?.pathname || '/';
+          navigate(from, { replace: true });
+          return;
+        }
+      } catch (error) {
+        console.error('Auth check error:', error);
+        // Clear any stale auth state
+        await supabase.auth.signOut();
+        localStorage.clear();
+      } finally {
+        if (mounted) {
+          clearTimeout(timeoutId);
+          setIsInitializing(false);
+        }
+      }
+    };
+
+    checkAuth();
+
+    return () => {
+      mounted = false;
+      clearTimeout(timeoutId);
+    };
+  }, [navigate, location]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,11 +118,39 @@ export function Login() {
     }
   };
 
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen bg-[#f15922] flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-md flex flex-col items-center">
+          <div className="flex flex-col items-center mb-8">
+            <div className="w-24 h-24 flex items-center justify-center">
+              <Logo />
+            </div>
+            <h1 className="text-white text-4xl font-bold flex items-center">
+              RINGO
+              <sup className="ml-1 flex items-center gap-0.5 text-sm text-white">
+                <span>par</span>
+                <SmallLogo />
+              </sup>
+            </h1>
+            <div className="mt-4">
+              <IrsstLogo />
+            </div>
+          </div>
+          <div className="flex items-center justify-center text-white gap-2">
+            <Loader2 className="animate-spin" size={20} />
+            <span>Chargement...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#f15922] flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center mb-8">
-          <div className="w-24 h-24 flex items-center justify-center -mb-2">
+          <div className="w-24 h-24 flex items-center justify-center">
             <Logo />
           </div>
           <h1 className="text-white text-4xl font-bold flex items-center">

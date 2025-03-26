@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, forwardRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronRight, Search, X, Send, Loader2, CheckSquare, Square, FolderPlus, Edit2, Trash2 } from 'lucide-react';
 import { useDocumentStore, Document, Folder } from '../lib/documentStore';
 import { useConversationStore } from '../lib/conversationStore';
 import { FileIcon } from './FileIcon';
 import { FolderModal } from './FolderModal';
+import { DeleteConfirmationModal } from './DeleteConfirmationModal';
 
 interface FileCardProps {
   document: Document;
@@ -60,11 +61,11 @@ interface FolderTreeItemProps {
   onToggle: (folderId: string) => void;
   onCreateFolder: (parentId: string | null) => void;
   onRenameFolder: (folder: Folder) => void;
-  onDeleteFolder: (folder: Folder) => void;
+  onDeleteClick: (folder: Folder) => void;
   folders: Folder[];
 }
 
-const FolderTreeItem: React.FC<FolderTreeItemProps> = ({
+const FolderTreeItem = forwardRef<HTMLDivElement, FolderTreeItemProps>(({
   folder,
   level,
   selectedFolder,
@@ -73,9 +74,9 @@ const FolderTreeItem: React.FC<FolderTreeItemProps> = ({
   onToggle,
   onCreateFolder,
   onRenameFolder,
-  onDeleteFolder,
+  onDeleteClick,
   folders
-}) => {
+}, ref) => {
   const hasChildren = folders.some(f => f.parent_id === folder.id);
   const isExpanded = expandedFolders.has(folder.id);
   const childFolders = folders.filter(f => f.parent_id === folder.id);
@@ -83,6 +84,7 @@ const FolderTreeItem: React.FC<FolderTreeItemProps> = ({
 
   return (
     <motion.div
+      ref={ref}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -144,7 +146,7 @@ const FolderTreeItem: React.FC<FolderTreeItemProps> = ({
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                onDeleteFolder(folder);
+                onDeleteClick(folder);
               }}
               className="p-1 hover:bg-black/10 rounded"
               title="Supprimer"
@@ -174,7 +176,7 @@ const FolderTreeItem: React.FC<FolderTreeItemProps> = ({
                 onToggle={onToggle}
                 onCreateFolder={onCreateFolder}
                 onRenameFolder={onRenameFolder}
-                onDeleteFolder={onDeleteFolder}
+                onDeleteClick={onDeleteClick}
                 folders={folders}
               />
             ))}
@@ -183,7 +185,9 @@ const FolderTreeItem: React.FC<FolderTreeItemProps> = ({
       </AnimatePresence>
     </motion.div>
   );
-};
+});
+
+FolderTreeItem.displayName = 'FolderTreeItem';
 
 interface FileExplorerProps {
   isOpen: boolean;
@@ -208,6 +212,16 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
     parentId: null
   });
   
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{
+    isOpen: boolean;
+    folder: Folder | null;
+    isDeleting: boolean;
+  }>({
+    isOpen: false,
+    folder: null,
+    isDeleting: false
+  });
+
   const {
     folders,
     documents,
@@ -276,13 +290,31 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
     });
   };
 
-  const handleDeleteFolder = async (folder: Folder) => {
-    if (window.confirm(`Supprimer le dossier "${folder.name}" ?`)) {
-      await deleteFolder(folder.id);
+  const handleDeleteClick = (folder: Folder) => {
+    setDeleteConfirmation({
+      isOpen: true,
+      folder,
+      isDeleting: false
+    });
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmation.folder) return;
+    
+    try {
+      setDeleteConfirmation(prev => ({ ...prev, isDeleting: true }));
+      await deleteFolder(deleteConfirmation.folder.id);
       await fetchFolders();
-      if (selectedFolder?.id === folder.id) {
+      
+      if (selectedFolder?.id === deleteConfirmation.folder.id) {
         setSelectedFolder(null);
+        setExpandedFolders(new Set());
       }
+      
+      setDeleteConfirmation({ isOpen: false, folder: null, isDeleting: false });
+    } catch (error) {
+      console.error('Error deleting folder:', error);
+      setDeleteConfirmation(prev => ({ ...prev, isDeleting: false }));
     }
   };
 
@@ -453,7 +485,7 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
                           onToggle={handleToggleFolder}
                           onCreateFolder={handleCreateFolder}
                           onRenameFolder={handleRenameFolder}
-                          onDeleteFolder={handleDeleteFolder}
+                          onDeleteClick={handleDeleteClick}
                           folders={folders}
                         />
                       ))}
@@ -578,7 +610,7 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
           </div>
         </motion.div>
       </div>
-
+      
       <FolderModal
         isOpen={folderModal.isOpen}
         onClose={() => setFolderModal({ isOpen: false, mode: 'create', parentId: null })}
@@ -591,6 +623,15 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
             ? folders.find(f => f.id === folderModal.parentId)?.name
             : undefined
         }
+      />
+
+      <DeleteConfirmationModal
+        isOpen={deleteConfirmation.isOpen}
+        title="Supprimer le dossier"
+        message={`Êtes-vous sûr de vouloir supprimer le dossier "${deleteConfirmation.folder?.name}" ? Cette action est irréversible et supprimera également tous les sous-dossiers et documents qu'il contient.`}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteConfirmation({ isOpen: false, folder: null, isDeleting: false })}
+        isDeleting={deleteConfirmation.isDeleting}
       />
     </>
   );
