@@ -187,47 +187,6 @@ export function DocumentImportModal() {
     disabled: processingStatus.isProcessing
   });
 
-  const getFolderPath = () => {
-    if (!currentFolder) return 'Aucun dossier sélectionné';
-    const path = selectedPath.map(folder => folder.name);
-    if (path.length === 0) return 'Racine';
-    return path.join(' / ');
-  };
-
-  const handleFolderSelect = (folder: Folder, level: number) => {
-    const newPath = selectedPath.slice(0, level);
-    newPath[level] = folder;
-    setSelectedPath(newPath);
-    setCurrentFolder(folder);
-  };
-
-  const handleCreateFolder = async (parentId: string | null) => {
-    const name = window.prompt('Nom du dossier:');
-    if (name) {
-      await createFolder(name, parentId);
-      await fetchFolders();
-    }
-  };
-
-  const handleRenameFolder = async (folder: Folder) => {
-    const newName = window.prompt('Nouveau nom:', folder.name);
-    if (newName && newName !== folder.name) {
-      await renameFolder(folder.id, newName);
-      await fetchFolders();
-    }
-  };
-
-  const handleDeleteFolder = async (folder: Folder) => {
-    if (window.confirm(`Supprimer le dossier "${folder.name}" ?`)) {
-      await deleteFolder(folder.id);
-      await fetchFolders();
-      if (currentFolder?.id === folder.id) {
-        setCurrentFolder(null);
-        setSelectedPath([]);
-      }
-    }
-  };
-
   const handleUpload = async () => {
     if (!currentFolder || !selectedFile || processingStatus.isProcessing) return;
     
@@ -260,6 +219,13 @@ export function DocumentImportModal() {
         const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
         const filePath = `documents/${fileName}`;
 
+        setProcessingStatus({
+          isProcessing: true,
+          progress: 30,
+          stage: 'processing',
+          message: 'Téléversement du fichier audio...'
+        });
+
         const { error: uploadError, data: uploadData } = await supabase.storage
           .from('documents')
           .upload(filePath, selectedFile, {
@@ -270,6 +236,13 @@ export function DocumentImportModal() {
 
         if (uploadError) throw uploadError;
         if (!uploadData?.path) throw new Error('Failed to upload file');
+
+        setProcessingStatus({
+          isProcessing: true,
+          progress: 60,
+          stage: 'processing',
+          message: 'Traitement du fichier audio...'
+        });
 
         const doc = await uploadDocument(selectedFile, currentFolder.id, {
           type: documentType,
@@ -326,6 +299,40 @@ export function DocumentImportModal() {
         message: error instanceof Error ? error.message : 'Une erreur est survenue'
       });
       setSelectedFile(null);
+    }
+  };
+
+  const handleFolderSelect = (folder: Folder, level: number) => {
+    const newPath = selectedPath.slice(0, level);
+    newPath[level] = folder;
+    setSelectedPath(newPath);
+    setCurrentFolder(folder);
+  };
+
+  const handleCreateFolder = async (parentId: string | null) => {
+    const name = window.prompt('Nom du dossier:');
+    if (name) {
+      await createFolder(name, parentId);
+      await fetchFolders();
+    }
+  };
+
+  const handleRenameFolder = async (folder: Folder) => {
+    const newName = window.prompt('Nouveau nom:', folder.name);
+    if (newName && newName !== folder.name) {
+      await renameFolder(folder.id, newName);
+      await fetchFolders();
+    }
+  };
+
+  const handleDeleteFolder = async (folder: Folder) => {
+    if (window.confirm(`Supprimer le dossier "${folder.name}" ?`)) {
+      await deleteFolder(folder.id);
+      await fetchFolders();
+      if (currentFolder?.id === folder.id) {
+        setCurrentFolder(null);
+        setSelectedPath([]);
+      }
     }
   };
 

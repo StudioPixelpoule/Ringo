@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { Logo } from '../components/Logo';
 import { SmallLogo } from '../components/SmallLogo';
 import { IrsstLogo } from '../components/IrsstLogo';
+import packageJson from '../../package.json';
 
 export function Login() {
   const [email, setEmail] = useState('');
@@ -129,6 +130,10 @@ export function Login() {
               <text x="500" y="100" fontSize="60" fontFamily="Arial" fontWeight="300" textAnchor="middle">En mode</text>
               <text x="500" y="180" fontSize="100" fontFamily="Arial" fontWeight="900" textAnchor="middle">SOLUTIONS</text>
             </svg>
+          </div>
+          <div className="mt-8 text-xs text-white/70 text-center">
+            <p>Version {packageJson.version}</p>
+            <p>© {new Date().getFullYear()} En Mode Solutions. Tous droits réservés.</p>
           </div>
         </div>
       </div>

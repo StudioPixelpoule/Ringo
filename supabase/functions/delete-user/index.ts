@@ -4,15 +4,22 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.7'
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Max-Age': '86400',
+};
 
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: corsHeaders });
   }
 
   try {
+    // Verify request method
+    if (req.method !== 'POST') {
+      throw new Error('Method not allowed');
+    }
+
     // Create authenticated Supabase client using the service role key
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -23,13 +30,13 @@ serve(async (req) => {
           persistSession: false,
         },
       }
-    )
+    );
 
     // Get the request body
-    const { user_id } = await req.json()
+    const { user_id } = await req.json();
 
     if (!user_id) {
-      throw new Error('user_id is required')
+      throw new Error('user_id is required');
     }
 
     // First check if user exists and get their role
@@ -37,10 +44,10 @@ serve(async (req) => {
       .from('profiles')
       .select('role')
       .eq('id', user_id)
-      .single()
+      .single();
 
     if (profileError) {
-      throw new Error('Failed to fetch user profile')
+      throw new Error('Failed to fetch user profile');
     }
 
     // Don't allow deleting the last super admin
@@ -49,32 +56,32 @@ serve(async (req) => {
         .from('profiles')
         .select('id', { count: 'exact', head: true })
         .eq('role', 'super_admin')
-        .eq('status', true)
+        .eq('status', true);
 
       if (countError) {
-        throw new Error('Failed to check super admin count')
+        throw new Error('Failed to check super admin count');
       }
 
       if (count === 1) {
-        throw new Error('Cannot delete the last super admin')
+        throw new Error('Cannot delete the last super admin');
       }
     }
 
     // Delete all user data
     const { error: deleteDataError } = await supabaseAdmin
-      .rpc('delete_user_data', { user_id_param: user_id })
+      .rpc('delete_user_data_v2', { user_id_param: user_id });
 
     if (deleteDataError) {
-      throw new Error('Failed to delete user data')
+      throw new Error('Failed to delete user data');
     }
 
     // Delete the user from auth.users
     const { error: deleteUserError } = await supabaseAdmin.auth.admin.deleteUser(
       user_id
-    )
+    );
 
     if (deleteUserError) {
-      throw new Error('Failed to delete user account')
+      throw new Error('Failed to delete user account');
     }
 
     return new Response(
@@ -83,14 +90,18 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
       }
-    )
+    );
   } catch (error) {
+    console.error('Error in delete-user function:', error);
+    
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        error: error instanceof Error ? error.message : 'An error occurred while deleting the user'
+      }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
+        status: 400
       }
-    )
+    );
   }
-})
+});

@@ -69,27 +69,13 @@ export const useUserStore = create<UserStore>((set, get) => ({
   createUser: async ({ email, password, role }) => {
     set({ loading: true, error: null });
     try {
-      // Create user in auth
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-        email: email.toLowerCase(),
-        password: password,
-        email_confirm: true
+      // Call the Edge Function instead of direct admin API
+      const { data, error } = await supabase.functions.invoke('create-user', {
+        body: { email, password, role }
       });
 
-      if (authError) throw authError;
-      if (!authData.user) throw new Error('Failed to create user');
-
-      // Create profile
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert([{
-          id: authData.user.id,
-          email: email.toLowerCase(),
-          role: role,
-          status: true
-        }]);
-
-      if (profileError) throw profileError;
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Failed to create user');
 
       // Refresh user list
       await get().fetchUsers();

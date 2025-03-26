@@ -2,6 +2,9 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { createWorker } from 'tesseract.js';
 import mammoth from 'mammoth';
 
+// Initialize PDF.js worker with proper CDN path
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+
 // Types communs
 export interface ProcessingResult {
   content: string;
@@ -55,6 +58,31 @@ function detectLanguage(text: string): string {
   return frenchPattern.test(text) ? 'fra' : 'eng';
 }
 
+// Optimisation d'image pour OCR
+async function optimizeImageForOCR(imageData: ImageData): Promise<ImageData> {
+  const { width, height, data } = imageData;
+  const newData = new Uint8ClampedArray(width * height * 4);
+
+  for (let i = 0; i < data.length; i += 4) {
+    // Convert to grayscale using luminance formula
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    const gray = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+
+    // Apply threshold for binarization
+    const value = gray > 128 ? 255 : 0;
+
+    // Set RGBA values
+    newData[i] = value;     // R
+    newData[i + 1] = value; // G
+    newData[i + 2] = value; // B
+    newData[i + 3] = 255;   // A
+  }
+
+  return new ImageData(newData, width, height);
+}
+
 // Traitement des fichiers audio
 async function processAudioFile(
   file: File,
@@ -73,35 +101,70 @@ async function processAudioFile(
     canCancel: true
   });
 
+  // Validate file type
+  const validTypes = [
+    'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/wave', 
+    'audio/x-wav', 'audio/aac', 'audio/ogg', 'audio/webm'
+  ];
+
+  if (!validTypes.includes(file.type)) {
+    throw new Error(`Type de fichier audio non supporté: ${file.type}`);
+  }
+
+  // Validate file size (25MB limit for Whisper API)
+  if (file.size > 25 * 1024 * 1024) {
+    throw new Error('Le fichier audio ne doit pas dépasser 25MB');
+  }
+
   const formData = new FormData();
   formData.append('file', file);
   formData.append('model', 'whisper-1');
   formData.append('response_format', 'verbose_json');
+  formData.append('language', 'fr');
+  formData.append('prompt', 'Transcription en français. Respecter la ponctuation et la structure du texte.');
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 300000); // 5min timeout
+
+    onProgress?.({
+      stage: 'processing',
+      progress: 30,
+      message: 'Transcription en cours...',
+      canCancel: true
+    });
+
     const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
       },
       body: formData,
-      signal
+      signal: controller.signal
     });
 
+    clearTimeout(timeoutId);
+
     if (!response.ok) {
-      throw new Error(`Échec de la transcription: ${response.statusText}`);
+      const error = await response.json().catch(() => ({ error: response.statusText }));
+      throw new Error(`Échec de la transcription: ${error.error || response.statusText}`);
     }
 
     const result = await response.json();
 
+    if (!result.text || !Array.isArray(result.segments)) {
+      throw new Error('Format de réponse invalide de l\'API Whisper');
+    }
+
     onProgress?.({
       stage: 'processing',
-      progress: 90,
-      message: 'Finalisation de la transcription...',
+      progress: 70,
+      message: 'Structuration du texte...',
       canCancel: true
     });
 
-    return {
+    // Format the transcription with proper structure
+    const formattedText: ProcessingResult = {
       content: result.text,
       metadata: {
         title: file.name.replace(/\.[^/.]+$/, ''),
@@ -115,14 +178,26 @@ async function processAudioFile(
           text: String(s.text || '').trim()
         }))
       },
-      confidence: 0.95,
+      confidence: result.segments.reduce((acc: number, s: any) => acc + (s.confidence || 0), 0) / result.segments.length,
       processingDate: new Date().toISOString()
     };
+
+    onProgress?.({
+      stage: 'complete',
+      progress: 100,
+      message: 'Transcription terminée',
+      canCancel: false
+    });
+
+    return formattedText;
   } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('Traitement annulé');
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        throw new Error('La transcription a pris trop de temps');
+      }
+      throw new Error(`Échec de la transcription: ${error.message}`);
     }
-    throw error;
+    throw new Error('Une erreur inattendue est survenue lors de la transcription');
   }
 }
 
@@ -144,7 +219,13 @@ async function processPDFDocument(
   });
 
   const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const pdf = await pdfjsLib.getDocument({
+    data: arrayBuffer,
+    useWorkerFetch: true,
+    isEvalSupported: true,
+    useSystemFonts: true
+  }).promise;
+  
   const metadata = await pdf.getMetadata();
 
   const pages: Array<{
@@ -177,16 +258,20 @@ async function processPDFDocument(
       paragraphs: [] as string[]
     };
 
+    // Extract text content
     for (const item of content.items as any[]) {
       const text = item.str.trim();
       if (!text) continue;
 
-      // Détection des titres
-      if (
+      // Improved heading detection
+      const isHeading = 
         item.fontName?.toLowerCase().includes('bold') ||
         item.fontSize > 12 ||
-        /^[A-Z0-9\s]{10,}$/.test(text)
-      ) {
+        /^[A-Z0-9\s]{10,}$/.test(text) ||
+        /^[\d.]+\s+[A-Z]/.test(text) || // Numbered headings
+        text.length < 50 && text.toUpperCase() === text; // Short all-caps lines
+
+      if (isHeading) {
         structure.headings.push(text);
       } else {
         structure.paragraphs.push(text);
@@ -195,36 +280,74 @@ async function processPDFDocument(
       pageText += text + ' ';
     }
 
-    // OCR si peu de texte détecté
-    if (pageText.length < 100) {
-      const scale = 2.0;
-      const viewport = page.getViewport({ scale });
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
+    // Perform OCR if needed
+    if (pageText.length < 200 || /image|figure|tableau/i.test(pageText)) {
+      try {
+        const scale = 2.0; // Higher resolution for better OCR
+        const viewport = page.getViewport({ scale });
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d', {
+          willReadFrequently: true,
+          alpha: false
+        });
 
-      if (context) {
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
+        if (context) {
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
 
-        await page.render({
-          canvasContext: context,
-          viewport,
-        }).promise;
+          // Clear canvas with white background
+          context.fillStyle = 'white';
+          context.fillRect(0, 0, canvas.width, canvas.height);
 
-        const worker = await createWorker();
-        const lang = detectLanguage(pageText);
-        await worker.loadLanguage(lang);
-        await worker.initialize(lang);
+          // Render PDF page
+          await page.render({
+            canvasContext: context,
+            viewport,
+            background: 'white'
+          }).promise;
 
-        const { data } = await worker.recognize(canvas);
-        await worker.terminate();
+          // Get image data and optimize for OCR
+          const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+          const optimizedImageData = await optimizeImageForOCR(imageData);
+          
+          // Put optimized image data back to canvas
+          const optimizedCanvas = document.createElement('canvas');
+          optimizedCanvas.width = imageData.width;
+          optimizedCanvas.height = imageData.height;
+          const optimizedContext = optimizedCanvas.getContext('2d');
+          
+          if (optimizedContext) {
+            optimizedContext.putImageData(optimizedImageData, 0, 0);
 
-        if (data.text.length > pageText.length) {
-          pageText = cleanText(data.text);
-          totalConfidence += data.confidence / 100;
-        } else {
-          totalConfidence += 1;
+            // Perform OCR
+            const worker = await createWorker();
+            await worker.loadLanguage('fra+eng');
+            await worker.initialize('fra+eng');
+            const { data: ocrResult } = await worker.recognize(optimizedCanvas);
+            await worker.terminate();
+
+            if (ocrResult.text.length > pageText.length * 0.5) {
+              const cleanedOCRText = cleanText(ocrResult.text);
+              
+              // Merge OCR text with existing text
+              const combinedText = new Set([
+                ...pageText.split(/[.!?]+/).map(s => s.trim()),
+                ...cleanedOCRText.split(/[.!?]+/).map(s => s.trim())
+              ]);
+              
+              pageText = Array.from(combinedText)
+                .filter(s => s.length > 10) // Remove fragments
+                .join('. ');
+              
+              totalConfidence += ocrResult.confidence / 100;
+            } else {
+              totalConfidence += pageText.length > 0 ? 1 : 0.5;
+            }
+          }
         }
+      } catch (ocrError) {
+        console.warn(`OCR failed for page ${i}:`, ocrError);
+        totalConfidence += pageText.length > 0 ? 0.7 : 0.3;
       }
     } else {
       totalConfidence += 1;
@@ -243,14 +366,44 @@ async function processPDFDocument(
     canCancel: true
   });
 
-  // Extraction de la structure globale
+  // Improved structure extraction
   const sections = pages.flatMap((page, index) => {
-    return page.structure.headings.map((heading, i) => ({
-      heading,
-      content: page.structure.paragraphs[i] || '',
-      pageNumber: index + 1
-    }));
+    const sections: Array<{
+      heading?: string;
+      content: string;
+      pageNumber: number;
+    }> = [];
+
+    let currentHeading = '';
+    let currentContent: string[] = [];
+
+    // Process headings and content
+    page.structure.headings.forEach((heading, i) => {
+      if (currentHeading) {
+        sections.push({
+          heading: currentHeading,
+          content: currentContent.join('\n'),
+          pageNumber: index + 1
+        });
+      }
+      currentHeading = heading;
+      currentContent = [page.structure.paragraphs[i] || ''];
+    });
+
+    // Add remaining content
+    if (currentHeading || currentContent.length > 0) {
+      sections.push({
+        heading: currentHeading,
+        content: currentContent.join('\n'),
+        pageNumber: index + 1
+      });
+    }
+
+    return sections;
   });
+
+  // Calculate final confidence score
+  const confidence = Math.min(1, totalConfidence / pdf.numPages);
 
   return {
     content: pages.map(p => p.text).join('\n\n'),
@@ -268,7 +421,7 @@ async function processPDFDocument(
       abstract: pages[0]?.structure.paragraphs[0],
       sections
     },
-    confidence: totalConfidence / pdf.numPages,
+    confidence,
     processingDate: new Date().toISOString()
   };
 }

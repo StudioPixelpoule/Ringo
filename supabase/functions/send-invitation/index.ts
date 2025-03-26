@@ -20,6 +20,11 @@ serve(async (req) => {
   }
 
   try {
+    // Verify request method
+    if (req.method !== 'POST') {
+      throw new Error('Method not allowed');
+    }
+
     const {
       invitation,
       appUrl = 'http://localhost:5173'  // Default to local dev URL
@@ -27,6 +32,18 @@ serve(async (req) => {
 
     if (!invitation?.email || !invitation?.token) {
       throw new Error('Email and token are required');
+    }
+
+    // Validate email format
+    const emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+    if (!emailRegex.test(invitation.email)) {
+      throw new Error('Invalid email format');
+    }
+
+    // Validate role
+    const validRoles = ['super_admin', 'admin', 'user'];
+    if (!validRoles.includes(invitation.role)) {
+      throw new Error('Invalid role');
     }
 
     const client = new SmtpClient();

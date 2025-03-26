@@ -253,37 +253,38 @@ export function Chat({ session }: ChatProps) {
               <LogOut size={18} strokeWidth={2.5} />
             </button>
             <div className="border-l border-white/20 pl-4 flex flex-col">
-              <span className="text-white/90 text-sm">{session.user.email}
-              </span>
+              <span className="text-white/90 text-sm">{session.user.email}</span>
               {userRole === 'super_admin' ? (
                 <span className="text-white/70 text-xs">S-Admin</span>
               ) : userRole === 'admin' ? (
-                <span className="text-white/70 text-xs">admin</span>
+                <span className="text-white/70 text-xs">Admin</span>
               ) : null}
             </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Only show admin buttons to super admin */}
+          {isSuperAdmin && (
+            <>
+              <button 
+                onClick={() => setErrorLogOpen(true)}
+                className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white"
+                title="Voir les erreurs système"
+              >
+                <AlertTriangle size={18} strokeWidth={2.5} />
+              </button>
+              <button 
+                onClick={() => setUserModalOpen(true)}
+                className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
+                aria-label="User management"
+              >
+                <Users size={18} strokeWidth={2.5} />
+              </button>
+            </>
+          )}
+          {/* Show document management buttons to both admin and super admin */}
           {isAdminOrSuperAdmin && (
             <>
-              {isSuperAdmin && (
-                <>
-                  <button 
-                    onClick={() => setErrorLogOpen(true)}
-                    className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white"
-                    title="Voir les erreurs système"
-                  >
-                    <AlertTriangle size={18} strokeWidth={2.5} />
-                  </button>
-                  <button 
-                    onClick={() => setUserModalOpen(true)}
-                    className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
-                    aria-label="User management"
-                  >
-                    <Users size={18} strokeWidth={2.5} />
-                  </button>
-                </>
-              )}
               <button 
                 onClick={() => setDocumentModalOpen(true)}
                 className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
@@ -312,6 +313,7 @@ export function Chat({ session }: ChatProps) {
               >
                 <FileText size={18} strokeWidth={2.5} />
               </button>
+              {/* Show feedback manager only to super admin */}
               {isSuperAdmin && <FeedbackManager />}
             </>
           )}
@@ -418,24 +420,33 @@ export function Chat({ session }: ChatProps) {
 
       <FeedbackButton />
 
-      <UserManagementModal />
-      <DocumentImportModal />
-      <FileManagementModal
-        isOpen={isFileManagementOpen}
-        onClose={() => setFileManagementOpen(false)}
-      />
-      <FileExplorer
-        isOpen={isFileExplorerOpen}
-        onClose={() => setFileExplorerOpen(false)}
-      />
-      <ReportTemplateManager
-        isOpen={isTemplateManagerOpen}
-        onClose={() => setTemplateManagerOpen(false)}
-      />
-      <WebContentImporter
-        isOpen={isWebsiteImportOpen}
-        onClose={() => setWebsiteImportOpen(false)}
-      />
+      {/* Only render user management modal for super admin */}
+      {isSuperAdmin && <UserManagementModal />}
+      
+      {/* Render other modals for admin and super admin */}
+      {isAdminOrSuperAdmin && (
+        <>
+          <DocumentImportModal />
+          <FileManagementModal
+            isOpen={isFileManagementOpen}
+            onClose={() => setFileManagementOpen(false)}
+          />
+          <FileExplorer
+            isOpen={isFileExplorerOpen}
+            onClose={() => setFileExplorerOpen(false)}
+          />
+          <ReportTemplateManager
+            isOpen={isTemplateManagerOpen}
+            onClose={() => setTemplateManagerOpen(false)}
+          />
+          <WebContentImporter
+            isOpen={isWebsiteImportOpen}
+            onClose={() => setWebsiteImportOpen(false)}
+          />
+        </>
+      )}
+      
+      {/* Only render error log viewer for super admin */}
       {isSuperAdmin && (
         <ErrorLogViewer
           isOpen={isErrorLogOpen}

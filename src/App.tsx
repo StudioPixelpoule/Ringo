@@ -3,7 +3,6 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Session } from '@supabase/supabase-js';
 import { Login } from './pages/Login';
 import { Chat } from './pages/Chat';
-import { AcceptInvitation } from './pages/AcceptInvitation';
 import { supabase } from './lib/supabase';
 
 function App() {
@@ -33,6 +32,7 @@ function App() {
       } else if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
         setSession(null);
         setUserRole('user');
+        localStorage.clear();
         window.location.href = '/login';
       } else {
         setSession(session);
@@ -43,49 +43,43 @@ function App() {
       setLoading(false);
     });
 
-    // Handle auth errors
-    const handleAuthError = (error: any) => {
-      if (error?.message?.includes('refresh_token_not_found') || 
-          error?.message?.includes('Invalid Refresh Token')) {
-        console.warn('Session expired, redirecting to login');
-        setSession(null);
-        window.location.href = '/login';
-      }
-    };
-
-    // Add error listener
-    window.addEventListener('unhandledrejection', (event) => {
-      if (event.reason?.name === 'AuthApiError') {
-        handleAuthError(event.reason);
-      }
-    });
-
-    // Cleanup subscriptions
     return () => {
       subscription.unsubscribe();
-      window.removeEventListener('unhandledrejection', handleAuthError);
     };
   }, []);
 
   const fetchUserRole = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('role, status')
-        .eq('id', userId)
-        .single();
+    const retryFetch = async (attempt: number = 1): Promise<any> => {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('role, status')
+          .eq('id', userId)
+          .single();
 
-      if (error) {
-        console.error('Error fetching user profile:', error);
-        // Check if it's an auth error
-        if (error.code === 'PGRST301' || error.code === '401') {
-          setSession(null);
-          window.location.href = '/login';
-          return;
+        if (error) {
+          if (error.code === 'PGRST301' || error.code === '401') {
+            localStorage.clear();
+            window.location.href = '/login';
+            return;
+          }
+          throw error;
+        }
+
+        return data;
+      } catch (error) {
+        if (attempt < 3 && error instanceof TypeError && error.message === 'Failed to fetch') {
+          console.warn(`Attempt ${attempt}: Network error occurred. Retrying in 1 second...`);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          return retryFetch(attempt + 1);
         }
         throw error;
       }
+    };
 
+    try {
+      const data = await retryFetch();
+      
       if (!data) {
         console.warn('No profile found for user');
         return;
@@ -100,6 +94,9 @@ function App() {
       setUserRole(data.role);
     } catch (error) {
       console.error('Error in fetchUserRole:', error);
+      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+        console.error('Network error occurred while fetching user role. Please check your internet connection and Supabase URL.');
+      }
       // Don't throw here to prevent the unhandled promise rejection
     }
   };
@@ -118,10 +115,6 @@ function App() {
         <Route
           path="/login"
           element={session ? <Navigate to="/" replace /> : <Login />}
-        />
-        <Route
-          path="/accept-invitation"
-          element={<AcceptInvitation />}
         />
         <Route
           path="/"

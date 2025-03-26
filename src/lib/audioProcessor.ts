@@ -47,13 +47,19 @@ async function processAudioChunk(chunk: Blob, apiKey: string): Promise<{
   formData.append('prompt', 'Transcription en français. Respecter la ponctuation.');
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
     const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
       },
-      body: formData
+      body: formData,
+      signal: controller.signal
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: response.statusText }));
@@ -107,6 +113,11 @@ export async function processAudioFile(
       throw new Error(`Type de fichier audio non supporté: ${file.type}`);
     }
 
+    // Validate file size (25MB limit for Whisper API)
+    if (file.size > 25 * 1024 * 1024) {
+      throw new Error('Le fichier audio ne doit pas dépasser 25MB');
+    }
+
     onProgress?.({
       stage: 'processing',
       progress: 10,
@@ -114,101 +125,89 @@ export async function processAudioFile(
       canCancel: true
     });
 
-    const MAX_CHUNK_SIZE = 24 * 1024 * 1024; // 24MB to stay under Whisper's 25MB limit
-    let transcription = '';
-    const segments: AudioProcessingResult['metadata']['segments'] = [];
-    let timeOffset = 0;
-    let totalDuration = 0;
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('model', 'whisper-1');
+    formData.append('response_format', 'verbose_json');
+    formData.append('language', 'fr');
+    formData.append('prompt', 'Transcription en français. Respecter la ponctuation et la structure du texte.');
 
-    // Process file in chunks if necessary
-    if (file.size > MAX_CHUNK_SIZE) {
-      const chunks = await createChunkedStream(file, MAX_CHUNK_SIZE);
-      
-      for (let i = 0; i < chunks.length; i++) {
-        // Check if operation was cancelled
-        if (signal?.aborted) {
-          throw new Error('Processing cancelled');
-        }
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 300000); // 5min timeout
 
-        onProgress?.({
-          stage: 'processing',
-          progress: 10 + ((i / chunks.length) * 80),
-          message: `Transcription partie ${i + 1} sur ${chunks.length}`,
-          canCancel: true
-        });
-
-        const result = await processAudioChunk(chunks[i], apiKey);
-        transcription += (transcription ? ' ' : '') + result.text;
-        
-        const adjustedSegments = result.segments.map(segment => ({
-          start: segment.start + timeOffset,
-          end: segment.end + timeOffset,
-          text: segment.text
-        }));
-        
-        segments.push(...adjustedSegments);
-        
-        const lastSegment = result.segments[result.segments.length - 1];
-        if (lastSegment) {
-          timeOffset = lastSegment.end;
-          totalDuration = Math.max(totalDuration, lastSegment.end + timeOffset);
-        }
-      }
-    } else {
       onProgress?.({
         stage: 'processing',
-        progress: 50,
+        progress: 30,
         message: 'Transcription en cours...',
         canCancel: true
       });
 
-      // Check if operation was cancelled
-      if (signal?.aborted) {
-        throw new Error('Processing cancelled');
+      const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: formData,
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: response.statusText }));
+        throw new Error(`Échec de la transcription: ${error.error || response.statusText}`);
       }
 
-      const result = await processAudioChunk(file, apiKey);
-      transcription = result.text;
-      segments.push(...result.segments);
-      totalDuration = result.segments[result.segments.length - 1]?.end || 0;
+      const result = await response.json();
+
+      if (!result.text || !Array.isArray(result.segments)) {
+        throw new Error('Format de réponse invalide de l\'API Whisper');
+      }
+
+      onProgress?.({
+        stage: 'processing',
+        progress: 70,
+        message: 'Structuration du texte...',
+        canCancel: true
+      });
+
+      // Format the transcription with proper structure
+      const formattedText = {
+        text: result.text,
+        metadata: {
+          title: file.name.replace(/\.[^/.]+$/, ''),
+          duration: result.duration,
+          language: detectLanguage(result.text),
+          fileType: file.type,
+          fileName: file.name,
+          segments: result.segments.map((s: any) => ({
+            start: Number(s.start) || 0,
+            end: Number(s.end) || 0,
+            text: String(s.text || '').trim()
+          }))
+        },
+        confidence: result.segments.reduce((acc: number, s: any) => acc + (s.confidence || 0), 0) / result.segments.length,
+        processingDate: new Date().toISOString()
+      };
+
+      onProgress?.({
+        stage: 'complete',
+        progress: 100,
+        message: 'Transcription terminée',
+        canCancel: false
+      });
+
+      return JSON.stringify(formattedText);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          throw new Error('La transcription a pris trop de temps');
+        }
+        throw new Error(`Échec de la transcription: ${error.message}`);
+      }
+      throw new Error('Une erreur inattendue est survenue lors de la transcription');
     }
-
-    onProgress?.({
-      stage: 'processing',
-      progress: 90,
-      message: 'Finalisation de la transcription...',
-      canCancel: true
-    });
-
-    // Check if operation was cancelled
-    if (signal?.aborted) {
-      throw new Error('Processing cancelled');
-    }
-
-    // Prepare result
-    const result: AudioProcessingResult = {
-      text: transcription,
-      metadata: {
-        title: file.name.replace(/\.[^/.]+$/, ''),
-        duration: totalDuration,
-        language: detectLanguage(transcription),
-        fileType: file.type,
-        fileName: file.name,
-        segments
-      },
-      confidence: 0.95,
-      processingDate: new Date().toISOString()
-    };
-
-    onProgress?.({
-      stage: 'complete',
-      progress: 100,
-      message: 'Transcription terminée',
-      canCancel: false
-    });
-
-    console.log('[Audio Processing] Processing completed successfully');
-    return JSON.stringify(result);
   } catch (error) {
     console.error('[Audio Processing] Error:', error);
     throw error;
