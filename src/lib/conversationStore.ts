@@ -1,20 +1,38 @@
 import { create } from 'zustand';
 import { supabase } from './supabase';
 import { generateChatResponse, generateChatResponseStreaming } from './openai';
-import { handleError } from './errorHandler';
-import { 
-  Conversation, 
-  Message, 
-  ConversationDocument, 
-  Document,
-  StoreState 
-} from './types';
+import { Document } from './documentStore';
 
-interface ConversationStore extends StoreState {
+export interface Conversation {
+  id: string;
+  title: string;
+  created_at: string;
+  user_id: string;
+}
+
+export interface Message {
+  id: string;
+  conversation_id: string;
+  sender: 'user' | 'assistant';
+  content: string;
+  created_at: string;
+}
+
+export interface ConversationDocument {
+  id: string;
+  conversation_id: string;
+  document_id: string;
+  created_at: string;
+  documents: Document;
+}
+
+interface ConversationStore {
   conversations: Conversation[];
   currentConversation: Conversation | null;
   messages: Message[];
   documents: ConversationDocument[];
+  loading: boolean;
+  error: string | null;
   isTyping: boolean;
   streamedMessages: Set<string>;
 
@@ -58,11 +76,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       if (error) throw error;
       set({ conversations: data || [] });
     } catch (error) {
-      const appError = await handleError(error, {
-        component: 'ConversationStore',
-        action: 'fetchConversations'
-      });
-      set({ error: appError.getUserMessage() });
+      set({ error: error instanceof Error ? error.message : 'Error fetching conversations' });
     } finally {
       set({ loading: false });
     }
@@ -91,11 +105,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       
       return data;
     } catch (error) {
-      const appError = await handleError(error, {
-        component: 'ConversationStore',
-        action: 'createConversation'
-      });
-      set({ error: appError.getUserMessage() });
+      set({ error: error instanceof Error ? error.message : 'Error creating conversation' });
       throw error;
     } finally {
       set({ loading: false });
@@ -132,12 +142,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       if (messageError) throw messageError;
       set({ messages: [welcomeMessage] });
     } catch (error) {
-      const appError = await handleError(error, {
-        component: 'ConversationStore',
-        action: 'createConversationWithDocument'
-      });
-      set({ error: appError.getUserMessage() });
-      throw error;
+      set({ error: error instanceof Error ? error.message : 'Error creating conversation with document' });
     } finally {
       set({ loading: false });
     }
@@ -161,12 +166,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
         documents: get().currentConversation?.id === id ? [] : get().documents
       });
     } catch (error) {
-      const appError = await handleError(error, {
-        component: 'ConversationStore',
-        action: 'deleteConversation'
-      });
-      set({ error: appError.getUserMessage() });
-      throw error;
+      set({ error: error instanceof Error ? error.message : 'Error deleting conversation' });
     } finally {
       set({ loading: false });
     }
@@ -202,12 +202,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
           : get().currentConversation
       });
     } catch (error) {
-      const appError = await handleError(error, {
-        component: 'ConversationStore',
-        action: 'updateConversationTitle'
-      });
-      set({ error: appError.getUserMessage() });
-      throw error;
+      set({ error: error instanceof Error ? error.message : 'Error updating conversation title' });
     } finally {
       set({ loading: false });
     }
@@ -225,12 +220,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       if (error) throw error;
       set({ messages: data || [] });
     } catch (error) {
-      const appError = await handleError(error, {
-        component: 'ConversationStore',
-        action: 'fetchMessages'
-      });
-      set({ error: appError.getUserMessage() });
-      throw error;
+      set({ error: error instanceof Error ? error.message : 'Error fetching messages' });
     } finally {
       set({ loading: false });
     }
@@ -311,6 +301,7 @@ INSTRUCTIONS: Le texte ci-dessus contient le contenu complet du document "${doc.
 
       const documentContext = formattedDocuments.join('\n\n---\n\n');
 
+      // Create empty assistant message first
       const { data: aiMessage, error: aiError } = await supabase
         .from('messages')
         .insert([{
@@ -323,8 +314,10 @@ INSTRUCTIONS: Le texte ci-dessus contient le contenu complet du document "${doc.
 
       if (aiError) throw aiError;
 
+      // Add empty message to state
       set({ messages: [...get().messages, aiMessage] });
 
+      // Stream the response
       let streamedContent = '';
       await generateChatResponseStreaming(
         [...chatHistory, { role: 'user', content }],
@@ -332,6 +325,7 @@ INSTRUCTIONS: Le texte ci-dessus contient le contenu complet du document "${doc.
         async (chunk) => {
           streamedContent += chunk;
           
+          // Update message in database
           const { error: updateError } = await supabase
             .from('messages')
             .update({ content: streamedContent })
@@ -339,6 +333,7 @@ INSTRUCTIONS: Le texte ci-dessus contient le contenu complet du document "${doc.
             
           if (updateError) throw updateError;
           
+          // Update message in state
           set({ 
             messages: get().messages.map(m => 
               m.id === aiMessage.id ? { ...m, content: streamedContent } : m
@@ -347,14 +342,10 @@ INSTRUCTIONS: Le texte ci-dessus contient le contenu complet du document "${doc.
         }
       );
 
+      // Mark message as streamed
       get().markMessageAsStreamed(aiMessage.id);
     } catch (error) {
-      const appError = await handleError(error, {
-        component: 'ConversationStore',
-        action: 'sendMessage'
-      });
-      set({ error: appError.getUserMessage() });
-      throw error;
+      set({ error: error instanceof Error ? error.message : 'Error sending message' });
     } finally {
       set({ loading: false, isTyping: false });
     }
@@ -396,12 +387,7 @@ INSTRUCTIONS: Le texte ci-dessus contient le contenu complet du document "${doc.
         set({ messages: [...get().messages, acknowledgmentMessage] });
       }
     } catch (error) {
-      const appError = await handleError(error, {
-        component: 'ConversationStore',
-        action: 'linkDocument'
-      });
-      set({ error: appError.getUserMessage() });
-      throw error;
+      set({ error: error instanceof Error ? error.message : 'Error linking document' });
     } finally {
       set({ loading: false });
     }
@@ -426,12 +412,7 @@ INSTRUCTIONS: Le texte ci-dessus contient le contenu complet du document "${doc.
       
       await get().fetchConversationDocuments(conversation.id);
     } catch (error) {
-      const appError = await handleError(error, {
-        component: 'ConversationStore',
-        action: 'unlinkDocument'
-      });
-      set({ error: appError.getUserMessage() });
-      throw error;
+      set({ error: error instanceof Error ? error.message : 'Error unlinking document' });
     } finally {
       set({ loading: false });
     }
@@ -460,12 +441,7 @@ INSTRUCTIONS: Le texte ci-dessus contient le contenu complet du document "${doc.
       if (error) throw error;
       set({ documents: data || [] });
     } catch (error) {
-      const appError = await handleError(error, {
-        component: 'ConversationStore',
-        action: 'fetchConversationDocuments'
-      });
-      set({ error: appError.getUserMessage() });
-      throw error;
+      set({ error: error instanceof Error ? error.message : 'Error fetching conversation documents' });
     } finally {
       set({ loading: false });
     }

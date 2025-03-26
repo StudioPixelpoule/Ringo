@@ -9,7 +9,6 @@ export interface ErrorLog {
   created_at: string;
   status: 'new' | 'investigating' | 'resolved';
   resolution?: string;
-  archived?: boolean;
 }
 
 export async function logError(
@@ -17,50 +16,22 @@ export async function logError(
   context?: Record<string, any>
 ) {
   try {
-    // Log to console first
-    console.error('🚨 Error:', error);
-    if (context) {
-      console.error('📝 Context:', context);
-    }
-    if (error instanceof Error && error.stack) {
-      console.error('📚 Stack:', error.stack);
-    }
-
-    // Get current user if available
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      console.debug('⚠️ No user found for error logging');
-      return;
-    }
 
-    // Get user profile
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single();
+    const { error: dbError } = await supabase
+      .from('error_logs')
+      .insert([{
+        error: error instanceof Error ? error.message : error,
+        stack: error instanceof Error ? error.stack : undefined,
+        context: context || {},
+        user_id: user?.id,
+        status: 'new'
+      }]);
 
-    // Only log errors if user is super admin
-    if (profile?.role === 'super_admin') {
-      console.debug('📝 Logging error to database...');
-      
-      const { error: dbError } = await supabase
-        .from('error_logs')
-        .insert([{
-          error: error instanceof Error ? error.message : error,
-          stack: error instanceof Error ? error.stack : undefined,
-          context: context || {},
-          user_id: user.id,
-          status: 'new'
-        }]);
-
-      if (dbError) {
-        console.error('❌ Failed to log error:', dbError);
-      } else {
-        console.debug('✅ Error logged successfully');
-      }
+    if (dbError) {
+      console.error('Failed to log error:', dbError);
     }
   } catch (e) {
-    console.error('❌ Error logging failed:', e);
+    console.error('Error logging failed:', e);
   }
 }

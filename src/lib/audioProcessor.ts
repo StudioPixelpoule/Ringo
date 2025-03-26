@@ -1,6 +1,4 @@
 import { createChunkedStream, validateAudioChunk } from './streamUtils';
-import { CHUNK_SIZE_LIMITS } from './constants';
-import { logError } from './errorLogger';
 
 interface ProcessingProgress {
   stage: 'upload' | 'processing' | 'complete';
@@ -77,12 +75,7 @@ async function processAudioChunk(chunk: Blob, apiKey: string): Promise<{
       }))
     };
   } catch (error) {
-    logError(error, {
-      component: 'audioProcessor',
-      action: 'processAudioChunk',
-      chunkSize: chunk.size,
-      mimeType: chunk.type
-    });
+    console.error('[Audio Processing] Chunk processing error:', error);
     throw error;
   }
 }
@@ -95,7 +88,7 @@ export async function processAudioFile(
   try {
     console.log(`[Audio Processing] Starting processing: ${file.name}`);
 
-    const apiKey = process.env.VITE_OPENAI_API_KEY;
+    const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
     if (!apiKey) {
       throw new Error('OpenAI API key is not configured');
     }
@@ -121,25 +114,15 @@ export async function processAudioFile(
       canCancel: true
     });
 
+    const MAX_CHUNK_SIZE = 24 * 1024 * 1024; // 24MB to stay under Whisper's 25MB limit
     let transcription = '';
     const segments: AudioProcessingResult['metadata']['segments'] = [];
     let timeOffset = 0;
     let totalDuration = 0;
 
-    // Process file in chunks
-    if (file.size > CHUNK_SIZE_LIMITS.WHISPER) {
-      const chunks = await createChunkedStream(file, {
-        maxChunkSize: CHUNK_SIZE_LIMITS.WHISPER,
-        onProgress: (progress) => {
-          onProgress?.({
-            stage: 'upload',
-            progress,
-            message: `Préparation des segments audio (${Math.round(progress)}%)`,
-            canCancel: true
-          });
-        },
-        signal
-      });
+    // Process file in chunks if necessary
+    if (file.size > MAX_CHUNK_SIZE) {
+      const chunks = await createChunkedStream(file, MAX_CHUNK_SIZE);
       
       for (let i = 0; i < chunks.length; i++) {
         // Check if operation was cancelled
@@ -227,13 +210,7 @@ export async function processAudioFile(
     console.log('[Audio Processing] Processing completed successfully');
     return JSON.stringify(result);
   } catch (error) {
-    logError(error, {
-      component: 'audioProcessor',
-      action: 'processAudioFile',
-      fileType: file.type,
-      fileName: file.name,
-      fileSize: file.size
-    });
+    console.error('[Audio Processing] Error:', error);
     throw error;
   }
 }

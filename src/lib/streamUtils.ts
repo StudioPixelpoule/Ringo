@@ -1,27 +1,10 @@
-import { StreamingOptions } from './types';
-
-export async function createChunkedStream(
-  file: File, 
-  options: StreamingOptions = {}
-): Promise<Blob[]> {
-  const {
-    maxChunkSize = getChunkSize(file.type),
-    onProgress,
-    signal
-  } = options;
-
+export async function createChunkedStream(file: File, chunkSize: number): Promise<Blob[]> {
   const chunks: Blob[] = [];
   let offset = 0;
-  const totalChunks = Math.ceil(file.size / maxChunkSize);
 
   try {
     while (offset < file.size) {
-      // Check for cancellation
-      if (signal?.aborted) {
-        throw new Error('Operation cancelled');
-      }
-
-      const chunk = file.slice(offset, offset + maxChunkSize);
+      const chunk = file.slice(offset, offset + chunkSize);
       
       if (chunk.size === 0) break;
       
@@ -29,30 +12,16 @@ export async function createChunkedStream(
       if (buffer.byteLength === 0) break;
       
       chunks.push(new Blob([buffer], { type: file.type }));
-      offset += maxChunkSize;
-
-      // Report progress
-      if (onProgress) {
-        onProgress((offset / file.size) * 100);
-      }
-
+      offset += chunkSize;
+      
       // Release chunk data
       buffer.slice(0);
-
-      // Allow UI to update
-      await new Promise(resolve => setTimeout(resolve, 0));
     }
     
     return chunks;
   } catch (error) {
-    logError(error, {
-      component: 'streamUtils',
-      action: 'createChunkedStream',
-      fileType: file.type,
-      fileSize: file.size,
-      chunkSize: maxChunkSize
-    });
-    throw error;
+    console.error('[Stream Utils] Error creating chunks:', error);
+    throw new Error('Failed to create file chunks');
   }
 }
 
@@ -64,71 +33,7 @@ export async function validateAudioChunk(chunk: Blob): Promise<boolean> {
     await audioContext.close();
     return true;
   } catch (error) {
-    logError(error, {
-      component: 'streamUtils',
-      action: 'validateAudioChunk',
-      chunkSize: chunk.size,
-      mimeType: chunk.type
-    });
+    console.warn('[Stream Utils] Invalid audio chunk:', error);
     return false;
-  }
-}
-
-export async function* createStreamFromFile(
-  file: File,
-  options: StreamingOptions = {}
-): AsyncGenerator<Blob, void, unknown> {
-  const {
-    maxChunkSize = getChunkSize(file.type),
-    onProgress,
-    signal
-  } = options;
-
-  let offset = 0;
-
-  try {
-    while (offset < file.size) {
-      if (signal?.aborted) {
-        throw new Error('Operation cancelled');
-      }
-
-      const chunk = file.slice(offset, offset + maxChunkSize);
-      if (chunk.size === 0) break;
-
-      yield chunk;
-      offset += chunk.size;
-
-      if (onProgress) {
-        onProgress((offset / file.size) * 100);
-      }
-
-      await new Promise(resolve => setTimeout(resolve, 0));
-    }
-  } catch (error) {
-    logError(error, {
-      component: 'streamUtils',
-      action: 'createStreamFromFile',
-      fileType: file.type,
-      fileSize: file.size,
-      chunkSize: maxChunkSize
-    });
-    throw error;
-  }
-}
-
-export async function concatenateBlobs(blobs: Blob[]): Promise<Blob> {
-  try {
-    const buffers = await Promise.all(
-      blobs.map(blob => blob.arrayBuffer())
-    );
-    return new Blob(buffers, { type: blobs[0]?.type });
-  } catch (error) {
-    logError(error, {
-      component: 'streamUtils',
-      action: 'concatenateBlobs',
-      blobCount: blobs.length,
-      totalSize: blobs.reduce((sum, blob) => sum + blob.size, 0)
-    });
-    throw error;
   }
 }

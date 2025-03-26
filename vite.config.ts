@@ -2,13 +2,13 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
-  plugins: [react({
-    jsxRuntime: 'classic'
-  })],
+  plugins: [react()],
+  optimizeDeps: {
+    include: ['xlsx']
+  },
   build: {
     target: 'esnext',
     minify: 'esbuild',
-    sourcemap: false,
     rollupOptions: {
       output: {
         manualChunks: {
@@ -42,54 +42,10 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000
   },
   server: {
-    host: true,
-    port: 5173,
-    strictPort: true,
-    cors: true,
     headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, apikey',
+      'Cache-Control': 'public, max-age=31536000',
       'Cross-Origin-Opener-Policy': 'same-origin',
       'Cross-Origin-Embedder-Policy': 'require-corp'
-    },
-    proxy: {
-      '/api/proxy': {
-        target: 'https://api.allorigins.win',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/proxy/, '/raw'),
-        configure: (proxy) => {
-          proxy.on('error', (err) => {
-            console.error('Proxy error:', err);
-          });
-          proxy.on('proxyReq', (proxyReq) => {
-            proxyReq.setHeader('User-Agent', 'Mozilla/5.0');
-          });
-        }
-      },
-      '/api/v1': {
-        target: 'https://api.openai.com',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/v1/, '/v1'),
-        configure: (proxy) => {
-          proxy.on('error', (err) => {
-            console.error('OpenAI proxy error:', err);
-          });
-          proxy.on('proxyReq', (proxyReq, req) => {
-            // Forward Authorization header
-            const authHeader = req.headers['authorization'];
-            if (authHeader) {
-              proxyReq.setHeader('Authorization', authHeader);
-            }
-          });
-        }
-      }
     }
-  },
-  preview: {
-    port: 5173,
-    strictPort: true,
-    host: true,
-    cors: true
   }
 });

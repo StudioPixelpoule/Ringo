@@ -5,6 +5,7 @@ import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import './EnhancedMarkdown.css';
 
 interface EnhancedMarkdownProps {
   content: string;
@@ -30,21 +31,19 @@ export const EnhancedMarkdown: React.FC<EnhancedMarkdownProps> = ({ content, cla
           ul: ({ node, ...props }) => <ul className="markdown-ul" {...props} />,
           ol: ({ node, ...props }) => <ol className="markdown-ol" {...props} />,
           li: ({ node, ...props }) => <li className="markdown-li" {...props} />,
-          table: ({ node, ...props }) => (
-            <div className="overflow-x-auto my-4 rounded-lg border border-gray-200">
-              <table className="w-full" {...props} />
-            </div>
-          ),
-          thead: ({ node, ...props }) => <thead className="bg-gray-50" {...props} />,
-          th: ({ node, ...props }) => <th className="px-4 py-2 text-left text-sm font-semibold text-gray-900" {...props} />,
-          td: ({ node, ...props }) => <td className="px-4 py-2 text-sm text-gray-700 border-t border-gray-200" {...props} />,
-          em: ({ node, ...props }) => <em className="italic text-gray-600" {...props} />,
-          strong: ({ node, ...props }) => <strong className="font-semibold text-gray-900" {...props} />,
-          hr: ({ node, ...props }) => <hr className="my-6 border-t border-gray-200" {...props} />,
+          table: ({ node, ...props }) => <div className="table-container"><table className="markdown-table" {...props} /></div>,
+          thead: ({ node, ...props }) => <thead className="markdown-thead" {...props} />,
+          tbody: ({ node, ...props }) => <tbody className="markdown-tbody" {...props} />,
+          tr: ({ node, ...props }) => <tr className="markdown-tr" {...props} />,
+          th: ({ node, ...props }) => <th className="markdown-th" {...props} />,
+          td: ({ node, ...props }) => <td className="markdown-td" {...props} />,
+          em: ({ node, ...props }) => <em className="markdown-em" {...props} />,
+          strong: ({ node, ...props }) => <strong className="markdown-strong" {...props} />,
+          hr: ({ node, ...props }) => <hr className="markdown-hr" {...props} />,
           img: ({ node, src, alt, ...props }) => (
-            <div className="my-4 text-center">
-              <img src={src} alt={alt} className="inline-block max-w-full rounded-lg shadow-md" loading="lazy" {...props} />
-              {alt && <span className="block mt-2 text-sm text-gray-500">{alt}</span>}
+            <div className="markdown-image-container">
+              <img src={src} alt={alt} className="markdown-img" loading="lazy" {...props} />
+              {alt && <span className="markdown-img-caption">{alt}</span>}
             </div>
           ),
           code: ({ node, inline, className, children, ...props }) => {
@@ -54,7 +53,7 @@ export const EnhancedMarkdown: React.FC<EnhancedMarkdownProps> = ({ content, cla
                 style={atomDark}
                 language={match[1]}
                 PreTag="div"
-                className="rounded-lg text-sm"
+                className="markdown-code-block"
                 showLineNumbers={true}
                 wrapLines={true}
                 {...props}

@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Users, ArrowRight, LogOut, Database, FileText, Globe, AlertTriangle, UserPlus, Settings, FileSpreadsheet } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Users, ArrowRight, LogOut, Database, FileText, Globe, AlertTriangle } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
-import { useNavigate } from 'react-router-dom';
 import { Logo } from '../components/Logo';
 import { SmallLogo } from '../components/SmallLogo';
 import { IrsstLogo } from '../components/IrsstLogo';
@@ -20,15 +19,11 @@ import { FeedbackButton } from '../components/FeedbackButton';
 import { FeedbackManager } from '../components/FeedbackManager';
 import { WebContentImporter } from '../components/WebContentImporter';
 import { ErrorLogViewer } from '../components/ErrorLogViewer';
-import { CreateUserModal } from '../components/CreateUserModal';
-import { AddUserModal } from '../components/AddUserModal';
 import { supabase } from '../lib/supabase';
 import { useUserStore } from '../lib/store';
 import { useDocumentStore } from '../lib/documentStore';
 import { useConversationStore } from '../lib/conversationStore';
-import { AppError } from '../lib/AppError';
-import { handleError } from '../lib/errorHandler';
-import { AuthErrorType } from '../lib/errorTypes';
+import { logError } from '../lib/errorLogger';
 import './Chat.css';
 
 interface ChatProps {
@@ -36,16 +31,14 @@ interface ChatProps {
 }
 
 export function Chat({ session }: ChatProps) {
-  const navigate = useNavigate();
   const [input, setInput] = useState('');
+  const [userRole, setUserRole] = useState<string>('user');
   const [isFileExplorerOpen, setFileExplorerOpen] = useState(false);
   const [isFileManagementOpen, setFileManagementOpen] = useState(false);
   const [isTemplateManagerOpen, setTemplateManagerOpen] = useState(false);
   const [isWebsiteImportOpen, setWebsiteImportOpen] = useState(false);
   const [userHasScrolled, setUserHasScrolled] = useState(false);
   const [isErrorLogOpen, setErrorLogOpen] = useState(false);
-  const [isCreateUserOpen, setCreateUserOpen] = useState(false);
-  const [isAddUserOpen, setAddUserOpen] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -53,8 +46,6 @@ export function Chat({ session }: ChatProps) {
   
   const { setModalOpen: setUserModalOpen } = useUserStore();
   const { setModalOpen: setDocumentModalOpen } = useDocumentStore();
-  const userRole = useUserStore(state => state.userRole);
-
   const {
     messages,
     currentConversation,
@@ -65,39 +56,29 @@ export function Chat({ session }: ChatProps) {
     unlinkDocument,
   } = useConversationStore();
 
+  // Get the last assistant message index
   const lastAssistantMessageIndex = messages
     .map((m, i) => ({ ...m, index: i }))
     .filter(m => m.sender === 'assistant')
     .pop()?.index;
 
-  // Error handling effect
   useEffect(() => {
-    const errorHandler = async (event: ErrorEvent) => {
-      try {
-        await handleError(event.error, {
-          component: 'Chat',
-          action: 'globalErrorHandler',
-          location: window.location.href,
-          timestamp: new Date().toISOString()
-        });
-      } catch (error) {
-        // If error handling itself fails, log to console as last resort
-        console.error('Critical error in error handler:', error);
-      }
+    const errorHandler = (event: ErrorEvent) => {
+      logError(event.error, {
+        location: window.location.href,
+        timestamp: new Date().toISOString()
+      });
     };
 
-    const rejectionHandler = async (event: PromiseRejectionEvent) => {
-      try {
-        const error = event.reason instanceof Error ? event.reason : new Error(String(event.reason));
-        await handleError(error, {
-          component: 'Chat',
-          action: 'unhandledRejection',
+    const rejectionHandler = (event: PromiseRejectionEvent) => {
+      logError(
+        event.reason instanceof Error ? event.reason : new Error(String(event.reason)),
+        {
+          type: 'unhandled_rejection',
           location: window.location.href,
           timestamp: new Date().toISOString()
-        });
-      } catch (error) {
-        console.error('Critical error in rejection handler:', error);
-      }
+        }
+      );
     };
 
     window.addEventListener('error', errorHandler);
@@ -109,68 +90,82 @@ export function Chat({ session }: ChatProps) {
     };
   }, []);
 
-  // Fetch conversations effect
   useEffect(() => {
-    fetchConversations().catch(async (error) => {
-      await handleError(error, {
-        component: 'Chat',
-        action: 'fetchConversations',
-        conversationId: currentConversation?.id
-      });
-    });
-  }, [fetchConversations, currentConversation?.id]);
+    const fetchUserRole = async () => {
+      try {
+        // First validate session
+        const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw sessionError;
+        if (!currentSession) {
+          console.warn('No active session');
+          window.location.href = '/login';
+          return;
+        }
 
-  // Scroll handling effect
-  useEffect(() => {
-    const handleScroll = () => {
-      if (!messagesContainerRef.current) return;
-      
-      const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
-      const isScrolledToBottom = scrollHeight - scrollTop <= clientHeight + 50;
-      
-      if (!isScrolledToBottom) {
-        setUserHasScrolled(true);
-      } else {
-        setUserHasScrolled(false);
+        // Then fetch profile
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('role, status')
+          .eq('id', session.user.id)
+          .single();
+
+        if (error) {
+          console.error('Error fetching user profile:', error);
+          if (error.code === 'PGRST301' || error.code === '401') {
+            window.location.href = '/login';
+            return;
+          }
+          throw error;
+        }
+
+        if (!data) {
+          console.warn('No profile found for user');
+          return;
+        }
+
+        if (!data.status) {
+          console.warn('User profile is inactive');
+          await supabase.auth.signOut();
+          return;
+        }
+
+        setUserRole(data.role);
+      } catch (error) {
+        console.error('Error in fetchUserRole:', error);
+        if (error?.message?.includes('JWT expired') || 
+            error?.message?.includes('Invalid JWT')) {
+          window.location.href = '/login';
+          return;
+        }
       }
     };
 
-    const container = messagesContainerRef.current;
-    if (container) {
-      container.addEventListener('scroll', handleScroll);
+    fetchUserRole();
+    fetchConversations();
+  }, [session, fetchConversations]);
+
+  // Handle scroll detection
+  const handleScroll = () => {
+    if (!messagesContainerRef.current) return;
+    
+    const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
+    const isScrolledToBottom = scrollHeight - scrollTop <= clientHeight + 50; // 50px margin
+    
+    if (!isScrolledToBottom) {
+      setUserHasScrolled(true);
+    } else {
+      setUserHasScrolled(false);
     }
+  };
 
-    return () => {
-      if (container) {
-        container.removeEventListener('scroll', handleScroll);
-      }
-    };
-  }, []);
-
-  // Auto-scroll effect
+  // Scroll to bottom only in specific conditions
   useEffect(() => {
     if (userHasScrolled) return;
 
-    const scrollToBottom = () => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    };
-
-    scrollToBottom();
-
-    const handleResize = () => {
-      if (!userHasScrolled) {
-        scrollToBottom();
-      }
-    };
-
-    window.addEventListener('resize', handleResize);
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-    };
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, userHasScrolled]);
 
-  const handleSubmit = useCallback(async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isTyping || !currentConversation) return;
     
@@ -181,154 +176,56 @@ export function Chat({ session }: ChatProps) {
     try {
       await sendMessage(content);
       
+      // Ensure input is focused after sending
       inputRef.current?.focus();
       
+      // Scroll to bottom after sending
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
       }, 100);
     } catch (error) {
-      await handleError(error, {
-        component: 'Chat',
-        action: 'sendMessage',
-        conversationId: currentConversation.id,
-        messageContent: content
-      });
+      console.error('Error sending message:', error);
     }
-  }, [input, isTyping, currentConversation, sendMessage]);
+  };
 
-  const adjustTextareaHeight = useCallback(() => {
+  const adjustTextareaHeight = () => {
     if (inputRef.current) {
       inputRef.current.style.height = 'auto';
       inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 200) + 'px';
     }
-  }, []);
+  };
 
-  const handleLogout = useCallback(async () => {
+  const handleLogout = async () => {
     try {
+      setUserRole('user');
+      setInput('');
+      setFileExplorerOpen(false);
+      setFileManagementOpen(false);
+      setTemplateManagerOpen(false);
+      setWebsiteImportOpen(false);
+
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
-      
-      navigate('/login');
     } catch (error) {
-      // For auth errors, we want to force logout anyway
-      if (error instanceof AppError && error.type === AuthErrorType.SESSION_EXPIRED) {
-        navigate('/login');
-        return;
-      }
-
-      await handleError(error, {
-        component: 'Chat',
-        action: 'handleLogout'
-      });
-      
-      // Force logout as fallback
-      navigate('/login');
+      console.error('Error during logout:', error);
+      window.location.href = '/login';
     }
-  }, [navigate]);
+  };
 
-  const handleRemoveDocument = useCallback(async (documentId: string) => {
+  const handleRemoveDocument = async (documentId: string) => {
     try {
       await unlinkDocument(documentId);
     } catch (error) {
-      await handleError(error, {
-        component: 'Chat',
-        action: 'handleRemoveDocument',
-        documentId,
-        conversationId: currentConversation?.id
-      });
+      console.error('Error removing document:', error);
     }
-  }, [unlinkDocument, currentConversation?.id]);
+  };
 
-  const handleWebsiteImport = useCallback(() => {
+  const handleWebsiteImport = () => {
     setWebsiteImportOpen(true);
-  }, []);
+  };
 
-  if (!session?.user) {
-    navigate('/login');
-    return null;
-  }
-
-  const isAdminOrSuperAdmin = userRole === 'admin' || userRole === 'super_admin' || userRole === 'g_admin';
+  const isAdminOrSuperAdmin = userRole === 'admin' || userRole === 'super_admin';
   const isSuperAdmin = userRole === 'super_admin';
-  const isGAdmin = userRole === 'g_admin';
-
-  const headerButtons = (
-    <div className="flex items-center gap-2">
-      {isAdminOrSuperAdmin && (
-        <>
-          {isSuperAdmin && (
-            <>
-              <button 
-                onClick={() => setErrorLogOpen(true)}
-                className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white"
-                title="Journal des erreurs"
-              >
-                <AlertTriangle size={18} strokeWidth={2.5} />
-              </button>
-              <button 
-                onClick={() => setUserModalOpen(true)}
-                className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white"
-                title="Gestion des utilisateurs"
-              >
-                <Users size={18} strokeWidth={2.5} />
-              </button>
-              <button
-                onClick={() => setCreateUserOpen(true)}
-                className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white"
-                title="Créer un utilisateur"
-              >
-                <UserPlus size={18} strokeWidth={2.5} />
-              </button>
-              <button
-                onClick={() => setAddUserOpen(true)}
-                className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white"
-                title="Inviter un utilisateur"
-              >
-                <Settings size={18} strokeWidth={2.5} />
-              </button>
-            </>
-          )}
-          <button 
-            onClick={() => setDocumentModalOpen(true)}
-            className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white"
-            title="Importer un document"
-          >
-            <DocumentIcon />
-          </button>
-          <button 
-            onClick={handleWebsiteImport}
-            className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white"
-            title="Importer depuis le web"
-          >
-            <Globe size={18} strokeWidth={2.5} />
-          </button>
-          <button 
-            onClick={() => setFileManagementOpen(true)}
-            className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white"
-            title="Gestion des fichiers"
-          >
-            <DocumentListIcon />
-          </button>
-          <button 
-            onClick={() => setTemplateManagerOpen(true)}
-            className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white"
-            title="Modèles de rapports"
-          >
-            <FileSpreadsheet size={18} strokeWidth={2.5} />
-          </button>
-          {isSuperAdmin && <FeedbackManager />}
-        </>
-      )}
-    </div>
-  );
-
-  const messageList = messages.map((message, index) => (
-    <MessageItem
-      key={message.id}
-      message={message}
-      isLatestAssistantMessage={index === lastAssistantMessageIndex}
-    />
-  ));
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-gray-50">
@@ -350,26 +247,75 @@ export function Chat({ session }: ChatProps) {
           <div className="flex items-center gap-4">
             <button 
               onClick={handleLogout}
-              className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white"
-              title="Se déconnecter"
+              className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
+              aria-label="Logout"
             >
               <LogOut size={18} strokeWidth={2.5} />
             </button>
             <div className="border-l border-white/20 pl-4 flex flex-col">
-              <span className="text-white/90 text-sm">{session.user.email}</span>
+              <span className="text-white/90 text-sm">{session.user.email}
+              </span>
               {userRole === 'super_admin' ? (
-                <span className="text-white/70 text-xs font-medium">S-Admin</span>
+                <span className="text-white/70 text-xs">S-Admin</span>
               ) : userRole === 'admin' ? (
-                <span className="text-white/70 text-xs font-medium">Admin</span>
-              ) : userRole === 'g_admin' ? (
-                <span className="text-white/70 text-xs font-medium">G-Admin</span>
-              ) : (
-                <span className="text-white/70 text-xs font-medium">Utilisateur</span>
-              )}
+                <span className="text-white/70 text-xs">admin</span>
+              ) : null}
             </div>
           </div>
         </div>
-        {headerButtons}
+        <div className="flex items-center gap-2">
+          {isAdminOrSuperAdmin && (
+            <>
+              {isSuperAdmin && (
+                <>
+                  <button 
+                    onClick={() => setErrorLogOpen(true)}
+                    className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white"
+                    title="Voir les erreurs système"
+                  >
+                    <AlertTriangle size={18} strokeWidth={2.5} />
+                  </button>
+                  <button 
+                    onClick={() => setUserModalOpen(true)}
+                    className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
+                    aria-label="User management"
+                  >
+                    <Users size={18} strokeWidth={2.5} />
+                  </button>
+                </>
+              )}
+              <button 
+                onClick={() => setDocumentModalOpen(true)}
+                className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
+                aria-label="Document import"
+              >
+                <DocumentIcon />
+              </button>
+              <button 
+                onClick={handleWebsiteImport}
+                className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
+                aria-label="Website import"
+              >
+                <Globe size={18} strokeWidth={2.5} />
+              </button>
+              <button 
+                onClick={() => setFileManagementOpen(true)}
+                className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
+                aria-label="File management"
+              >
+                <DocumentListIcon />
+              </button>
+              <button 
+                onClick={() => setTemplateManagerOpen(true)}
+                className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
+                aria-label="Report templates"
+              >
+                <FileText size={18} strokeWidth={2.5} />
+              </button>
+              {isSuperAdmin && <FeedbackManager />}
+            </>
+          )}
+        </div>
       </header>
 
       <div className="flex-1 flex overflow-hidden">
@@ -391,6 +337,7 @@ export function Chat({ session }: ChatProps) {
             <div 
               className="flex-1 overflow-y-auto p-4"
               ref={messagesContainerRef}
+              onScroll={handleScroll}
             >
               {!currentConversation ? (
                 <div className="h-full flex flex-col items-center justify-center text-gray-500">
@@ -406,7 +353,13 @@ export function Chat({ session }: ChatProps) {
                 </div>
               ) : (
                 <>
-                  {messageList}
+                  {messages.map((message, index) => (
+                    <MessageItem
+                      key={message.id}
+                      message={message}
+                      isLatestAssistantMessage={index === lastAssistantMessageIndex}
+                    />
+                  ))}
                 </>
               )}
               <div ref={messagesEndRef} />
@@ -484,18 +437,10 @@ export function Chat({ session }: ChatProps) {
         onClose={() => setWebsiteImportOpen(false)}
       />
       {isSuperAdmin && (
-        <>
-          <ErrorLogViewer
-            isOpen={isErrorLogOpen}
-            onClose={() => setErrorLogOpen(false)}
-          />
-          <CreateUserModal
-            isOpen={isCreateUserOpen}
-            onClose={() => setCreateUserOpen(false)}
-            onSuccess={() => {}}
-          />
-          <AddUserModal />
-        </>
+        <ErrorLogViewer
+          isOpen={isErrorLogOpen}
+          onClose={() => setErrorLogOpen(false)}
+        />
       )}
     </div>
   );

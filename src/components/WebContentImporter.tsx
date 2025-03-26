@@ -1,12 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState } from 'react';
 import { X, Globe, FolderPlus, ChevronRight, Edit2, Trash2, Send, Loader2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useDocumentStore, Folder } from '../lib/documentStore';
-import { extractWebContent } from '../lib/webContentExtractor';
-import { FolderModal } from './FolderModal';
-import { DeleteConfirmationModal } from './DeleteConfirmationModal';
-import { logError } from '../lib/errorLogger';
-import { ProcessingProgress, ModalProps } from '../lib/types';
+import { supabase } from '../lib/supabase';
 
 interface ProcessingStatus {
   isProcessing: boolean;
@@ -15,172 +11,104 @@ interface ProcessingStatus {
   message: string;
 }
 
-interface FolderTreeItemProps {
-  folder: Folder;
+interface FolderColumnProps {
+  folders: Folder[];
   level: number;
-  selectedFolder: Folder | null;
-  expandedFolders: Set<string>;
-  onSelect: (folder: Folder) => void;
-  onToggle: (folderId: string) => void;
+  parentId: string | null;
+  selectedPath: Folder[];
+  onSelect: (folder: Folder, level: number) => void;
   onCreateFolder: (parentId: string | null) => void;
   onRenameFolder: (folder: Folder) => void;
-  onDeleteClick: (folder: Folder) => void;
-  folders: Folder[];
+  onDeleteFolder: (folder: Folder) => void;
 }
 
-const FolderTreeItem: React.FC<FolderTreeItemProps> = ({
-  folder,
+const FolderColumn: React.FC<FolderColumnProps> = ({
+  folders,
   level,
-  selectedFolder,
-  expandedFolders,
+  parentId,
+  selectedPath,
   onSelect,
-  onToggle,
   onCreateFolder,
   onRenameFolder,
-  onDeleteClick,
-  folders
+  onDeleteFolder,
 }) => {
-  const hasChildren = folders.some(f => f.parent_id === folder.id);
-  const isExpanded = expandedFolders.has(folder.id);
-  const childFolders = folders.filter(f => f.parent_id === folder.id);
-  const isSelected = selectedFolder?.id === folder.id;
+  const currentFolders = folders.filter(f => f.parent_id === parentId);
+  const selectedFolder = selectedPath[level];
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.2 }}
-    >
-      <div
-        className={`
-          flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer group
-          transition-all duration-200 relative
-          ${isSelected ? 'bg-[#f15922] text-white' : 'hover:bg-gray-100'}
-        `}
-        style={{ paddingLeft: `${(level + 1) * 12}px` }}
-      >
+    <div className="min-w-[200px] border-r border-gray-200 h-[400px] overflow-y-auto">
+      <div className="p-2 border-b border-gray-200 flex items-center justify-between">
+        <span className="font-medium text-sm text-gray-600">
+          {parentId ? folders.find(f => f.id === parentId)?.name : 'Racine'}
+        </span>
         <button
-          onClick={() => hasChildren && onToggle(folder.id)}
-          className={`
-            p-0.5 rounded transition-transform duration-200
-            ${hasChildren ? 'visible' : 'invisible'}
-            ${isSelected ? 'text-white' : 'text-gray-400 hover:text-gray-600'}
-          `}
+          onClick={() => onCreateFolder(parentId)}
+          className="p-1 text-[#f15922] hover:bg-[#f15922]/10 rounded-full"
         >
-          <ChevronRight
-            size={16}
-            className={`transform transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}
-          />
+          <FolderPlus size={16} />
         </button>
-
-        <div
-          className="flex-1 flex items-center justify-between min-w-0 cursor-pointer"
-          onClick={() => onSelect(folder)}
-        >
-          <span className="truncate">{folder.name}</span>
-          
-          <div className={`
-            opacity-0 group-hover:opacity-100 flex items-center gap-1
-            transition-opacity duration-200
-            ${isSelected ? 'text-white' : 'text-gray-500'}
-          `}>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onCreateFolder(folder.id);
-              }}
-              className="p-1 hover:bg-black/10 rounded"
-              title="Nouveau sous-dossier"
-            >
-              <FolderPlus size={14} />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onRenameFolder(folder);
-              }}
-              className="p-1 hover:bg-black/10 rounded"
-              title="Renommer"
-            >
-              <Edit2 size={14} />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onDeleteClick(folder);
-              }}
-              className="p-1 hover:bg-black/10 rounded"
-              title="Supprimer"
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
-        </div>
       </div>
-
-      <AnimatePresence>
-        {isExpanded && childFolders.length > 0 && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
+      <div className="p-2">
+        {currentFolders.map(folder => (
+          <div
+            key={folder.id}
+            className={`group flex items-center justify-between p-2 rounded-md cursor-pointer ${
+              selectedFolder?.id === folder.id
+                ? 'bg-[#f15922] text-white'
+                : 'hover:bg-gray-100'
+            }`}
+            onClick={() => onSelect(folder, level)}
           >
-            {childFolders.map(childFolder => (
-              <FolderTreeItem
-                key={childFolder.id}
-                folder={childFolder}
-                level={level + 1}
-                selectedFolder={selectedFolder}
-                expandedFolders={expandedFolders}
-                onSelect={onSelect}
-                onToggle={onToggle}
-                onCreateFolder={onCreateFolder}
-                onRenameFolder={onRenameFolder}
-                onDeleteClick={onDeleteClick}
-                folders={folders}
-              />
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
+            <div className="flex items-center gap-2">
+              <span className="truncate">{folder.name}</span>
+              {folders.some(f => f.parent_id === folder.id) && (
+                <ChevronRight size={16} className="flex-shrink-0" />
+              )}
+            </div>
+            <div className={`hidden group-hover:flex items-center gap-1 ${
+              selectedFolder?.id === folder.id ? 'text-white' : 'text-gray-500'
+            }`}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRenameFolder(folder);
+                }}
+                className="p-1 hover:bg-black/10 rounded"
+              >
+                <Edit2 size={14} />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteFolder(folder);
+                }}
+                className="p-1 hover:bg-black/10 rounded"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 };
 
 export function WebContentImporter({ 
   isOpen, 
   onClose 
-}: WebContentImporterProps) {
+}: { 
+  isOpen: boolean; 
+  onClose: () => void;
+}) {
   const [url, setUrl] = useState('');
   const [description, setDescription] = useState('');
   const [selectedPath, setSelectedPath] = useState<Folder[]>([]);
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [processingStatus, setProcessingStatus] = useState<ProcessingStatus>({
     isProcessing: false,
     progress: 0,
     stage: 'preparation',
     message: ''
-  });
-  const [folderModal, setFolderModal] = useState<{
-    isOpen: boolean;
-    mode: 'create' | 'rename';
-    parentId: string | null;
-    folder?: Folder;
-  }>({
-    isOpen: false,
-    mode: 'create',
-    parentId: null
-  });
-  const [deleteConfirmation, setDeleteConfirmation] = useState<{
-    isOpen: boolean;
-    folder: Folder | null;
-    isDeleting: boolean;
-  }>({
-    isOpen: false,
-    folder: null,
-    isDeleting: false
   });
 
   const {
@@ -188,124 +116,21 @@ export function WebContentImporter({
     currentFolder,
     loading,
     error,
+    uploadDocument,
     fetchFolders,
     setCurrentFolder,
     createFolder,
     deleteFolder,
     renameFolder,
-    uploadDocument,
-    setError,
     clearError,
+    setError
   } = useDocumentStore();
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (isOpen) {
       fetchFolders();
-      clearError();
     }
-  }, [isOpen, fetchFolders, clearError]);
-
-  const handleFolderSelect = (folder: Folder) => {
-    setCurrentFolder(folder);
-    
-    // Build the path to this folder
-    const path: Folder[] = [];
-    let currentId = folder.id;
-    
-    while (currentId) {
-      const currentFolder = folders.find(f => f.id === currentId);
-      if (currentFolder) {
-        path.unshift(currentFolder);
-        currentId = currentFolder.parent_id;
-      } else {
-        break;
-      }
-    }
-    
-    setSelectedPath(path);
-    
-    // Expand all parent folders
-    const newExpanded = new Set(expandedFolders);
-    path.forEach(f => newExpanded.add(f.id));
-    setExpandedFolders(newExpanded);
-  };
-
-  const handleToggleFolder = (folderId: string) => {
-    const newExpanded = new Set(expandedFolders);
-    if (newExpanded.has(folderId)) {
-      newExpanded.delete(folderId);
-    } else {
-      newExpanded.add(folderId);
-    }
-    setExpandedFolders(newExpanded);
-  };
-
-  const handleCreateFolder = (parentId: string | null) => {
-    setFolderModal({
-      isOpen: true,
-      mode: 'create',
-      parentId
-    });
-  };
-
-  const handleRenameFolder = (folder: Folder) => {
-    setFolderModal({
-      isOpen: true,
-      mode: 'rename',
-      parentId: folder.parent_id,
-      folder
-    });
-  };
-
-  const handleDeleteClick = (folder: Folder) => {
-    setDeleteConfirmation({
-      isOpen: true,
-      folder,
-      isDeleting: false
-    });
-  };
-
-  const handleConfirmDelete = async () => {
-    if (!deleteConfirmation.folder) return;
-    
-    try {
-      setDeleteConfirmation(prev => ({ ...prev, isDeleting: true }));
-      await deleteFolder(deleteConfirmation.folder.id);
-      await fetchFolders();
-      
-      if (currentFolder?.id === deleteConfirmation.folder.id) {
-        setCurrentFolder(null);
-        setExpandedFolders(new Set());
-        setSelectedPath([]);
-      }
-      
-      setDeleteConfirmation({ isOpen: false, folder: null, isDeleting: false });
-    } catch (error) {
-      console.error('Error deleting folder:', error);
-      setDeleteConfirmation(prev => ({ ...prev, isDeleting: false }));
-    }
-  };
-
-  const handleFolderSubmit = async (name: string) => {
-    try {
-      if (folderModal.mode === 'create') {
-        await createFolder(name, folderModal.parentId);
-      } else if (folderModal.folder) {
-        await renameFolder(folderModal.folder.id, name);
-      }
-      await fetchFolders();
-      
-      // Expand the parent folder if it exists
-      if (folderModal.parentId) {
-        setExpandedFolders(new Set(expandedFolders).add(folderModal.parentId));
-      }
-      
-      setFolderModal({ isOpen: false, mode: 'create', parentId: null });
-    } catch (error) {
-      console.error('Error handling folder:', error);
-      throw error;
-    }
-  };
+  }, [isOpen, fetchFolders]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -315,22 +140,111 @@ export function WebContentImporter({
       setProcessingStatus({
         isProcessing: true,
         progress: 10,
-        message: 'Récupération du contenu web...',
-        stage: 'preparation'
+        stage: 'preparation',
+        message: 'Récupération du contenu web...'
       });
 
-      // Extract web content with fallback strategies
-      const result = await extractWebContent(url, {
-        onProgress: (progress) => {
-          setProcessingStatus({
-            isProcessing: true,
-            progress: progress.progress,
-            stage: progress.stage,
-            message: progress.message
-          });
-        },
-        signal: new AbortController().signal
+      // Use a more reliable CORS proxy
+      const proxyUrl = 'https://api.allorigins.win/raw?url=';
+      
+      // Add error handling for URL
+      let targetUrl;
+      try {
+        targetUrl = new URL(url);
+        if (!['http:', 'https:'].includes(targetUrl.protocol)) {
+          throw new Error('URL invalide: le protocole doit être HTTP ou HTTPS');
+        }
+      } catch (error) {
+        throw new Error('URL invalide: veuillez entrer une URL valide');
+      }
+
+      // Fetch with timeout and retry
+      const fetchWithTimeout = async (url: string, timeout = 10000) => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+        try {
+          const response = await fetch(url, { signal: controller.signal });
+          clearTimeout(timeoutId);
+          return response;
+        } catch (error) {
+          clearTimeout(timeoutId);
+          throw error;
+        }
+      };
+
+      const fetchWithRetry = async (url: string, retries = 3) => {
+        for (let i = 0; i < retries; i++) {
+          try {
+            const response = await fetchWithTimeout(proxyUrl + encodeURIComponent(url));
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            return response;
+          } catch (error) {
+            if (i === retries - 1) throw error;
+            await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+          }
+        }
+        throw new Error('Failed to fetch after retries');
+      };
+
+      const webpageResponse = await fetchWithRetry(targetUrl.href);
+      const htmlContent = await webpageResponse.text();
+
+      if (!htmlContent.trim()) {
+        throw new Error('Le contenu de la page est vide');
+      }
+
+      setProcessingStatus({
+        isProcessing: true,
+        progress: 30,
+        stage: 'processing',
+        message: 'Extraction du contenu...'
       });
+
+      // Now send the content to OpenAI for processing
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-4-turbo-preview',
+          messages: [
+            {
+              role: 'system',
+              content: `You are a web content extraction specialist. Extract and structure the main content from HTML, removing navigation, ads, and other non-essential elements. Format the content using Markdown.
+
+Instructions:
+1. Focus on the main content
+2. Remove navigation menus, ads, footers
+3. Preserve important headings and structure
+4. Format using Markdown
+5. Include metadata like title and main topics
+6. Keep all relevant text content
+7. Preserve lists and tables
+8. Remove any script or style content`
+            },
+            {
+              role: 'user',
+              content: `Extract and structure the content from this HTML. URL: ${url}\n\nHTML Content:\n${htmlContent}`
+            }
+          ],
+          temperature: 0.3,
+          max_tokens: 4000
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to process web content');
+      }
+
+      const data = await response.json();
+      const extractedContent = data.choices[0]?.message?.content;
+
+      if (!extractedContent) {
+        throw new Error('No content extracted');
+      }
 
       setProcessingStatus({
         isProcessing: true,
@@ -342,10 +256,10 @@ export function WebContentImporter({
       // Create HTML file with extracted content
       const formattedContent = `
 <!DOCTYPE html>
-<html lang="${result.metadata.language || 'fr'}">
+<html>
 <head>
   <meta charset="UTF-8">
-  <title>${result.title}</title>
+  <title>Web Content - ${url}</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -376,30 +290,22 @@ export function WebContentImporter({
       border-radius: 8px;
       margin-bottom: 24px;
     }
-    img {
-      max-width: 100%;
-      height: auto;
-      border-radius: 4px;
-      margin: 1em 0;
-    }
   </style>
 </head>
 <body>
   <div class="metadata">
     <h2>Métadonnées</h2>
-    <p><strong>Source:</strong> <a href="${result.metadata.url}">${result.metadata.url}</a></p>
-    <p><strong>Date d'extraction:</strong> ${new Date(result.metadata.timestamp).toLocaleString('fr-FR')}</p>
-    <p><strong>Nombre de mots:</strong> ${result.metadata.wordCount}</p>
-    ${result.metadata.hasImages ? '<p><strong>Contient des images:</strong> Oui</p>' : ''}
+    <p><strong>Source:</strong> ${url}</p>
+    <p><strong>Date d'extraction:</strong> ${new Date().toLocaleString('fr-FR')}</p>
   </div>
-  ${result.content}
+  ${extractedContent}
 </body>
 </html>`;
 
       // Create file object
       const file = new File(
-        [formattedContent],
-        `web-${new URL(url).hostname}-${Date.now()}.html`,
+        [formattedContent], 
+        `web-content-${targetUrl.hostname}-${Date.now()}.html`, 
         { type: 'text/html' }
       );
 
@@ -435,13 +341,7 @@ export function WebContentImporter({
       }, 1500);
 
     } catch (error) {
-      logError(error, {
-        component: 'WebContentImporter',
-        action: 'handleSubmit',
-        url,
-        folderPath: getFolderPath(folders, currentFolder.id)
-      });
-
+      console.error('Error importing web content:', error);
       setProcessingStatus({
         isProcessing: false,
         progress: 0,
@@ -449,6 +349,40 @@ export function WebContentImporter({
         message: error instanceof Error ? error.message : 'Une erreur est survenue'
       });
       setError(error instanceof Error ? error.message : 'Une erreur est survenue');
+    }
+  };
+
+  const handleFolderSelect = (folder: Folder, level: number) => {
+    const newPath = selectedPath.slice(0, level);
+    newPath[level] = folder;
+    setSelectedPath(newPath);
+    setCurrentFolder(folder);
+  };
+
+  const handleCreateFolder = async (parentId: string | null) => {
+    const name = window.prompt('Nom du dossier:');
+    if (name) {
+      await createFolder(name, parentId);
+      await fetchFolders();
+    }
+  };
+
+  const handleRenameFolder = async (folder: Folder) => {
+    const newName = window.prompt('Nouveau nom:', folder.name);
+    if (newName && newName !== folder.name) {
+      await renameFolder(folder.id, newName);
+      await fetchFolders();
+    }
+  };
+
+  const handleDeleteFolder = async (folder: Folder) => {
+    if (window.confirm(`Supprimer le dossier "${folder.name}" ?`)) {
+      await deleteFolder(folder.id);
+      await fetchFolders();
+      if (currentFolder?.id === folder.id) {
+        setCurrentFolder(null);
+        setSelectedPath([]);
+      }
     }
   };
 
@@ -476,9 +410,9 @@ export function WebContentImporter({
           </button>
         </div>
 
-        <div className="flex-1 flex overflow-hidden">
-          {/* Left column - URL input - 25% */}
-          <div className="w-1/4 border-r p-4 space-y-4">
+        <div className="grid grid-cols-3 gap-6 p-6 flex-1 overflow-hidden">
+          {/* Left column - URL input */}
+          <div className="space-y-4">
             <h3 className="text-lg font-medium text-gray-900">URL du site web</h3>
             <div className="relative">
               <input
@@ -497,55 +431,40 @@ export function WebContentImporter({
             </div>
           </div>
 
-          {/* Middle column - Folder structure - 50% */}
-          <div className="w-1/2 border-r p-4 space-y-4">
+          {/* Middle column - Folder structure */}
+          <div className="space-y-4">
             <h3 className="text-lg font-medium text-gray-900">IRSST</h3>
-            <div className="border rounded-lg overflow-hidden shadow-sm bg-white">
-              <div className="p-3 border-b border-gray-200 flex items-center justify-between bg-gray-50">
-                <span className="font-medium text-sm text-gray-700">
-                  Structure des dossiers
-                </span>
-                <button
-                  onClick={() => handleCreateFolder(currentFolder?.id ?? null)}
-                  className="p-1.5 text-[#f15922] hover:bg-[#f15922]/10 rounded-full transition-colors"
-                  title={currentFolder ? "Nouveau sous-dossier" : "Nouveau dossier racine"}
-                >
-                  <FolderPlus size={16} />
-                </button>
-              </div>
-
-              <div className="h-[400px] overflow-y-auto p-2">
-                <AnimatePresence mode="popLayout">
-                  {folders
-                    .filter(f => !f.parent_id)
-                    .map(folder => (
-                      <FolderTreeItem
-                        key={folder.id}
-                        folder={folder}
-                        level={0}
-                        selectedFolder={currentFolder}
-                        expandedFolders={expandedFolders}
-                        onSelect={handleFolderSelect}
-                        onToggle={handleToggleFolder}
-                        onCreateFolder={handleCreateFolder}
-                        onRenameFolder={handleRenameFolder}
-                        onDeleteClick={handleDeleteClick}
-                        folders={folders}
-                      />
-                    ))}
-                </AnimatePresence>
-
-                {folders.filter(f => !f.parent_id).length === 0 && (
-                  <div className="p-4 text-center text-gray-500 text-sm">
-                    Aucun dossier
-                  </div>
-                )}
+            <div className="border rounded-lg overflow-hidden">
+              <div className="flex overflow-x-auto">
+                <FolderColumn
+                  folders={folders}
+                  level={0}
+                  parentId={null}
+                  selectedPath={selectedPath}
+                  onSelect={handleFolderSelect}
+                  onCreateFolder={handleCreateFolder}
+                  onRenameFolder={handleRenameFolder}
+                  onDeleteFolder={handleDeleteFolder}
+                />
+                {selectedPath.map((folder, index) => (
+                  <FolderColumn
+                    key={folder.id}
+                    folders={folders}
+                    level={index + 1}
+                    parentId={folder.id}
+                    selectedPath={selectedPath}
+                    onSelect={handleFolderSelect}
+                    onCreateFolder={handleCreateFolder}
+                    onRenameFolder={handleRenameFolder}
+                    onDeleteFolder={handleDeleteFolder}
+                  />
+                ))}
               </div>
             </div>
           </div>
 
-          {/* Right column - Indexation - 25% */}
-          <div className="w-1/4 p-4 space-y-4">
+          {/* Right column - Indexation */}
+          <div className="space-y-4">
             <h3 className="text-lg font-medium text-gray-900">Indexation du site</h3>
             <div className="space-y-4">
               <div>
@@ -616,29 +535,6 @@ export function WebContentImporter({
           </div>
         )}
       </motion.div>
-
-      <FolderModal
-        isOpen={folderModal.isOpen}
-        onClose={() => setFolderModal({ isOpen: false, mode: 'create', parentId: null })}
-        onSubmit={handleFolderSubmit}
-        title={folderModal.mode === 'create' ? 'Nouveau dossier' : 'Renommer le dossier'}
-        initialValue={folderModal.folder?.name}
-        mode={folderModal.mode}
-        parentFolder={
-          folderModal.parentId
-            ? folders.find(f => f.id === folderModal.parentId)?.name
-            : undefined
-        }
-      />
-
-      <DeleteConfirmationModal
-        isOpen={deleteConfirmation.isOpen}
-        title="Supprimer le dossier"
-        message={`Êtes-vous sûr de vouloir supprimer le dossier "${deleteConfirmation.folder?.name}" ? Cette action est irréversible et supprimera également tous les sous-dossiers et documents qu'il contient.`}
-        onConfirm={handleConfirmDelete}
-        onCancel={() => setDeleteConfirmation({ isOpen: false, folder: null, isDeleting: false })}
-        isDeleting={deleteConfirmation.isDeleting}
-      />
     </div>
   );
 }

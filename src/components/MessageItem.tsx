@@ -1,10 +1,9 @@
 import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { Message } from '../lib/conversationStore';
 import { DirectStreamingText } from './DirectStreamingText';
 import { useConversationStore } from '../lib/conversationStore';
 import { EnhancedMarkdown } from './EnhancedMarkdown';
-import { messageVariants, transition } from '../lib/animations';
+import './MessageItem.css';
 
 interface MessageItemProps {
   message: Message;
@@ -18,6 +17,10 @@ export const MessageItem: React.FC<MessageItemProps> = ({
   const isAssistant = message.sender === 'assistant';
   const streamedMessages = useConversationStore(state => state.streamedMessages);
   
+  // A message should stream only if it is:
+  // 1. An assistant message
+  // 2. The latest assistant message
+  // 3. Not already streamed (not in streamedMessages)
   const shouldStream = isAssistant && isLatestAssistantMessage && !streamedMessages.has(message.id);
   
   const formattedTime = new Date(message.created_at).toLocaleTimeString([], { 
@@ -27,23 +30,13 @@ export const MessageItem: React.FC<MessageItemProps> = ({
   
   if (isAssistant) {
     return (
-      <motion.div
-        variants={messageVariants}
-        initial="initial"
-        animate="animate"
-        exit="exit"
-        transition={transition}
-        className="my-1.5 flex flex-col"
-      >
-        <div className="flex items-center gap-1 mb-0.5 px-3 text-xs text-gray-600">
-          <span className="text-gray-400">{formattedTime}</span>
+      <div className="message-item">
+        <div className="message-metadata">
+          <span className="message-time">{formattedTime}</span>
           <span>Assistant</span>
         </div>
-        <motion.div 
-          className="self-start mr-12 ml-3"
-          layout
-        >
-          <div className="bg-gray-50 border border-gray-200 p-2 px-3 rounded-md shadow-sm">
+        <div className="assistant-message">
+          <div className="assistant-message-content">
             {shouldStream ? (
               <DirectStreamingText 
                 content={message.content} 
@@ -54,32 +47,22 @@ export const MessageItem: React.FC<MessageItemProps> = ({
               <EnhancedMarkdown content={message.content} />
             )}
           </div>
-        </motion.div>
-      </motion.div>
+        </div>
+      </div>
     );
   }
   
   return (
-    <motion.div
-      variants={messageVariants}
-      initial="initial"
-      animate="animate"
-      exit="exit"
-      transition={transition}
-      className="my-1.5 flex flex-col"
-    >
-      <div className="flex items-center gap-1 mb-0.5 px-3 text-xs text-gray-600">
-        <span className="text-gray-400">{formattedTime}</span>
+    <div className="message-item">
+      <div className="message-metadata">
+        <span className="message-time">{formattedTime}</span>
         <span>Vous</span>
       </div>
-      <motion.div 
-        className="self-end ml-12 mr-3"
-        layout
-      >
-        <div className="bg-[#f15922] text-white p-2 px-3 rounded-md shadow-sm text-sm leading-relaxed">
+      <div className="user-message">
+        <div className="user-message-content">
           {message.content}
         </div>
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   );
 };

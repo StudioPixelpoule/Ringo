@@ -1,121 +1,277 @@
-import { ProcessingProgress, ProcessingOptions, ProcessingResult } from './types';
-import { config } from './config';
-import { logError } from './errorLogger';
-import { handleError } from './errorHandler';
-import { AuthErrorType } from './errorTypes';
-import { supabase } from './supabase';
+import * as pdfjsLib from 'pdfjs-dist';
+import { createWorker } from 'tesseract.js';
+import mammoth from 'mammoth';
+import * as XLSX from 'xlsx';
+import Papa from 'papaparse';
 
-export async function processDocument(
-  file: File,
-  options?: ProcessingOptions
-): Promise<ProcessingResult> {
+// Initialize PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
+
+interface ProcessingProgress {
+  stage: 'preparation' | 'processing' | 'extraction' | 'complete';
+  progress: number;
+  message: string;
+}
+
+interface ProcessingOptions {
+  onProgress?: (progress: ProcessingProgress) => void;
+  signal?: AbortSignal;
+}
+
+async function processDataFile(file: File, options?: ProcessingOptions): Promise<string> {
   try {
     options?.onProgress?.({
       stage: 'preparation',
       progress: 10,
-      message: 'Préparation du document...'
+      message: 'Lecture du fichier de données...'
     });
 
-    // Validate auth state first
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    if (sessionError || !session) {
-      throw await handleError(new Error('No valid session'), {
-        component: 'documentProcessor',
-        action: 'validateAuth',
-        type: AuthErrorType.SESSION_EXPIRED
-      });
-    }
-
-    // Verify user profile is active
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('status')
-      .eq('id', session.user.id)
-      .single();
-
-    if (profileError || !profile?.status) {
-      throw await handleError(new Error('Profile inactive or not found'), {
-        component: 'documentProcessor',
-        action: 'validateAuth',
-        type: AuthErrorType.SESSION_EXPIRED
-      });
-    }
-
+    let data: any;
     const extension = file.name.split('.').pop()?.toLowerCase();
-    let content: string;
 
-    // Handle audio files
-    if (file.type.startsWith('audio/')) {
-      content = JSON.stringify({
-        type: 'audio',
-        fileName: file.name,
-        fileType: file.type,
-        fileSize: file.size,
-        duration: 'unknown',
-        processingDate: new Date().toISOString(),
-        metadata: {
-          format: extension,
-          source: 'upload'
-        }
-      }, null, 2);
-
-      options?.onProgress?.({
-        stage: 'complete',
-        progress: 100,
-        message: 'Traitement audio terminé'
+    // Handle different file types
+    if (extension === 'json') {
+      const text = await file.text();
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        throw new Error('Le fichier JSON est invalide');
+      }
+    } else if (extension === 'csv') {
+      const text = await file.text();
+      const parseResult = await new Promise((resolve, reject) => {
+        Papa.parse(text, {
+          header: true,
+          dynamicTyping: true,
+          skipEmptyLines: true,
+          delimitersToGuess: [',', ';', '\t', '|'],
+          complete: resolve,
+          error: reject
+        });
       });
 
-      return {
-        content,
-        metadata: {
-          fileName: file.name,
-          fileType: file.type,
-          size: file.size,
-          timestamp: new Date().toISOString()
-        }
-      };
+      if ('errors' in parseResult && parseResult.errors?.length > 0) {
+        console.warn('CSV parsing warnings:', parseResult.errors);
+      }
+
+      data = parseResult.data;
+    } else if (extension === 'xlsx' || extension === 'xls') {
+      options?.onProgress?.({
+        stage: 'processing',
+        progress: 40,
+        message: 'Traitement du fichier Excel...'
+      });
+      
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, {
+        type: 'array',
+        cellDates: true,
+        cellText: true
+      });
+      
+      // Extract all sheets
+      data = {};
+      workbook.SheetNames.forEach(sheetName => {
+        const worksheet = workbook.Sheets[sheetName];
+        // Convert each sheet to JSON
+        data[sheetName] = XLSX.utils.sheet_to_json(worksheet, {
+          defval: '',
+          raw: false
+        });
+      });
+      
+      // If no data was extracted
+      if (!data || Object.keys(data).length === 0) {
+        throw new Error('Aucune donnée trouvée dans le fichier Excel');
+      }
+      
+      options?.onProgress?.({
+        stage: 'processing',
+        progress: 60,
+        message: 'Données Excel extraites avec succès'
+      });
     }
 
-    // Process other file types
-    if (extension === 'pdf') {
-      const arrayBuffer = await file.arrayBuffer();
-      content = await processPDF(arrayBuffer, options);
-    } else if (['doc', 'docx'].includes(extension || '')) {
+    options?.onProgress?.({
+      stage: 'extraction',
+      progress: 70,
+      message: 'Structuration des données...'
+    });
+
+    // Format data for storage
+    const formattedData = {
+      type: extension,
+      fileName: file.name,
+      data,
+      metadata: {
+        rowCount: Array.isArray(data) ? data.length : 
+                 typeof data === 'object' ? Object.values(data).reduce((sum: number, sheet: any[]) => sum + sheet.length, 0) : 1,
+        fields: Array.isArray(data) ? Object.keys(data[0] || {}) :
+                typeof data === 'object' ? Object.keys(data).map(sheet => ({
+                  sheet,
+                  fields: Object.keys(data[sheet][0] || {})
+                })) : Object.keys(data || {}),
+        size: file.size,
+        sheets: extension === 'xlsx' || extension === 'xls' ? Object.keys(data) : undefined
+      },
+      processingDate: new Date().toISOString()
+    };
+
+    options?.onProgress?.({
+      stage: 'complete',
+      progress: 100,
+      message: 'Traitement terminé'
+    });
+
+    return JSON.stringify(formattedData, null, 2);
+  } catch (error) {
+    console.error('[Data Processing] Error:', error);
+    throw error;
+  }
+}
+
+async function processTextDocument(file: File, options?: ProcessingOptions): Promise<string> {
+  try {
+    options?.onProgress?.({
+      stage: 'preparation',
+      progress: 10,
+      message: 'Préparation du document texte...'
+    });
+
+    let text: string;
+
+    if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
       const arrayBuffer = await file.arrayBuffer();
       const result = await mammoth.extractRawText({ arrayBuffer });
-      content = result.value;
-    } else if (['json', 'csv', 'xlsx', 'xls'].includes(extension || '')) {
-      if (extension === 'json') {
-        content = await file.text();
-        // Validate and format JSON
-        const parsed = JSON.parse(content);
-        content = JSON.stringify(parsed, null, 2);
-      } else if (extension === 'csv') {
-        content = await processCSV(file, options);
-      } else {
-        const arrayBuffer = await file.arrayBuffer();
-        const workbook = XLSX.read(arrayBuffer, {
-          type: 'array',
-          cellDates: true,
-          cellNF: false,
-          cellText: false
-        });
-
-        // Process all sheets
-        const result = workbook.SheetNames.reduce((acc, sheetName) => {
-          const sheet = workbook.Sheets[sheetName];
-          acc[sheetName] = XLSX.utils.sheet_to_json(sheet, {
-            raw: false,
-            dateNF: 'YYYY-MM-DD',
-            defval: null
-          });
-          return acc;
-        }, {} as Record<string, any>);
-
-        content = JSON.stringify(result, null, 2);
-      }
+      text = result.value;
     } else {
-      content = await file.text();
+      text = await file.text();
+    }
+
+    if (!text?.trim()) {
+      throw new Error(`Aucun contenu extrait du document: ${file.name}`);
+    }
+
+    options?.onProgress?.({
+      stage: 'processing',
+      progress: 50,
+      message: 'Nettoyage et structuration du texte...'
+    });
+
+    // Clean and structure text
+    text = text
+      .replace(/\s+/g, ' ')
+      .replace(/[\n\r]+/g, '\n')
+      .replace(/[^\S\n]+/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
+    options?.onProgress?.({
+      stage: 'complete',
+      progress: 100,
+      message: 'Traitement terminé'
+    });
+
+    return text;
+  } catch (error) {
+    console.error('[Text Processing] Error:', error);
+    throw error;
+  }
+}
+
+async function processPDFDocument(file: File, options?: ProcessingOptions): Promise<string> {
+  try {
+    options?.onProgress?.({
+      stage: 'preparation',
+      progress: 10,
+      message: 'Chargement du PDF...'
+    });
+
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({
+      data: arrayBuffer,
+      useWorkerFetch: true,
+      isEvalSupported: true,
+      useSystemFonts: true
+    }).promise;
+
+    const numPages = pdf.numPages;
+    let extractedText = '';
+    let currentPage = 1;
+
+    for (let i = 1; i <= numPages; i++) {
+      if (options?.signal?.aborted) {
+        throw new Error('Processing cancelled');
+      }
+
+      options?.onProgress?.({
+        stage: 'processing',
+        progress: Math.round((i / numPages) * 80) + 10,
+        message: `Traitement de la page ${i}/${numPages}...`
+      });
+
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      let pageText = '';
+
+      // Extract text while preserving structure
+      for (const item of content.items as any[]) {
+        if (item.str?.trim()) {
+          pageText += item.str + ' ';
+        }
+      }
+
+      // If page has little text, try OCR
+      if (pageText.length < 100) {
+        try {
+          const scale = 2.0;
+          const viewport = page.getViewport({ scale });
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+
+          if (context) {
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+
+            await page.render({
+              canvasContext: context,
+              viewport
+            }).promise;
+
+            const worker = await createWorker();
+            await worker.loadLanguage('fra+eng');
+            await worker.initialize('fra+eng');
+            const { data } = await worker.recognize(canvas);
+            await worker.terminate();
+
+            if (data.text.length > pageText.length) {
+              pageText = data.text;
+            }
+          }
+        } catch (ocrError) {
+          console.warn(`OCR failed for page ${i}:`, ocrError);
+        }
+      }
+
+      extractedText += pageText.trim() + '\n\n';
+      currentPage++;
+    }
+
+    options?.onProgress?.({
+      stage: 'extraction',
+      progress: 90,
+      message: 'Finalisation de l\'extraction...'
+    });
+
+    const cleanedText = extractedText
+      .replace(/\s+/g, ' ')
+      .replace(/[\n\r]+/g, '\n')
+      .replace(/[^\S\n]+/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
+    if (!cleanedText) {
+      throw new Error(`Aucun texte extrait du PDF: ${file.name}`);
     }
 
     options?.onProgress?.({
@@ -124,35 +280,71 @@ export async function processDocument(
       message: 'Traitement terminé'
     });
 
-    return {
-      content,
-      metadata: {
-        fileName: file.name,
-        fileType: file.type,
-        size: file.size,
-        timestamp: new Date().toISOString()
-      }
-    };
+    return cleanedText;
   } catch (error) {
-    // Log error with context
-    await logError(error, {
-      component: 'documentProcessor',
-      action: 'processDocument',
-      fileType: file.type,
-      fileName: file.name,
-      fileSize: file.size
+    console.error('[PDF Processing] Error:', error);
+    throw error;
+  }
+}
+
+export async function processDocument(
+  file: File,
+  options?: ProcessingOptions
+): Promise<string> {
+  try {
+    console.log('📄 Starting document processing:', {
+      name: file.name,
+      type: file.type,
+      size: file.size
     });
 
-    // Throw appropriate error
-    throw await handleError(error, {
-      component: 'documentProcessor',
-      action: 'processDocument',
-      type: AuthErrorType.SESSION_EXPIRED,
-      context: {
-        fileType: file.type,
-        fileName: file.name,
-        fileSize: file.size
+    // Validate file size
+    if (file.size > 100 * 1024 * 1024) { // 100MB limit
+      throw new Error('Le fichier est trop volumineux (limite: 100MB)');
+    }
+
+    let result: string;
+    const extension = file.name.split('.').pop()?.toLowerCase();
+
+    // Handle data files
+    if (['json', 'csv', 'xlsx', 'xls'].includes(extension || '')) {
+      result = await processDataFile(file, options);
+    }
+    // Handle documents
+    else {
+      switch (file.type.toLowerCase()) {
+        case 'application/pdf':
+          result = await processPDFDocument(file, options);
+          break;
+
+        case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+        case 'text/plain':
+          result = await processTextDocument(file, options);
+          break;
+
+        case 'text/html':
+          // For HTML reports, just return the content as is
+          result = await file.text();
+          break;
+
+        default:
+          throw new Error(`Type de fichier non supporté: ${file.type}`);
       }
+    }
+
+    if (!result?.trim()) {
+      throw new Error(`Aucun contenu valide extrait de ${file.name}`);
+    }
+
+    console.log('✅ Document processing completed:', {
+      fileName: file.name,
+      contentLength: result.length,
+      excerpt: result.substring(0, 100) + '...'
     });
+
+    return result;
+  } catch (error) {
+    console.error('[Document Processing] Error:', error);
+    throw error;
   }
 }

@@ -1,7 +1,12 @@
 import { ConversationDocument } from './conversationStore';
 import { supabase } from './supabase';
 import { generateChatResponse } from './openai';
-import { ReportTemplate } from './reportTemplateService';
+
+interface ReportTemplate {
+  id: string;
+  name: string;
+  type: 'summary' | 'analysis' | 'comparison' | 'extraction';
+}
 
 async function getDocumentContent(doc: ConversationDocument): Promise<string> {
   try {
@@ -23,27 +28,112 @@ async function getDocumentContent(doc: ConversationDocument): Promise<string> {
   }
 }
 
-function validateStructure(content: string, template: ReportTemplate): boolean {
-  if (!template.structure?.sections) return true;
+function getPromptForTemplate(template: ReportTemplate, documents: ConversationDocument[]): string {
+  const basePrompt = `Tu es un expert en analyse de documents. Je veux que tu génères un rapport ${template.type === 'summary' ? 'synthétique' : 'détaillé'} basé sur ${documents.length} document(s).
 
-  const requiredSections = template.structure.sections
-    .filter(section => section.required)
-    .map(section => section.title.toLowerCase());
+Format attendu :
+- Structure claire avec titres et sous-titres
+- Points clés mis en évidence
+- Synthèse des informations importantes
+- Recommandations concrètes si pertinent
 
-  const contentSections = content
-    .split('\n')
-    .filter(line => line.startsWith('## '))
-    .map(line => line.replace('## ', '').toLowerCase());
+Le rapport doit suivre cette structure :
 
-  return requiredSections.every(required => 
-    contentSections.some(section => section.includes(required))
-  );
+## Introduction
+- Contexte et objectifs
+- Documents analysés
+- Méthodologie
+
+`;
+
+  switch (template.type) {
+    case 'summary':
+      return basePrompt + `
+## Points Clés
+- Synthèse des éléments essentiels
+- Conclusions principales
+- Messages importants à retenir
+
+## Recommandations
+- Actions suggérées
+- Points d'attention
+- Prochaines étapes
+
+## Conclusion
+- Synthèse globale
+- Perspectives`;
+
+    case 'analysis':
+      return basePrompt + `
+## Analyse Détaillée
+- Examen approfondi du contenu
+- Interprétation des données
+- Points critiques identifiés
+
+## Implications
+- Impact sur les processus
+- Conséquences potentielles
+- Opportunités et risques
+
+## Recommandations
+- Actions prioritaires
+- Solutions proposées
+- Plan de mise en œuvre
+
+## Conclusion
+- Synthèse de l'analyse
+- Points d'action
+- Perspectives futures`;
+
+    case 'comparison':
+      return basePrompt + `
+## Analyse Comparative
+- Points communs
+- Différences significatives
+- Complémentarités
+
+## Évaluation
+- Forces et faiblesses
+- Meilleures pratiques
+- Points d'amélioration
+
+## Recommandations
+- Harmonisation suggérée
+- Actions prioritaires
+- Synergies potentielles
+
+## Conclusion
+- Synthèse comparative
+- Orientations proposées`;
+
+    case 'extraction':
+      return basePrompt + `
+## Données Extraites
+- Informations clés
+- Métriques importantes
+- Tendances identifiées
+
+## Analyse des Données
+- Interprétation
+- Corrélations
+- Points notables
+
+## Visualisation
+- Tableaux récapitulatifs
+- Points de données essentiels
+- Structures identifiées
+
+## Conclusion
+- Synthèse des données
+- Utilisation suggérée
+- Prochaines analyses`;
+
+    default:
+      return basePrompt;
+  }
 }
 
-export async function generateReport(
-  documents: ConversationDocument[], 
-  template: ReportTemplate
-): Promise<Blob> {
+export async function generateReport(documents: ConversationDocument[], template: ReportTemplate): Promise<Blob> {
   try {
     // Fetch content for all documents
     const contents = await Promise.all(
@@ -61,319 +151,226 @@ INSTRUCTIONS: Le texte ci-dessus contient le contenu complet du document "${doc.
       })
     );
 
-    // Prepare the prompt with structure validation
-    const structureInstructions = template.structure?.sections
-      ? `\nSTRUCTURE REQUISE:\n\n${
-          template.structure.sections
-            .map(section => `## ${section.title}${section.required ? ' (Obligatoire)' : ''}`)
-            .join('\n\n')
-        }`
-      : '';
-
-    const prompt = `${template.prompt}
-
-INSTRUCTIONS IMPORTANTES:
-1. Respecte STRICTEMENT la structure définie
-2. Utilise les titres de section exactement comme spécifiés
-3. Assure-toi que toutes les sections obligatoires sont présentes
-4. Maintiens une cohérence dans le formatage${structureInstructions}
-
-DOCUMENTS À ANALYSER:
-${contents.join('\n\n---\n\n')}`;
-
-    // Generate report content
-    let reportContent = await generateChatResponse(
+    // Generate report content using OpenAI
+    const prompt = getPromptForTemplate(template, documents);
+    const reportContent = await generateChatResponse(
       [
-        { 
-          role: 'system', 
-          content: `Tu es un expert en analyse de documents spécialisé dans la génération de rapports de type "${template.type}". 
-                   Ton objectif est de générer un rapport professionnel en suivant EXACTEMENT la structure et les instructions fournies.
-                   
-                   RÈGLES DE MISE EN FORME:
-                   1. Utilise ## pour les titres de sections principaux (H2)
-                   2. Utilise ### pour les sous-sections (H3)
-                   3. Utilise **texte** pour mettre en évidence les points importants
-                   4. Utilise des listes à puces (-) pour énumérer les points
-                   5. Ajoute des sauts de ligne pour aérer le texte
-                   6. Évite les styles de texte excessifs ou incohérents
-                   7. Assure une hiérarchie claire des informations
-                   8. Ne jamais utiliser le caractère # seul sur une ligne
-                   9. Aligner parfaitement les puces des listes de même niveau` 
-        },
-        { role: 'user', content: prompt }
+        { role: 'system', content: prompt },
+        { role: 'user', content: contents.join('\n\n---\n\n') }
       ],
       contents.join('\n\n---\n\n')
     );
 
-    // Validate structure
-    if (!validateStructure(reportContent, template)) {
-      console.warn('Report structure validation failed, regenerating...');
-      
-      // Add more explicit instructions
-      reportContent = await generateChatResponse(
-        [
-          { 
-            role: 'system', 
-            content: `ATTENTION: La structure précédente n'était pas conforme. 
-                     Tu DOIS utiliser EXACTEMENT les titres de section suivants:
-                     ${template.structure?.sections.map(s => `## ${s.title}`).join('\n')}` 
-          },
-          { role: 'user', content: prompt }
-        ],
-        contents.join('\n\n---\n\n')
-      );
-
-      // Final validation
-      if (!validateStructure(reportContent, template)) {
-        throw new Error('Impossible de générer un rapport conforme à la structure requise');
-      }
-    }
-
-    // Clean up any standalone # characters
-    reportContent = reportContent.replace(/^#\s*$/gm, '');
-
-    // Create HTML report
+    // Create HTML report with professional styling
     const htmlContent = `
     <!DOCTYPE html>
-    <html lang="fr">
+    <html>
     <head>
       <meta charset="UTF-8">
       <title>Rapport - ${template.name}</title>
       <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        
-        /* Reset CSS */
-        * {
-          margin: 0;
-          padding: 0;
-          box-sizing: border-box;
-        }
-        
-        /* Base styles */
-        :root {
-          --page-width: 21cm;
-          --page-height: 29.7cm;
-          --margin: 2cm;
-          --primary-color: #333333;
-          --secondary-color: #666666;
-          --accent-color: #106f69;
-          --border-color: #e5e5e5;
-          --background-color: #ffffff;
-        }
-        
-        /* Page layout */
-        @page {
-          size: A4;
-          margin: var(--margin);
-        }
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
         
         body {
-          font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-          font-size: 11pt;
+          font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
           line-height: 1.6;
-          color: var(--primary-color);
-          background: var(--background-color);
-          max-width: var(--page-width);
-          margin: 0 auto;
-          padding: 0;
+          color: #333;
+          max-width: 800px;
+          margin: 40px auto;
+          padding: 0 20px;
+          background: #fff;
         }
 
-        /* Header */
+        /* Header styles */
         .header {
-          margin-bottom: 2rem;
-          padding-bottom: 1rem;
-          border-bottom: 1px solid var(--border-color);
+          border-bottom: 3px solid #f15922;
+          padding-bottom: 20px;
+          margin-bottom: 30px;
         }
 
         .header h1 {
-          font-size: 24pt;
+          color: #f15922;
+          font-size: 28px;
           font-weight: 700;
-          color: var(--primary-color);
-          margin-bottom: 0.5rem;
-          line-height: 1.2;
-          page-break-after: avoid;
+          margin: 0 0 10px 0;
         }
 
         .metadata {
-          color: var(--secondary-color);
-          font-size: 9pt;
-          line-height: 1.4;
+          color: #666;
+          font-size: 14px;
+          margin-bottom: 10px;
         }
 
-        /* Content */
+        /* Content styles */
         .content {
-          margin: 2rem 0;
+          margin: 20px 0;
         }
 
         /* Typography */
+        h1 {
+          color: #f15922;
+          font-size: 28px;
+          font-weight: 700;
+          margin: 1.5em 0 0.5em;
+          padding-bottom: 0.3em;
+          border-bottom: 2px solid #f15922;
+        }
+
         h2 {
-          font-size: 16pt;
-          font-weight: 600;
-          color: var(--primary-color);
-          margin: 2rem 0 1rem;
-          padding-bottom: 0.5rem;
-          border-bottom: 1px solid var(--border-color);
-          line-height: 1.3;
-          page-break-after: avoid;
-          clear: both;
+          color: #dba747;
+          font-size: 24px;
+          font-weight: 700;
+          margin: 1.5em 0 0.5em;
+          padding-bottom: 0.3em;
+          border-bottom: 1px solid #dba747;
         }
 
         h3 {
-          font-size: 14pt;
+          color: #444;
+          font-size: 20px;
           font-weight: 600;
-          color: var(--primary-color);
-          margin: 1.5rem 0 0.75rem;
-          line-height: 1.3;
-          page-break-after: avoid;
+          margin: 1.2em 0 0.4em;
         }
 
         p {
-          margin-bottom: 0.75rem;
-          line-height: 1.6;
-          text-align: justify;
-          hyphens: auto;
+          margin: 0 0 1em;
+          line-height: 1.8;
         }
 
         /* Lists */
         ul, ol {
-          margin: 0.75rem 0;
-          padding-left: 2.5rem;
-          page-break-inside: avoid;
+          margin: 1em 0;
+          padding-left: 2em;
         }
 
         li {
-          margin-bottom: 0.5rem;
+          margin: 0.5em 0;
           line-height: 1.6;
-          position: relative;
-          text-align: justify;
-          padding-left: 0.5rem;
         }
 
         ul li {
           list-style-type: none;
+          position: relative;
         }
 
         ul li::before {
           content: "•";
-          color: var(--accent-color);
+          color: #f15922;
           font-weight: bold;
           position: absolute;
-          left: -1.5rem;
-          width: 1rem;
-          text-align: center;
-        }
-
-        /* Nested lists */
-        ul ul, ol ol, ul ol, ol ul {
-          margin: 0.5rem 0 0.5rem 0;
-          padding-left: 2rem;
+          left: -1.2em;
         }
 
         /* Emphasis */
         strong {
+          color: #f15922;
           font-weight: 600;
-          color: var(--primary-color);
         }
 
         em {
           font-style: italic;
-          color: var(--secondary-color);
+          color: #666;
+        }
+
+        /* Blockquotes */
+        blockquote {
+          margin: 1.5em 0;
+          padding: 1em 1.5em;
+          border-left: 4px solid #dba747;
+          background-color: #f8f9fa;
+          color: #555;
+          font-style: italic;
         }
 
         /* Tables */
         table {
           width: 100%;
           border-collapse: collapse;
-          margin: 1.5rem 0;
-          font-size: 10pt;
-          page-break-inside: avoid;
+          margin: 1.5em 0;
+          background: #fff;
+          border: 1px solid #e0e0e0;
         }
 
         th, td {
-          padding: 0.75rem;
+          padding: 12px 15px;
           text-align: left;
-          border: 1px solid var(--border-color);
-          vertical-align: top;
+          border: 1px solid #e0e0e0;
         }
 
         th {
-          background-color: #f8f9fa;
+          background-color: #f5f5f5;
           font-weight: 600;
-          color: var(--primary-color);
+          color: #333;
         }
 
         tr:nth-child(even) {
-          background-color: #fafafa;
+          background-color: #f9f9f9;
+        }
+
+        /* Code blocks */
+        pre {
+          background-color: #f6f8fa;
+          border: 1px solid #e1e4e8;
+          border-radius: 6px;
+          padding: 16px;
+          overflow: auto;
+          font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+          font-size: 85%;
+          line-height: 1.45;
+          margin: 1.5em 0;
+        }
+
+        code {
+          font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+          font-size: 85%;
+          background-color: rgba(27, 31, 35, 0.05);
+          padding: 0.2em 0.4em;
+          border-radius: 3px;
         }
 
         /* Footer */
         .footer {
-          margin-top: 3rem;
-          padding-top: 1rem;
-          border-top: 1px solid var(--border-color);
-          color: var(--secondary-color);
-          font-size: 9pt;
-          page-break-before: avoid;
-        }
-
-        .footer h4 {
-          color: var(--primary-color);
-          font-size: 10pt;
-          margin-bottom: 0.5rem;
+          margin-top: 50px;
+          padding-top: 20px;
+          border-top: 1px solid #eee;
+          color: #666;
+          font-size: 14px;
         }
 
         .footer ul {
-          margin: 0;
-          padding-left: 1.25rem;
+          margin: 10px 0;
+          padding-left: 20px;
         }
 
         .footer li {
-          margin: 0.25rem 0;
+          margin: 5px 0;
         }
 
-        /* Print-specific styles */
+        /* Print styles */
         @media print {
           body {
-            width: var(--page-width);
-            height: var(--page-height);
             margin: 0;
-            padding: 0;
-            print-color-adjust: exact;
-            -webkit-print-color-adjust: exact;
+            padding: 20px;
+            max-width: none;
           }
 
-          /* Avoid page breaks inside elements */
-          h1, h2, h3, h4, h5, h6 {
+          .header {
+            margin-bottom: 20px;
+          }
+
+          h1, h2, h3 {
             page-break-after: avoid;
+          }
+
+          ul, ol, img, table {
             page-break-inside: avoid;
-          }
-
-          table, figure, ul, ol {
-            page-break-inside: avoid;
-          }
-
-          /* Force page breaks before major sections */
-          h1 {
-            page-break-before: always;
-          }
-
-          /* Ensure footer stays at bottom */
-          .footer {
-            position: running(footer);
-            margin-top: 2rem;
-          }
-
-          @page {
-            @bottom-center {
-              content: counter(page);
-            }
           }
         }
       </style>
     </head>
     <body>
       <div class="header">
-        <h1>${template.name}</h1>
+        <h1>Rapport - ${template.name}</h1>
         <div class="metadata">
           <p>Généré le ${new Date().toLocaleDateString('fr-FR', {
             year: 'numeric',
@@ -382,55 +379,26 @@ ${contents.join('\n\n---\n\n')}`;
             hour: '2-digit',
             minute: '2-digit'
           })}</p>
-          <p>Type : ${template.type}</p>
-          ${template.description ? `<p>${template.description}</p>` : ''}
+          <p>Type: ${template.type}</p>
         </div>
       </div>
       
       <div class="content">
         ${reportContent
-          // Clean up multiple line breaks
-          .replace(/\n{3,}/g, '\n\n')
-          // Remove standalone # characters
-          .replace(/^#\s*$/gm, '')
-          // Handle headings
-          .replace(/## (.*?)(?=\n|$)/g, '</div><h2>$1</h2><div class="section">')
-          .replace(/### (.*?)(?=\n|$)/g, '</div><h3>$1</h3><div class="subsection">')
-          // Handle bold text
+          .replace(/\n/g, '<br>')
+          .replace(/## (.*)/g, '<h2>$1</h2>')
+          .replace(/### (.*)/g, '<h3>$1</h3>')
           .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-          // Handle lists with proper nesting
-          .replace(/(?:^|\n)- (.*?)(?=\n|$)/g, '\n<li>$1</li>')
-          .replace(/(?:^|\n)<li>/g, '\n<ul><li>')
-          .replace(/(?:^|\n)<\/li>(?:\n|$)/g, '</li></ul>\n')
-          // Handle paragraphs
-          .replace(/(?:^|\n)([^<\n].*?)(?=\n|$)/g, '<p>$1</p>')
-          // Clean up empty paragraphs
-          .replace(/<p>\s*<\/p>/g, '')
-          // Clean up nested lists
-          .replace(/<\/ul>\s*<ul>/g, '')
-          // Clean up extra divs
-          .replace(/<div class="section">\s*<\/div>/g, '')
-          .replace(/<div class="subsection">\s*<\/div>/g, '')
-          // Add initial div
-          .replace(/^/, '<div class="section">')
-          // Close final div
-          .replace(/$/, '</div>')
-          // Clean up multiple spaces
-          .replace(/\s{2,}/g, ' ')
-          // Clean up empty lines
-          .replace(/\n{2,}/g, '\n')
+          .replace(/- (.*)/g, '<li>$1</li>')
+          .replace(/<li>/g, '<ul><li>')
+          .replace(/<\/li>\n/g, '</li></ul>')
         }
       </div>
       
       <div class="footer">
-        <h4>Documents analysés</h4>
+        <p>Documents analysés:</p>
         <ul>
-          ${documents.map(d => `
-            <li>
-              <strong>${d.documents.name}</strong>
-              <span class="text-sm text-gray-500">(${d.documents.type})</span>
-            </li>
-          `).join('')}
+          ${documents.map(d => `<li>${d.documents.name} (${d.documents.type})</li>`).join('')}
         </ul>
       </div>
     </body>

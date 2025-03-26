@@ -1,103 +1,74 @@
 import { createClient } from '@supabase/supabase-js';
-import { config } from './config';
 
-// Create Supabase client with better config
-const supabaseInstance = createClient(config.supabase.url, config.supabase.anonKey, {
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing Supabase environment variables');
+}
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: false,
-    storage: sessionStorage,
-    storageKey: 'sb-auth-token',
+    detectSessionInUrl: true,
     flowType: 'pkce',
-    debug: import.meta.env.DEV
+    storage: window.localStorage,
+    storageKey: 'sb-auth-token'
   },
   global: {
     headers: {
-      'x-application-name': 'ringo',
-      'x-client-info': `ringo/${config.app.version}`
+      'x-application-name': 'ringo'
     }
   }
 });
-
-// Export singleton instance
-export const supabase = supabaseInstance;
-
-// Admin utilities for user management
-export const adminUtils = {
-  /**
-   * Create a new user
-   */
-  async createUser(email: string, password: string, role: string) {
-    try {
-      const response = await fetch('/functions/v1/create-user', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${config.supabase.anonKey}`
-        },
-        body: JSON.stringify({ email, password, role })
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to create user');
-      }
-
-      return response.json();
-    } catch (error) {
-      console.error('Error creating user:', error);
-      throw error;
-    }
-  },
-
-  /**
-   * Delete a user
-   */
-  async deleteUser(userId: string) {
-    try {
-      const response = await fetch('/functions/v1/delete-user', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${config.supabase.anonKey}`
-        },
-        body: JSON.stringify({ user_id: userId })
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to delete user');
-      }
-
-      return true;
-    } catch (error) {
-      console.error('Error deleting user:', error);
-      throw error;
-    }
-  }
-};
 
 // Initialize auth state
-supabase.auth.getSession().catch(error => {
-  console.error('Error getting initial session:', error);
-  sessionStorage.clear();
-  window.location.href = '/login';
-});
+supabase.auth.getSession().catch(console.error);
 
 // Set up auth state change listener
 supabase.auth.onAuthStateChange((event, session) => {
-  console.debug('🔄 Auth state change:', event);
-
   if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
-    sessionStorage.clear();
+    // Clear any cached data
     localStorage.clear();
+    // Redirect to login
     window.location.href = '/login';
   } else if (event === 'TOKEN_REFRESHED') {
-    console.debug('✅ Token refreshed successfully');
-  } else if (event === 'SIGNED_IN') {
-    console.debug('✅ Sign in successful');
+    console.log('Session token refreshed');
   }
 });
 
-export default supabase;
+// Add session refresh on focus
+let refreshTimeout: NodeJS.Timeout;
+window.addEventListener('focus', () => {
+  clearTimeout(refreshTimeout);
+  refreshTimeout = setTimeout(() => {
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        if (!session) {
+          // No valid session, redirect to login
+          window.location.href = '/login';
+        }
+      })
+      .catch((error) => {
+        console.error('Session refresh error:', error);
+        if (error?.message?.includes('refresh_token_not_found') || 
+            error?.message?.includes('JWT expired') || 
+            error?.message?.includes('Invalid Refresh Token')) {
+          localStorage.clear();
+          window.location.href = '/login';
+        }
+      });
+  }, 1000);
+});
+
+// Add unhandled rejection listener for auth errors
+window.addEventListener('unhandledrejection', (event) => {
+  if (event.reason?.name === 'AuthApiError' || 
+      event.reason?.message?.includes('JWT expired') ||
+      event.reason?.message?.includes('Invalid JWT')) {
+    console.error('Auth API Error:', event.reason);
+    localStorage.clear();
+    window.location.href = '/login';
+  }
+});

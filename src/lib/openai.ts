@@ -1,9 +1,16 @@
 import OpenAI from 'openai';
-import { config } from './config';
+
+const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+
+if (!apiKey) {
+  throw new Error(
+    'VITE_OPENAI_API_KEY is not set in environment variables. ' +
+    'Please add it to your .env file: VITE_OPENAI_API_KEY=your_api_key_here'
+  );
+}
 
 const openai = new OpenAI({
-  apiKey: config.openai.apiKey,
-  baseURL: '/api/v1', // Use local proxy
+  apiKey,
   dangerouslyAllowBrowser: true
 });
 
@@ -20,7 +27,29 @@ Pour une meilleure lisibilité, structure tes réponses avec :
 - Des sous-titres en utilisant "###" pour les sous-sections
 - Des points importants en **gras**
 - Des listes à puces pour énumérer des éléments
-- Des sauts de ligne pour aérer le texte`;
+- Des sauts de ligne pour aérer le texte
+
+Pour les documents textuels :
+- Analyse le contenu et la structure
+- Identifie les sections principales
+- Met en évidence les informations importantes
+- Propose une synthèse claire
+
+Pour l'analyse croisée des documents :
+- Compare systématiquement les contenus
+- Identifie les points communs et les différences
+- Relève les éventuelles contradictions
+- Montre comment les documents se complètent
+- Propose une synthèse globale
+
+À la fin de chaque réponse, propose des suggestions pour approfondir l'analyse :
+
+## Pour approfondir...
+- "Souhaitez-vous des détails sur un point particulier ?"
+- "Je peux analyser plus en détail certains aspects, lesquels vous intéressent ?"
+- "Voulez-vous explorer d'autres perspectives ?"
+
+Sois concis et précis dans tes réponses.`;
 
 // Constants for token limits
 const MAX_TOKENS = 128000; // GPT-4 Turbo context window
@@ -236,7 +265,10 @@ export async function generateChatResponseStreaming(
         pendingFormatting.link = false;
       }
 
+      // Ajouter le contenu au texte complet
       fullResponse += content;
+
+      // Envoyer le chunk avec le formatage préservé
       onChunk(content);
     }
 

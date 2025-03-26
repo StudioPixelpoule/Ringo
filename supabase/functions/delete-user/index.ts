@@ -1,4 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.7'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,6 +13,18 @@ serve(async (req) => {
   }
 
   try {
+    // Create authenticated Supabase client using the service role key
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    )
+
     // Get the request body
     const { user_id } = await req.json()
 
@@ -19,69 +32,48 @@ serve(async (req) => {
       throw new Error('user_id is required')
     }
 
-    // Create headers with service role key
-    const headers = {
-      'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-      'apikey': Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
-      'Content-Type': 'application/json'
-    }
-
     // First check if user exists and get their role
-    const profileResponse = await fetch(
-      `${Deno.env.get('SUPABASE_URL')}/rest/v1/profiles?id=eq.${user_id}&select=role`,
-      { headers }
-    )
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('role')
+      .eq('id', user_id)
+      .single()
 
-    if (!profileResponse.ok) {
+    if (profileError) {
       throw new Error('Failed to fetch user profile')
-    }
-
-    const [profile] = await profileResponse.json()
-    if (!profile) {
-      throw new Error('User profile not found')
     }
 
     // Don't allow deleting the last super admin
     if (profile.role === 'super_admin') {
-      const countResponse = await fetch(
-        `${Deno.env.get('SUPABASE_URL')}/rest/v1/profiles?role=eq.super_admin&status=eq.true&select=id`,
-        { headers }
-      )
+      const { count, error: countError } = await supabaseAdmin
+        .from('profiles')
+        .select('id', { count: 'exact', head: true })
+        .eq('role', 'super_admin')
+        .eq('status', true)
 
-      if (!countResponse.ok) {
+      if (countError) {
         throw new Error('Failed to check super admin count')
       }
 
-      const superAdmins = await countResponse.json()
-      if (superAdmins.length <= 1) {
+      if (count === 1) {
         throw new Error('Cannot delete the last super admin')
       }
     }
 
-    // Delete all user data using RPC function
-    const rpcResponse = await fetch(
-      `${Deno.env.get('SUPABASE_URL')}/rest/v1/rpc/delete_user_data`,
-      {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ user_id_param: user_id })
-      }
-    )
+    // Delete all user data
+    const { error: deleteDataError } = await supabaseAdmin
+      .rpc('delete_user_data', { user_id_param: user_id })
 
-    if (!rpcResponse.ok) {
+    if (deleteDataError) {
       throw new Error('Failed to delete user data')
     }
 
     // Delete the user from auth.users
-    const authResponse = await fetch(
-      `${Deno.env.get('SUPABASE_URL')}/auth/v1/admin/users/${user_id}`,
-      {
-        method: 'DELETE',
-        headers
-      }
+    const { error: deleteUserError } = await supabaseAdmin.auth.admin.deleteUser(
+      user_id
     )
 
-    if (!authResponse.ok) {
+    if (deleteUserError) {
       throw new Error('Failed to delete user account')
     }
 

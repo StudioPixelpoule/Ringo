@@ -1,208 +1,119 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Session } from '@supabase/supabase-js';
 import { Login } from './pages/Login';
 import { Chat } from './pages/Chat';
 import { AcceptInvitation } from './pages/AcceptInvitation';
 import { supabase } from './lib/supabase';
-import { useModalStore } from './lib/modalStore';
-import { useUserStore } from './lib/store';
-import { Loader2 } from 'lucide-react';
-import { Logo } from './components/Logo';
-import { SmallLogo } from './components/SmallLogo';
-import { IrsstLogo } from './components/IrsstLogo';
-import { handleError } from './lib/errorHandler';
 
 function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const closeAllModals = useModalStore(state => state.closeAll);
-  const setUserRole = useUserStore(state => state.setUserRole);
-  
+  const [userRole, setUserRole] = useState<string>('user');
+
   useEffect(() => {
-    let mounted = true;
-
-    const checkAuth = async () => {
-      try {
-        // First check if we have a session in storage
-        const storedSession = sessionStorage.getItem('sb-auth-token');
-        if (!storedSession) {
-          const path = window.location.pathname;
-          if (path !== '/login' && !path.startsWith('/accept-invitation')) {
-            throw new Error('No session found');
-          }
-          if (mounted) {
-            setSession(null);
-            setIsAuthenticated(false);
-            setLoading(false);
-          }
-          return;
-        }
-
-        // Get current session from Supabase
-        const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) throw sessionError;
-
-        // Handle no session case
-        if (!currentSession) {
-          // Clear invalid stored session
-          sessionStorage.removeItem('sb-auth-token');
-          
-          const path = window.location.pathname;
-          if (path !== '/login' && !path.startsWith('/accept-invitation')) {
-            throw new Error('No session found');
-          }
-          if (mounted) {
-            setSession(null);
-            setIsAuthenticated(false);
-            setLoading(false);
-          }
-          return;
-        }
-
-        // Get user profile
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('status, role')
-          .eq('id', currentSession.user.id)
-          .single();
-
-        if (profileError) {
-          // Handle specific error cases
-          if (profileError.code === 'PGRST301' || profileError.code === '401') {
-            await supabase.auth.signOut();
-            sessionStorage.removeItem('sb-auth-token');
-            throw new Error('Invalid session');
-          }
-          throw profileError;
-        }
-
-        // Validate profile status
-        if (!profile?.status) {
-          await supabase.auth.signOut();
-          sessionStorage.removeItem('sb-auth-token');
-          throw new Error('Profile inactive or not found');
-        }
-
-        if (mounted) {
-          setUserRole(profile.role);
-          setSession(currentSession);
-          setIsAuthenticated(true);
-          // Store session
-          sessionStorage.setItem('sb-auth-token', currentSession.access_token);
-        }
-      } catch (error) {
-        if (!mounted) return;
-
-        // Log error with context
-        await handleError(error, {
-          component: 'App',
-          action: 'checkAuth',
-          sessionId: session?.user?.id,
-          location: window.location.pathname
-        });
-
-        // Clear auth state on critical errors
-        if (error instanceof Error && 
-            (error.message.includes('No session found') ||
-             error.message.includes('Invalid session') ||
-             error.message.includes('Profile inactive'))) {
-          await supabase.auth.signOut();
-          localStorage.clear();
-          sessionStorage.clear();
-          closeAllModals();
-        }
-
-        if (mounted) {
-          setSession(null);
-          setIsAuthenticated(false);
-        }
-      } finally {
-        if (mounted) {
-          setLoading(false);
-        }
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session) {
+        fetchUserRole(session.user.id);
       }
-    };
-
-    // Initial auth check
-    checkAuth();
+      setLoading(false);
+    });
 
     // Listen for auth changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!mounted) return;
+      if (event === 'TOKEN_REFRESHED') {
+        setSession(session);
+        if (session) {
+          fetchUserRole(session.user.id);
+        }
+      } else if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+        setSession(null);
+        setUserRole('user');
+        window.location.href = '/login';
+      } else {
+        setSession(session);
+        if (session) {
+          fetchUserRole(session.user.id);
+        }
+      }
+      setLoading(false);
+    });
 
-      console.debug('Auth state change:', event);
+    // Handle auth errors
+    const handleAuthError = (error: any) => {
+      if (error?.message?.includes('refresh_token_not_found') || 
+          error?.message?.includes('Invalid Refresh Token')) {
+        console.warn('Session expired, redirecting to login');
+        setSession(null);
+        window.location.href = '/login';
+      }
+    };
 
-      switch (event) {
-        case 'SIGNED_OUT':
-        case 'USER_DELETED':
-          setSession(null);
-          setIsAuthenticated(false);
-          localStorage.clear();
-          sessionStorage.clear();
-          closeAllModals();
-          break;
-
-        case 'SIGNED_IN':
-          if (session) {
-            sessionStorage.setItem('sb-auth-token', session.access_token);
-            await checkAuth();
-          }
-          break;
-
-        case 'TOKEN_REFRESHED':
-          if (session) {
-            sessionStorage.setItem('sb-auth-token', session.access_token);
-            await checkAuth();
-          }
-          break;
-
-        default:
-          // Ignore other events
-          break;
+    // Add error listener
+    window.addEventListener('unhandledrejection', (event) => {
+      if (event.reason?.name === 'AuthApiError') {
+        handleAuthError(event.reason);
       }
     });
 
-    // Cleanup
+    // Cleanup subscriptions
     return () => {
-      mounted = false;
       subscription.unsubscribe();
+      window.removeEventListener('unhandledrejection', handleAuthError);
     };
-  }, [closeAllModals, setUserRole, session?.user?.id]);
+  }, []);
+
+  const fetchUserRole = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('role, status')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        console.error('Error fetching user profile:', error);
+        // Check if it's an auth error
+        if (error.code === 'PGRST301' || error.code === '401') {
+          setSession(null);
+          window.location.href = '/login';
+          return;
+        }
+        throw error;
+      }
+
+      if (!data) {
+        console.warn('No profile found for user');
+        return;
+      }
+
+      if (!data.status) {
+        console.warn('User profile is inactive');
+        await supabase.auth.signOut();
+        return;
+      }
+
+      setUserRole(data.role);
+    } catch (error) {
+      console.error('Error in fetchUserRole:', error);
+      // Don't throw here to prevent the unhandled promise rejection
+    }
+  };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#f15922] flex flex-col items-center justify-center p-4">
-        <div className="w-full max-w-md flex flex-col items-center">
-          <div className="flex flex-col items-center mb-8 animate-pulse">
-            <div className="w-24 h-24 flex items-center justify-center">
-              <Logo />
-            </div>
-            <h1 className="text-white text-4xl font-bold flex items-center">
-              RINGO
-              <sup className="ml-1 flex items-center gap-0.5 text-sm text-white">
-                <span>par</span>
-                <SmallLogo />
-              </sup>
-            </h1>
-            <div className="mt-4">
-              <IrsstLogo />
-            </div>
-          </div>
-          <div className="flex items-center justify-center text-white gap-2">
-            <Loader2 className="animate-spin" size={20} />
-            <span>Vérification de l'authentification...</span>
-          </div>
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-gray-600">Chargement...</div>
       </div>
     );
   }
 
   return (
-    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+    <BrowserRouter>
       <Routes>
         <Route
           path="/login"
@@ -214,13 +125,7 @@ function App() {
         />
         <Route
           path="/"
-          element={
-            isAuthenticated ? (
-              <Chat session={session!} />
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
+          element={session ? <Chat session={session} /> : <Navigate to="/login" replace />}
         />
       </Routes>
     </BrowserRouter>

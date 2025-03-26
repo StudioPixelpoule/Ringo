@@ -1,190 +1,102 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, FileText, FolderPlus, ChevronRight, Edit2, Trash2, Send, Loader2, CheckSquare, Square } from 'lucide-react';
+import { X, Upload, FileText, FolderPlus, ChevronRight, Edit2, Trash2, Check, Loader2 } from 'lucide-react';
 import { useDocumentStore, Document, Folder } from '../lib/documentStore';
-import { useConversationStore } from '../lib/conversationStore';
 import { supabase } from '../lib/supabase';
 import { FileIcon } from './FileIcon';
 import { logError } from '../lib/errorLogger';
-import { FolderModal } from './FolderModal';
-import { DeleteConfirmationModal } from './DeleteConfirmationModal';
-import { processDocument } from '../lib/documentProcessor';
-import { validateFileSize } from '../lib/constants';
-import { ProcessingProgress, ModalProps } from '../lib/types';
-import { config } from '../lib/config';
 
-interface FolderTreeItemProps {
-  folder: Folder;
-  level: number;
-  selectedFolder: Folder | null;
-  expandedFolders: Set<string>;
-  onSelect: (folder: Folder) => void;
-  onToggle: (folderId: string) => void;
-  onCreateFolder: (parentId: string | null) => void;
-  onRenameFolder: (folder: Folder) => void;
-  onDeleteClick: (folder: Folder) => void;
-  folders: Folder[];
+interface ProcessingStatus {
+  isProcessing: boolean;
+  progress: number;
+  stage: 'preparation' | 'processing' | 'extraction' | 'complete';
+  message: string;
 }
 
-const FolderTreeItem: React.FC<FolderTreeItemProps> = ({
-  folder,
+interface FolderColumnProps {
+  folders: Folder[];
+  level: number;
+  parentId: string | null;
+  selectedPath: Folder[];
+  onSelect: (folder: Folder, level: number) => void;
+  onCreateFolder: (parentId: string | null) => void;
+  onRenameFolder: (folder: Folder) => void;
+  onDeleteFolder: (folder: Folder) => void;
+}
+
+const FolderColumn: React.FC<FolderColumnProps> = ({
+  folders,
   level,
-  selectedFolder,
-  expandedFolders,
+  parentId,
+  selectedPath,
   onSelect,
-  onToggle,
   onCreateFolder,
   onRenameFolder,
-  onDeleteClick,
-  folders
+  onDeleteFolder,
 }) => {
-  const hasChildren = folders.some(f => f.parent_id === folder.id);
-  const isExpanded = expandedFolders.has(folder.id);
-  const childFolders = folders.filter(f => f.parent_id === folder.id);
-  const isSelected = selectedFolder?.id === folder.id;
+  const currentFolders = folders.filter(f => f.parent_id === parentId);
+  const selectedFolder = selectedPath[level];
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.2 }}
-    >
-      <div
-        className={`
-          flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer group
-          transition-all duration-200 relative
-          ${isSelected ? 'bg-[#f15922] text-white' : 'hover:bg-gray-100'}
-        `}
-        style={{ paddingLeft: `${(level + 1) * 12}px` }}
-      >
+    <div className="min-w-[200px] border-r border-gray-200 h-[400px] overflow-y-auto">
+      <div className="p-2 border-b border-gray-200 flex items-center justify-between">
+        <span className="font-medium text-sm text-gray-600">
+          {parentId ? folders.find(f => f.id === parentId)?.name : 'Racine'}
+        </span>
         <button
-          onClick={() => hasChildren && onToggle(folder.id)}
-          className={`
-            p-0.5 rounded transition-transform duration-200
-            ${hasChildren ? 'visible' : 'invisible'}
-            ${isSelected ? 'text-white' : 'text-gray-400 hover:text-gray-600'}
-          `}
+          onClick={() => onCreateFolder(parentId)}
+          className="p-1 text-[#f15922] hover:bg-[#f15922]/10 rounded-full"
         >
-          <ChevronRight
-            size={16}
-            className={`transform transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}
-          />
+          <FolderPlus size={16} />
         </button>
-
-        <div
-          className="flex-1 flex items-center justify-between min-w-0 cursor-pointer"
-          onClick={() => onSelect(folder)}
-        >
-          <span className="truncate">{folder.name}</span>
-          
-          <div className={`
-            opacity-0 group-hover:opacity-100 flex items-center gap-1
-            transition-opacity duration-200
-            ${isSelected ? 'text-white' : 'text-gray-500'}
-          `}>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onCreateFolder(folder.id);
-              }}
-              className="p-1 hover:bg-black/10 rounded"
-              title="Nouveau sous-dossier"
-            >
-              <FolderPlus size={14} />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onRenameFolder(folder);
-              }}
-              className="p-1 hover:bg-black/10 rounded"
-              title="Renommer"
-            >
-              <Edit2 size={14} />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onDeleteClick(folder);
-              }}
-              className="p-1 hover:bg-black/10 rounded"
-              title="Supprimer"
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
-        </div>
       </div>
-
-      <AnimatePresence>
-        {isExpanded && childFolders.length > 0 && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
+      <div className="p-2">
+        {currentFolders.map(folder => (
+          <div
+            key={folder.id}
+            className={`group flex items-center justify-between p-2 rounded-md cursor-pointer ${
+              selectedFolder?.id === folder.id
+                ? 'bg-[#f15922] text-white'
+                : 'hover:bg-gray-100'
+            }`}
+            onClick={() => onSelect(folder, level)}
           >
-            {childFolders.map(childFolder => (
-              <FolderTreeItem
-                key={childFolder.id}
-                folder={childFolder}
-                level={level + 1}
-                selectedFolder={selectedFolder}
-                expandedFolders={expandedFolders}
-                onSelect={onSelect}
-                onToggle={onToggle}
-                onCreateFolder={onCreateFolder}
-                onRenameFolder={onRenameFolder}
-                onDeleteClick={onDeleteClick}
-                folders={folders}
-              />
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
+            <div className="flex items-center gap-2">
+              <span className="truncate">{folder.name}</span>
+              {folders.some(f => f.parent_id === folder.id) && (
+                <ChevronRight size={16} className="flex-shrink-0" />
+              )}
+            </div>
+            <div className={`hidden group-hover:flex items-center gap-1 ${
+              selectedFolder?.id === folder.id ? 'text-white' : 'text-gray-500'
+            }`}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRenameFolder(folder);
+                }}
+                className="p-1 hover:bg-black/10 rounded"
+              >
+                <Edit2 size={14} />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteFolder(folder);
+                }}
+                className="p-1 hover:bg-black/10 rounded"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 };
 
-interface DocumentImportModalProps extends ModalProps {
-  // Additional props if needed
-}
-
 export function DocumentImportModal() {
-  const [selectedPath, setSelectedPath] = useState<Folder[]>([]);
-  const [description, setDescription] = useState('');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
-  const [processingStatus, setProcessingStatus] = useState<ProcessingProgress>({
-    isProcessing: false,
-    progress: 0,
-    stage: 'preparation',
-    message: ''
-  });
-  
-  const [folderModal, setFolderModal] = useState<{
-    isOpen: boolean;
-    mode: 'create' | 'rename';
-    parentId: string | null;
-    folder?: Folder;
-  }>({
-    isOpen: false,
-    mode: 'create',
-    parentId: null
-  });
-
-  const [deleteConfirmation, setDeleteConfirmation] = useState<{
-    isOpen: boolean;
-    folder: Folder | null;
-    isDeleting: boolean;
-  }>({
-    isOpen: false,
-    folder: null,
-    isDeleting: false
-  });
-
   const {
     isModalOpen,
     folders,
@@ -201,24 +113,30 @@ export function DocumentImportModal() {
     clearError,
   } = useDocumentStore();
 
+  const [selectedPath, setSelectedPath] = useState<Folder[]>([]);
+  const [description, setDescription] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [processingStatus, setProcessingStatus] = useState<ProcessingStatus>({
+    isProcessing: false,
+    progress: 0,
+    stage: 'preparation',
+    message: ''
+  });
+
   useEffect(() => {
     if (isModalOpen) {
       fetchFolders();
 
+      // Check for pending report import
       const pendingImport = localStorage.getItem('pendingReportImport');
       if (pendingImport) {
-        try {
-          const importData = JSON.parse(pendingImport);
-          const file = new File([importData.content], importData.name, {
-            type: importData.type
-          });
-          setSelectedFile(file);
-          setDescription('Rapport généré automatiquement');
-          localStorage.removeItem('pendingReportImport');
-        } catch (error) {
-          console.error('Error processing pending import:', error);
-          localStorage.removeItem('pendingReportImport');
-        }
+        const importData = JSON.parse(pendingImport);
+        const file = new File([importData.content], importData.name, {
+          type: importData.type
+        });
+        setSelectedFile(file);
+        setDescription('Rapport généré automatiquement');
+        localStorage.removeItem('pendingReportImport');
       } else if (!processingStatus.isProcessing) {
         setProcessingStatus({
           isProcessing: false,
@@ -263,125 +181,57 @@ export function DocumentImportModal() {
       'audio/aac': ['.aac'],
       'audio/ogg': ['.ogg'],
       'audio/webm': ['.webm'],
-      'text/html': ['.html'],
-      'video/mp4': ['.mp4']
+      'text/html': ['.html']
     },
     multiple: false,
     disabled: processingStatus.isProcessing
   });
 
-  const handleFolderSelect = (folder: Folder) => {
+  const getFolderPath = () => {
+    if (!currentFolder) return 'Aucun dossier sélectionné';
+    const path = selectedPath.map(folder => folder.name);
+    if (path.length === 0) return 'Racine';
+    return path.join(' / ');
+  };
+
+  const handleFolderSelect = (folder: Folder, level: number) => {
+    const newPath = selectedPath.slice(0, level);
+    newPath[level] = folder;
+    setSelectedPath(newPath);
     setCurrentFolder(folder);
-    
-    // Build the path to this folder
-    const path: Folder[] = [];
-    let currentId = folder.id;
-    
-    while (currentId) {
-      const currentFolder = folders.find(f => f.id === currentId);
-      if (currentFolder) {
-        path.unshift(currentFolder);
-        currentId = currentFolder.parent_id;
-      } else {
-        break;
-      }
-    }
-    
-    setSelectedPath(path);
-    
-    // Expand all parent folders
-    const newExpanded = new Set(expandedFolders);
-    path.forEach(f => newExpanded.add(f.id));
-    setExpandedFolders(newExpanded);
   };
 
-  const handleToggleFolder = (folderId: string) => {
-    const newExpanded = new Set(expandedFolders);
-    if (newExpanded.has(folderId)) {
-      newExpanded.delete(folderId);
-    } else {
-      newExpanded.add(folderId);
-    }
-    setExpandedFolders(newExpanded);
-  };
-
-  const handleCreateFolder = (parentId: string | null) => {
-    setFolderModal({
-      isOpen: true,
-      mode: 'create',
-      parentId
-    });
-  };
-
-  const handleRenameFolder = (folder: Folder) => {
-    setFolderModal({
-      isOpen: true,
-      mode: 'rename',
-      parentId: folder.parent_id,
-      folder
-    });
-  };
-
-  const handleDeleteClick = (folder: Folder) => {
-    setDeleteConfirmation({
-      isOpen: true,
-      folder,
-      isDeleting: false
-    });
-  };
-
-  const handleConfirmDelete = async () => {
-    if (!deleteConfirmation.folder) return;
-    
-    try {
-      setDeleteConfirmation(prev => ({ ...prev, isDeleting: true }));
-      await deleteFolder(deleteConfirmation.folder.id);
+  const handleCreateFolder = async (parentId: string | null) => {
+    const name = window.prompt('Nom du dossier:');
+    if (name) {
+      await createFolder(name, parentId);
       await fetchFolders();
-      
-      if (currentFolder?.id === deleteConfirmation.folder.id) {
+    }
+  };
+
+  const handleRenameFolder = async (folder: Folder) => {
+    const newName = window.prompt('Nouveau nom:', folder.name);
+    if (newName && newName !== folder.name) {
+      await renameFolder(folder.id, newName);
+      await fetchFolders();
+    }
+  };
+
+  const handleDeleteFolder = async (folder: Folder) => {
+    if (window.confirm(`Supprimer le dossier "${folder.name}" ?`)) {
+      await deleteFolder(folder.id);
+      await fetchFolders();
+      if (currentFolder?.id === folder.id) {
         setCurrentFolder(null);
-        setExpandedFolders(new Set());
         setSelectedPath([]);
       }
-      
-      setDeleteConfirmation({ isOpen: false, folder: null, isDeleting: false });
-    } catch (error) {
-      console.error('Error deleting folder:', error);
-      setDeleteConfirmation(prev => ({ ...prev, isDeleting: false }));
-    }
-  };
-
-  const handleFolderSubmit = async (name: string) => {
-    try {
-      if (folderModal.mode === 'create') {
-        await createFolder(name, folderModal.parentId);
-      } else if (folderModal.folder) {
-        await renameFolder(folderModal.folder.id, name);
-      }
-      await fetchFolders();
-      
-      // Expand the parent folder if it exists
-      if (folderModal.parentId) {
-        setExpandedFolders(new Set(expandedFolders).add(folderModal.parentId));
-      }
-      
-      setFolderModal({ isOpen: false, mode: 'create', parentId: null });
-    } catch (error) {
-      console.error('Error handling folder:', error);
-      throw error;
     }
   };
 
   const handleUpload = async () => {
     if (!currentFolder || !selectedFile || processingStatus.isProcessing) return;
-
+    
     try {
-      // Validate file size
-      const validation = validateFileSize(selectedFile);
-      if (!validation.valid) {
-        throw new Error(validation.message);
-      }
-
       setProcessingStatus({
         isProcessing: true,
         progress: 0,
@@ -389,89 +239,44 @@ export function DocumentImportModal() {
         message: 'Préparation du document...'
       });
 
+      // Auto-detect document type
+      const extension = selectedFile.name.split('.').pop()?.toLowerCase();
+      const documentType = extension === 'pdf' ? 'pdf' :
+                         ['doc', 'docx'].includes(extension || '') ? 'doc' :
+                         ['json', 'csv', 'xlsx', 'xls'].includes(extension || '') ? 'data' :
+                         ['mp3', 'wav', 'wave', 'aac', 'ogg', 'webm'].includes(extension || '') ? 'audio' :
+                         extension === 'html' ? 'report' : 'unknown';
+
+      // Convert special characters to underscores
       const sanitizedDescription = description
         .replace(/[^a-zA-Z0-9\s]/g, '_')
         .replace(/\s+/g, '_')
         .replace(/_+/g, '_')
         .replace(/^_|_$/g, '');
 
-      // For audio/video files, store the original file
-      if (selectedFile.type.startsWith('audio/') || selectedFile.type.startsWith('video/')) {
+      // For audio files, store the original file
+      if (documentType === 'audio') {
         const fileExt = selectedFile.name.split('.').pop()?.toLowerCase() || '';
         const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
         const filePath = `documents/${fileName}`;
 
-        // Upload in chunks for large files
-        const chunkSize = 5 * 1024 * 1024; // 5MB chunks
-        const totalChunks = Math.ceil(selectedFile.size / chunkSize);
-        let uploadedChunks = 0;
+        const { error: uploadError, data: uploadData } = await supabase.storage
+          .from('documents')
+          .upload(filePath, selectedFile, {
+            cacheControl: '3600',
+            upsert: false,
+            contentType: selectedFile.type
+          });
 
-        // Create upload options with metadata
-        const uploadOptions = {
-          cacheControl: '3600',
-          contentType: selectedFile.type,
-          duplex: 'half',
-          metadata: {
-            size: selectedFile.size.toString(),
-            mimetype: selectedFile.type,
-            originalName: selectedFile.name
-          }
-        };
+        if (uploadError) throw uploadError;
+        if (!uploadData?.path) throw new Error('Failed to upload file');
 
-        // Handle large file upload
-        if (selectedFile.size > chunkSize) {
-          const chunks: Blob[] = [];
-          let offset = 0;
-
-          while (offset < selectedFile.size) {
-            chunks.push(selectedFile.slice(offset, offset + chunkSize));
-            offset += chunkSize;
-          }
-
-          // Upload chunks sequentially
-          for (let i = 0; i < chunks.length; i++) {
-            const chunk = chunks[i];
-            const isLastChunk = i === chunks.length - 1;
-            const range = `bytes ${i * chunkSize}-${Math.min((i + 1) * chunkSize - 1, selectedFile.size - 1)}/${selectedFile.size}`;
-
-            const { error: uploadError } = await supabase.storage
-              .from('documents')
-              .upload(filePath, chunk, {
-                ...uploadOptions,
-                upsert: true,
-                ...(isLastChunk ? {} : { duplex: 'half' }),
-                headers: {
-                  'Content-Range': range,
-                  'x-upsert': 'true'
-                }
-              });
-
-            if (uploadError) throw uploadError;
-            
-            uploadedChunks++;
-            setProcessingStatus({
-              isProcessing: true,
-              progress: Math.round((uploadedChunks / totalChunks) * 100),
-              stage: 'upload',
-              message: `Téléversement en cours (${uploadedChunks}/${totalChunks})...`
-            });
-          }
-        } else {
-          // Small file upload
-          const { error: uploadError } = await supabase.storage
-            .from('documents')
-            .upload(filePath, selectedFile, uploadOptions);
-
-          if (uploadError) throw uploadError;
-        }
-
-        // Create document record
-        await uploadDocument(selectedFile, currentFolder.id, {
-          type: selectedFile.type.startsWith('audio/') ? 'audio' : 'video',
+        const doc = await uploadDocument(selectedFile, currentFolder.id, {
+          type: documentType,
           description: sanitizedDescription,
           processed: true,
           size: selectedFile.size,
-          url: filePath
+          url: uploadData.path
         });
 
         setProcessingStatus({
@@ -491,20 +296,8 @@ export function DocumentImportModal() {
       }
 
       // For other document types, process normally
-      const result = await processDocument(selectedFile, {
-        openaiApiKey: config.openai.apiKey,
-        onProgress: (progress) => {
-          setProcessingStatus(progress);
-        }
-      });
-
-      if (!result) {
-        throw new Error('Échec du traitement du document');
-      }
-
-      // Create document record
-      await uploadDocument(selectedFile, currentFolder.id, {
-        type: selectedFile.type,
+      const doc = await uploadDocument(selectedFile, currentFolder.id, {
+        type: documentType,
         description: sanitizedDescription,
         processed: true,
         size: selectedFile.size
@@ -525,12 +318,7 @@ export function DocumentImportModal() {
 
     } catch (error) {
       console.error('Overall error:', error);
-      await logError(error instanceof Error ? error : new Error(String(error)), {
-        component: 'DocumentImportModal',
-        action: 'handleUpload',
-        fileType: selectedFile.type,
-        fileName: selectedFile.name
-      });
+      logError(error instanceof Error ? error : new Error(String(error)));
       setProcessingStatus({
         isProcessing: false,
         progress: 0,
@@ -562,8 +350,7 @@ export function DocumentImportModal() {
           </div>
         </div>
 
-        <div className="grid grid-cols-4 gap-6 p-6">
-          {/* Upload section - 25% */}
+        <div className="grid grid-cols-3 gap-6 p-6">
           <div className="space-y-4">
             <h3 className="text-lg font-medium text-gray-900">Téléverser un document</h3>
             <div
@@ -581,7 +368,7 @@ export function DocumentImportModal() {
                 {selectedFile ? (
                   <FileIcon file={selectedFile} size={48} />
                 ) : (
-                  <FileText
+                  <Upload
                     size={48}
                     className={`mx-auto mb-4 ${
                       isDragActive ? 'text-[#f15922]' : 'text-gray-400'
@@ -606,81 +393,37 @@ export function DocumentImportModal() {
             </div>
           </div>
 
-          {/* IRSST section - 50% */}
-          <div className="col-span-2 space-y-4">
+          <div className="space-y-4">
             <h3 className="text-lg font-medium text-gray-900">IRSST</h3>
-            
-            {/* Folder path breadcrumb */}
-            {selectedPath.length > 0 && (
-              <div className="bg-gray-50 rounded-lg p-2 mb-2 flex items-center gap-1 text-sm">
-                <span className="text-gray-600">Dossier sélectionné :</span>
-                <div className="flex items-center gap-1 overflow-x-auto">
-                  {selectedPath.map((folder, index) => (
-                    <React.Fragment key={folder.id}>
-                      {index > 0 && (
-                        <ChevronRight size={14} className="text-gray-400 flex-shrink-0" />
-                      )}
-                      <button
-                        onClick={() => handleFolderSelect(folder)}
-                        className={`whitespace-nowrap ${
-                          index === selectedPath.length - 1
-                            ? 'text-gray-900 font-medium'
-                            : 'text-[#f15922] hover:underline'
-                        }`}
-                      >
-                        {folder.name}
-                      </button>
-                    </React.Fragment>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="border rounded-lg overflow-hidden shadow-sm bg-white">
-              <div className="p-3 border-b border-gray-200 flex items-center justify-between bg-gray-50">
-                <span className="font-medium text-sm text-gray-700">
-                  Structure des dossiers
-                </span>
-                <button
-                  onClick={() => handleCreateFolder(currentFolder?.id ?? null)}
-                  className="p-1.5 text-[#f15922] hover:bg-[#f15922]/10 rounded-full transition-colors"
-                  title={currentFolder ? "Nouveau sous-dossier" : "Nouveau dossier racine"}
-                >
-                  <FolderPlus size={16} />
-                </button>
-              </div>
-
-              <div className="h-[400px] overflow-y-auto p-2">
-                <AnimatePresence mode="popLayout">
-                  {folders
-                    .filter(f => !f.parent_id)
-                    .map(folder => (
-                      <FolderTreeItem
-                        key={folder.id}
-                        folder={folder}
-                        level={0}
-                        selectedFolder={currentFolder}
-                        expandedFolders={expandedFolders}
-                        onSelect={handleFolderSelect}
-                        onToggle={handleToggleFolder}
-                        onCreateFolder={handleCreateFolder}
-                        onRenameFolder={handleRenameFolder}
-                        onDeleteClick={handleDeleteClick}
-                        folders={folders}
-                      />
-                    ))}
-                </AnimatePresence>
-
-                {folders.filter(f => !f.parent_id).length === 0 && (
-                  <div className="p-4 text-center text-gray-500 text-sm">
-                    Aucun dossier
-                  </div>
-                )}
+            <div className="border rounded-lg overflow-hidden">
+              <div className="flex overflow-x-auto">
+                <FolderColumn
+                  folders={folders}
+                  level={0}
+                  parentId={null}
+                  selectedPath={selectedPath}
+                  onSelect={handleFolderSelect}
+                  onCreateFolder={handleCreateFolder}
+                  onRenameFolder={handleRenameFolder}
+                  onDeleteFolder={handleDeleteFolder}
+                />
+                {selectedPath.map((folder, index) => (
+                  <FolderColumn
+                    key={folder.id}
+                    folders={folders}
+                    level={index + 1}
+                    parentId={folder.id}
+                    selectedPath={selectedPath}
+                    onSelect={handleFolderSelect}
+                    onCreateFolder={handleCreateFolder}
+                    onRenameFolder={handleRenameFolder}
+                    onDeleteFolder={handleDeleteFolder}
+                  />
+                ))}
               </div>
             </div>
           </div>
 
-          {/* Indexation section - 25% */}
           <div className="space-y-4">
             <h3 className="text-lg font-medium text-gray-900">Indexation du document</h3>
             <div className="space-y-4">
@@ -714,7 +457,7 @@ export function DocumentImportModal() {
                   </>
                 ) : (
                   <>
-                    <Send size={20} />
+                    <Upload size={20} />
                     Téléverser le document
                   </>
                 )}
@@ -736,11 +479,9 @@ export function DocumentImportModal() {
               </div>
             </div>
             <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-              <motion.div
-                className="h-full bg-[#f15922]"
-                initial={{ width: 0 }}
-                animate={{ width: `${processingStatus.progress}%` }}
-                transition={{ duration: 0.3 }}
+              <div
+                className="h-full bg-[#f15922] transition-all duration-300"
+                style={{ width: `${processingStatus.progress}%` }}
               />
             </div>
           </div>
@@ -754,29 +495,6 @@ export function DocumentImportModal() {
           </div>
         )}
       </div>
-      
-      <FolderModal
-        isOpen={folderModal.isOpen}
-        onClose={() => setFolderModal({ isOpen: false, mode: 'create', parentId: null })}
-        onSubmit={handleFolderSubmit}
-        title={folderModal.mode === 'create' ? 'Nouveau dossier' : 'Renommer le dossier'}
-        initialValue={folderModal.folder?.name}
-        mode={folderModal.mode}
-        parentFolder={
-          folderModal.parentId
-            ? folders.find(f => f.id === folderModal.parentId)?.name
-            : undefined
-        }
-      />
-
-      <DeleteConfirmationModal
-        isOpen={deleteConfirmation.isOpen}
-        title="Supprimer le dossier"
-        message={`Êtes-vous sûr de vouloir supprimer le dossier "${deleteConfirmation.folder?.name}" ? Cette action est irréversible et supprimera également tous les sous-dossiers et documents qu'il contient.`}
-        onConfirm={handleConfirmDelete}
-        onCancel={() => setDeleteConfirmation({ isOpen: false, folder: null, isDeleting: false })}
-        isDeleting={deleteConfirmation.isDeleting}
-      />
     </div>
   );
 }

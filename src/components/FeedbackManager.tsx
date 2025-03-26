@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { MessageSquare, X, Check, Archive, Trash2, Users, Send, Filter } from 'lucide-react';
+import { MessageSquare, X, Check, Archive } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { DeleteConfirmationModal } from './DeleteConfirmationModal';
 
 interface Feedback {
   id: string;
@@ -16,16 +15,6 @@ export function FeedbackManager() {
   const [feedback, setFeedback] = useState<Feedback[]>([]);
   const [loading, setLoading] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [statusFilter, setStatusFilter] = useState<'all' | 'unread' | 'read' | 'archived'>('all');
-  const [deleteConfirmation, setDeleteConfirmation] = useState<{
-    isOpen: boolean;
-    feedback: Feedback | null;
-    isDeleting: boolean;
-  }>({
-    isOpen: false,
-    feedback: null,
-    isDeleting: false
-  });
 
   useEffect(() => {
     if (isOpen) {
@@ -91,40 +80,6 @@ export function FeedbackManager() {
     }
   };
 
-  const handleDeleteClick = (feedback: Feedback) => {
-    setDeleteConfirmation({
-      isOpen: true,
-      feedback,
-      isDeleting: false
-    });
-  };
-
-  const handleConfirmDelete = async () => {
-    if (!deleteConfirmation.feedback) return;
-
-    try {
-      setDeleteConfirmation(prev => ({ ...prev, isDeleting: true }));
-
-      const { error } = await supabase
-        .from('user_feedback')
-        .delete()
-        .eq('id', deleteConfirmation.feedback.id);
-
-      if (error) throw error;
-
-      await fetchFeedback();
-      setDeleteConfirmation({ isOpen: false, feedback: null, isDeleting: false });
-    } catch (error) {
-      console.error('Error deleting feedback:', error);
-      setDeleteConfirmation(prev => ({ ...prev, isDeleting: false }));
-    }
-  };
-
-  const filteredFeedback = feedback.filter(item => {
-    if (statusFilter === 'all') return true;
-    return item.status === statusFilter;
-  });
-
   return (
     <>
       {/* Feedback button with notification badge */}
@@ -157,33 +112,18 @@ export function FeedbackManager() {
               </button>
             </div>
 
-            <div className="p-4 border-b bg-gray-50">
-              <div className="flex items-center gap-4">
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-                  className="px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#f15922] focus:border-transparent"
-                >
-                  <option value="all">Tous les retours</option>
-                  <option value="unread">Non lus</option>
-                  <option value="read">Lus</option>
-                  <option value="archived">Archivés</option>
-                </select>
-              </div>
-            </div>
-
             <div className="max-h-[70vh] overflow-y-auto p-6">
               {loading ? (
                 <div className="text-center py-8 text-gray-500">
                   Chargement...
                 </div>
-              ) : filteredFeedback.length === 0 ? (
+              ) : feedback.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   Aucun retour utilisateur pour le moment
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {filteredFeedback.map((item) => (
+                  {feedback.map((item) => (
                     <div
                       key={item.id}
                       className={`p-4 rounded-lg border ${
@@ -231,13 +171,6 @@ export function FeedbackManager() {
                               <Archive size={18} />
                             </button>
                           )}
-                          <button
-                            onClick={() => handleDeleteClick(item)}
-                            className="p-1 text-red-600 hover:bg-red-50 rounded"
-                            title="Supprimer définitivement"
-                          >
-                            <Trash2 size={18} />
-                          </button>
                         </div>
                       </div>
                     </div>
@@ -248,16 +181,6 @@ export function FeedbackManager() {
           </div>
         </div>
       )}
-
-      <DeleteConfirmationModal
-        isOpen={deleteConfirmation.isOpen}
-        title="Supprimer le retour utilisateur"
-        message={`Êtes-vous sûr de vouloir supprimer définitivement le retour de ${deleteConfirmation.feedback?.email} ? Cette action est irréversible.`}
-        confirmLabel="Supprimer définitivement"
-        onConfirm={handleConfirmDelete}
-        onCancel={() => setDeleteConfirmation({ isOpen: false, feedback: null, isDeleting: false })}
-        isDeleting={deleteConfirmation.isDeleting}
-      />
     </>
   );
 }

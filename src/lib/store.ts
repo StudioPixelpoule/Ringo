@@ -1,11 +1,10 @@
 import { create } from 'zustand';
-import { supabase, adminUtils } from './supabase';
-import { handleError } from './errorHandler';
+import { supabase } from './supabase';
 
 export interface Profile {
   id: string;
   email: string;
-  role: 'super_admin' | 'g_admin' | 'admin' | 'user';
+  role: 'super_admin' | 'admin' | 'user';
   status: boolean;
   created_at: string;
   updated_at: string;
@@ -22,10 +21,10 @@ interface UserStore {
   fetchUsers: () => Promise<void>;
   updateUser: (id: string, data: Partial<Profile>) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
+  createUser: (data: { email: string; password: string; role: Profile['role'] }) => Promise<void>;
   setSelectedUser: (user: Profile | null) => void;
   setModalOpen: (isOpen: boolean) => void;
   clearError: () => void;
-  setUserRole: (role: string) => void;
 }
 
 export const useUserStore = create<UserStore>((set, get) => ({
@@ -39,33 +38,64 @@ export const useUserStore = create<UserStore>((set, get) => ({
   fetchUsers: async () => {
     set({ loading: true, error: null });
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('User not authenticated');
-
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      set({ users: data || [] });
+      set({ users: data as Profile[] });
 
       // Get current user's role
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-      
-      if (profile) {
-        set({ userRole: profile.role });
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+        
+        if (profile) {
+          set({ userRole: profile.role });
+        }
       }
     } catch (error) {
-      const appError = await handleError(error, {
-        component: 'UserStore',
-        action: 'fetchUsers'
+      set({ error: error instanceof Error ? error.message : 'Failed to fetch users' });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  createUser: async ({ email, password, role }) => {
+    set({ loading: true, error: null });
+    try {
+      // Create user in auth
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        email: email.toLowerCase(),
+        password: password,
+        email_confirm: true
       });
-      set({ error: appError.getUserMessage() });
+
+      if (authError) throw authError;
+      if (!authData.user) throw new Error('Failed to create user');
+
+      // Create profile
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .insert([{
+          id: authData.user.id,
+          email: email.toLowerCase(),
+          role: role,
+          status: true
+        }]);
+
+      if (profileError) throw profileError;
+
+      // Refresh user list
+      await get().fetchUsers();
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to create user' });
+      throw error;
     } finally {
       set({ loading: false });
     }
@@ -82,11 +112,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
       if (error) throw error;
       await get().fetchUsers();
     } catch (error) {
-      const appError = await handleError(error, {
-        component: 'UserStore',
-        action: 'updateUser'
-      });
-      set({ error: appError.getUserMessage() });
+      set({ error: error instanceof Error ? error.message : 'Failed to update user' });
     } finally {
       set({ loading: false });
     }
@@ -95,15 +121,30 @@ export const useUserStore = create<UserStore>((set, get) => ({
   deleteUser: async (id: string) => {
     set({ loading: true, error: null });
     try {
-      await adminUtils.deleteUser(id);
+      // First deactivate the user
+      const { error: deactivateError } = await supabase
+        .from('profiles')
+        .update({ 
+          status: false, 
+          updated_at: new Date().toISOString() 
+        })
+        .eq('id', id);
+
+      if (deactivateError) throw deactivateError;
+
+      // Delete user data and auth account
+      const { error: deleteError } = await supabase.functions.invoke('delete-user', {
+        body: { user_id: id }
+      });
+
+      if (deleteError) throw deleteError;
+
+      // Update local state
       const users = get().users;
       set({ users: users.filter(u => u.id !== id) });
     } catch (error) {
-      const appError = await handleError(error, {
-        component: 'UserStore',
-        action: 'deleteUser'
-      });
-      set({ error: appError.getUserMessage() });
+      console.error('Error deleting user:', error);
+      set({ error: error instanceof Error ? error.message : 'Failed to delete user' });
     } finally {
       set({ loading: false });
     }
@@ -112,5 +153,4 @@ export const useUserStore = create<UserStore>((set, get) => ({
   setSelectedUser: (user: Profile | null) => set({ selectedUser: user }),
   setModalOpen: (isOpen: boolean) => set({ isModalOpen: isOpen }),
   clearError: () => set({ error: null }),
-  setUserRole: (role: string) => set({ userRole: role })
 }));

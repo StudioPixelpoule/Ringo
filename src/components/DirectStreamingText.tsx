@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
 import { useConversationStore } from '../lib/conversationStore';
 import { EnhancedMarkdown } from './EnhancedMarkdown';
+import './DirectStreamingText.css';
 
 interface DirectStreamingTextProps {
   content: string;
@@ -23,6 +23,7 @@ export const DirectStreamingText: React.FC<DirectStreamingTextProps> = ({
   const streamingIdRef = useRef(messageId);
   
   useEffect(() => {
+    // If message ID changes, reset everything
     if (messageId !== streamingIdRef.current) {
       setDisplayedContent('');
       setIsComplete(false);
@@ -36,6 +37,7 @@ export const DirectStreamingText: React.FC<DirectStreamingTextProps> = ({
     let index = 0;
     const characters = content.split('');
     
+    // Track Markdown structure
     const markdownState = {
       codeBlock: false,
       inlineCode: false,
@@ -57,6 +59,7 @@ export const DirectStreamingText: React.FC<DirectStreamingTextProps> = ({
         const nextChars = characters.slice(index, index + 3).join('');
         const prevChar = index > 0 ? characters[index - 1] : '';
         
+        // Handle Markdown syntax
         if (nextChars === '```') {
           markdownState.codeBlock = !markdownState.codeBlock;
           chunk += nextChars;
@@ -79,6 +82,7 @@ export const DirectStreamingText: React.FC<DirectStreamingTextProps> = ({
           chunk += currentChar;
           index++;
         } else if (currentChar === ']' && markdownState.link) {
+          // Capture the entire link syntax
           const linkEnd = content.indexOf(')', index);
           if (linkEnd > -1) {
             chunk += content.slice(index, linkEnd + 1);
@@ -86,6 +90,7 @@ export const DirectStreamingText: React.FC<DirectStreamingTextProps> = ({
           }
           markdownState.link = false;
         } else if (currentChar === '#' && (prevChar === '\n' || index === 0)) {
+          // Capture entire heading
           const headingEnd = content.indexOf('\n', index);
           if (headingEnd > -1) {
             chunk += content.slice(index, headingEnd + 1);
@@ -96,6 +101,7 @@ export const DirectStreamingText: React.FC<DirectStreamingTextProps> = ({
           }
           shouldPause = true;
         } else if (currentChar === '-' && (prevChar === '\n' || index === 0)) {
+          // Capture entire list item
           const itemEnd = content.indexOf('\n', index);
           if (itemEnd > -1) {
             chunk += content.slice(index, itemEnd + 1);
@@ -106,6 +112,7 @@ export const DirectStreamingText: React.FC<DirectStreamingTextProps> = ({
           }
           shouldPause = true;
         } else if (currentChar === '>' && (prevChar === '\n' || index === 0)) {
+          // Capture entire blockquote line
           const quoteEnd = content.indexOf('\n', index);
           if (quoteEnd > -1) {
             chunk += content.slice(index, quoteEnd + 1);
@@ -116,9 +123,11 @@ export const DirectStreamingText: React.FC<DirectStreamingTextProps> = ({
           }
           shouldPause = true;
         } else {
+          // Regular character
           chunk += currentChar;
           index++;
           
+          // Natural pauses
           if (currentChar === '.' || currentChar === '!' || currentChar === '?') {
             shouldPause = true;
           } else if (currentChar === ',' || currentChar === ';') {
@@ -165,24 +174,15 @@ export const DirectStreamingText: React.FC<DirectStreamingTextProps> = ({
   }, [content, messageId, speed, markMessageAsStreamed, onStreamingComplete]);
   
   return (
-    <motion.div 
-      className="w-full overflow-x-hidden"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.2 }}
-    >
+    <div className="streaming-text-container">
       {isComplete ? (
         <EnhancedMarkdown content={content} />
       ) : (
-        <div className="relative w-full min-h-[20px] whitespace-pre-wrap break-words">
+        <div className="streaming-text">
           <EnhancedMarkdown content={displayedContent} />
-          <motion.span
-            className="inline-block w-0.5 h-[1.2em] bg-[#f15922] align-middle ml-px"
-            animate={{ opacity: [1, 0] }}
-            transition={{ duration: 1, repeat: Infinity }}
-          />
+          <span className="typing-cursor" />
         </div>
       )}
-    </motion.div>
+    </div>
   );
 };

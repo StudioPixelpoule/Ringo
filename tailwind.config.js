@@ -14,9 +14,6 @@ export default {
         'lg': '1440px',
         'xl': '1680px',
         '2xl': '1920px'
-      },
-      borderWidth: {
-        '3': '3px'
       }
     }
   },

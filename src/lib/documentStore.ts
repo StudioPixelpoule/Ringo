@@ -1,15 +1,43 @@
 import { create } from 'zustand';
 import { supabase } from './supabase';
 import { processDocument } from './universalProcessor';
-import { handleError } from './errorHandler';
-import { Document, Folder, StoreState, ProcessingProgress } from './types';
 
-interface DocumentStore extends StoreState {
+export interface Folder {
+  id: string;
+  name: string;
+  parent_id: string | null;
+  created_at: string;
+}
+
+export interface Document {
+  id: string;
+  folder_id: string;
+  name: string;
+  type: string;
+  group_name: string;
+  description: string;
+  url: string;
+  processed: boolean;
+  created_at: string;
+  size?: number;
+}
+
+interface ProcessingStatus {
+  isProcessing: boolean;
+  progress: number;
+  stage: 'upload' | 'processing' | 'complete';
+  message: string;
+  canCancel?: boolean;
+}
+
+interface DocumentStore {
   folders: Folder[];
   documents: Document[];
   currentFolder: Folder | null;
   isModalOpen: boolean;
-  processingStatus: ProcessingProgress;
+  loading: boolean;
+  error: string | null;
+  processingStatus: ProcessingStatus;
   selectedDocuments: string[];
   
   setModalOpen: (isOpen: boolean) => void;
@@ -24,7 +52,6 @@ interface DocumentStore extends StoreState {
   selectDocument: (id: string) => void;
   unselectDocument: (id: string) => void;
   clearSelectedDocuments: () => void;
-  setError: (error: string | null) => void;
   clearError: () => void;
 }
 
@@ -49,6 +76,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   createFolder: async (name, parentId) => {
     set({ loading: true, error: null });
     try {
+      console.log("📁 Création du dossier:", { name, parentId });
+      
       const { data, error } = await supabase
         .from('folders')
         .insert([{ name, parent_id: parentId }])
@@ -59,12 +88,11 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       
       const folders = get().folders;
       set({ folders: [...folders, data] });
+      
+      console.log("✅ Dossier créé:", data);
     } catch (error) {
-      const appError = await handleError(error, {
-        component: 'DocumentStore',
-        action: 'createFolder'
-      });
-      set({ error: appError.getUserMessage() });
+      console.error("🚨 Erreur création dossier:", error);
+      set({ error: error instanceof Error ? error.message : 'Erreur création dossier' });
     } finally {
       set({ loading: false });
     }
@@ -88,6 +116,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     let uploadedPath: string | null = null;
 
     try {
+      console.log("📄 Traitement du document:", file.name);
+
       const result = await processDocument(file, {
         openaiApiKey: import.meta.env.VITE_OPENAI_API_KEY,
         onProgress: (progress) => {
@@ -97,17 +127,19 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       });
 
       if (!result) {
-        throw new Error('Document processing failed');
+        throw new Error('Échec du traitement du document');
       }
 
+      console.log("✅ Document traité");
       set({ processingStatus: {
         isProcessing: true,
         progress: 75,
         stage: 'upload',
-        message: 'Saving...',
+        message: 'Enregistrement...',
         canCancel: true
       }});
 
+      // Upload du fichier
       const fileExt = file.name.split('.').pop()?.toLowerCase() || '';
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
       const filePath = `documents/${fileName}`;
@@ -121,16 +153,18 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         });
 
       if (uploadError) throw uploadError;
-      if (!data?.path) throw new Error('Upload failed: No path returned');
+      if (!data?.path) throw new Error('Échec upload: Pas de chemin retourné');
 
       uploadedPath = data.path;
+      console.log("✅ Fichier uploadé:", uploadedPath);
 
+      // Création de l'enregistrement
       const { data: doc, error: dbError } = await supabase
         .from('documents')
         .insert([{
           folder_id: folderId,
           name: file.name,
-          type: fileExt,
+          type: file.type.startsWith('audio/') ? 'audio' : fileExt,
           url: data.path,
           size: file.size,
           ...metadata,
@@ -140,14 +174,17 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
       if (dbError) throw dbError;
 
+      // Store document content
       const { error: contentError } = await supabase
         .from('document_contents')
         .insert([{
           document_id: doc.id,
-          content: result.content
+          content: JSON.stringify(result)
         }]);
 
       if (contentError) throw contentError;
+
+      console.log("✅ Document enregistré:", doc);
 
       const documents = get().documents;
       set({ documents: [...documents, doc] });
@@ -161,11 +198,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
           .catch(console.error);
       }
 
-      const appError = await handleError(error, {
-        component: 'DocumentStore',
-        action: 'uploadDocument'
-      });
-      set({ error: appError.getUserMessage() });
+      console.error("🚨 Erreur upload document:", error);
+      set({ error: error instanceof Error ? error.message : 'Erreur upload document' });
       throw error;
     } finally {
       set({
@@ -184,6 +218,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   fetchFolders: async () => {
     set({ loading: true, error: null });
     try {
+      console.log("📁 Récupération des dossiers");
+      
       const { data, error } = await supabase
         .from('folders')
         .select('*')
@@ -191,13 +227,11 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
       if (error) throw error;
       
+      console.log("✅ Dossiers récupérés:", data?.length || 0);
       set({ folders: data || [] });
     } catch (error) {
-      const appError = await handleError(error, {
-        component: 'DocumentStore',
-        action: 'fetchFolders'
-      });
-      set({ error: appError.getUserMessage() });
+      console.error("🚨 Erreur récupération dossiers:", error);
+      set({ error: error instanceof Error ? error.message : 'Erreur récupération dossiers' });
     } finally {
       set({ loading: false });
     }
@@ -206,6 +240,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   fetchDocuments: async (folderId) => {
     set({ loading: true, error: null });
     try {
+      console.log("📄 Récupération des documents du dossier:", folderId);
+      
       const { data, error } = await supabase
         .from('documents')
         .select('*')
@@ -214,13 +250,11 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
       if (error) throw error;
       
+      console.log("✅ Documents récupérés:", data?.length || 0);
       set({ documents: data || [] });
     } catch (error) {
-      const appError = await handleError(error, {
-        component: 'DocumentStore',
-        action: 'fetchDocuments'
-      });
-      set({ error: appError.getUserMessage() });
+      console.error("🚨 Erreur récupération documents:", error);
+      set({ error: error instanceof Error ? error.message : 'Erreur récupération documents' });
     } finally {
       set({ loading: false });
     }
@@ -229,6 +263,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   fetchAllDocuments: async () => {
     set({ loading: true, error: null });
     try {
+      console.log("📄 Récupération de tous les documents");
+      
       const { data, error } = await supabase
         .from('documents')
         .select('*')
@@ -236,13 +272,11 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
       if (error) throw error;
       
+      console.log("✅ Documents récupérés:", data?.length || 0);
       set({ documents: data || [] });
     } catch (error) {
-      const appError = await handleError(error, {
-        component: 'DocumentStore',
-        action: 'fetchAllDocuments'
-      });
-      set({ error: appError.getUserMessage() });
+      console.error("🚨 Erreur récupération documents:", error);
+      set({ error: error instanceof Error ? error.message : 'Erreur récupération documents' });
     } finally {
       set({ loading: false });
     }
@@ -253,6 +287,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   deleteFolder: async (id) => {
     set({ loading: true, error: null });
     try {
+      console.log("🗑️ Suppression du dossier:", id);
+      
       const { error } = await supabase
         .from('folders')
         .delete()
@@ -262,12 +298,11 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       
       const folders = get().folders;
       set({ folders: folders.filter((f) => f.id !== id) });
+      
+      console.log("✅ Dossier supprimé");
     } catch (error) {
-      const appError = await handleError(error, {
-        component: 'DocumentStore',
-        action: 'deleteFolder'
-      });
-      set({ error: appError.getUserMessage() });
+      console.error("🚨 Erreur suppression dossier:", error);
+      set({ error: error instanceof Error ? error.message : 'Erreur suppression dossier' });
     } finally {
       set({ loading: false });
     }
@@ -276,6 +311,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   renameFolder: async (id, newName) => {
     set({ loading: true, error: null });
     try {
+      console.log("✏️ Renommage du dossier:", { id, newName });
+      
       const { error } = await supabase
         .from('folders')
         .update({ name: newName })
@@ -289,33 +326,34 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
           f.id === id ? { ...f, name: newName } : f
         ),
       });
+      
+      console.log("✅ Dossier renommé");
     } catch (error) {
-      const appError = await handleError(error, {
-        component: 'DocumentStore',
-        action: 'renameFolder'
-      });
-      set({ error: appError.getUserMessage() });
+      console.error("🚨 Erreur renommage dossier:", error);
+      set({ error: error instanceof Error ? error.message : 'Erreur renommage dossier' });
     } finally {
       set({ loading: false });
     }
   },
 
   selectDocument: (id) => {
+    console.log("📄 Sélection du document:", id);
     set((state) => ({
       selectedDocuments: [...state.selectedDocuments, id]
     }));
   },
 
   unselectDocument: (id) => {
+    console.log("📄 Désélection du document:", id);
     set((state) => ({
       selectedDocuments: state.selectedDocuments.filter(docId => docId !== id)
     }));
   },
 
   clearSelectedDocuments: () => {
+    console.log("🧹 Effacement de la sélection");
     set({ selectedDocuments: [] });
   },
 
-  setError: (error) => set({ error }),
   clearError: () => set({ error: null }),
 }));
