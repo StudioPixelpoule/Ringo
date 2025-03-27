@@ -407,16 +407,33 @@ export function DocumentImportModal() {
         );
 
         // Create document entry
-        await uploadDocument(selectedFile, currentFolder.id, {
-          type: documentType,
-          description: sanitizedDescription,
-          processed: true,
-          size: selectedFile.size,
-          url: uploadedPath
-        }, {
-          signal: abortControllerRef.current.signal,
-          content: JSON.stringify(result)
-        });
+        const { data: doc, error: docError } = await supabase
+          .from('documents')
+          .insert([{
+            folder_id: currentFolder.id,
+            name: selectedFile.name,
+            type: documentType,
+            description: sanitizedDescription,
+            url: uploadedPath,
+            size: selectedFile.size,
+            is_chunked: true,
+            manifest_path: `${filePath}_manifest.json`
+          }])
+          .select()
+          .single();
+
+        if (docError) throw docError;
+
+        // Store transcription content
+        const { error: contentError } = await supabase
+          .from('document_contents')
+          .insert([{
+            document_id: doc.id,
+            content: JSON.stringify(result),
+            is_chunked: false // Transcription is stored as a single piece
+          }]);
+
+        if (contentError) throw contentError;
 
         setProcessingStatus({
           isProcessing: false,
@@ -460,7 +477,9 @@ export function DocumentImportModal() {
           description: sanitizedDescription,
           processed: true,
           size: selectedFile.size,
-          url: uploadedPath
+          url: uploadedPath,
+          is_chunked: true,
+          manifest_path: `${filePath}_manifest.json`
         }, {
           signal: abortControllerRef.current.signal,
           onProgress: (progress) => {
