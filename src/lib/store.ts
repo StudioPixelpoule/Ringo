@@ -69,13 +69,45 @@ export const useUserStore = create<UserStore>((set, get) => ({
   createUser: async ({ email, password, role }) => {
     set({ loading: true, error: null });
     try {
-      // Call the Edge Function instead of direct admin API
-      const { data, error } = await supabase.functions.invoke('create-user', {
-        body: { email, password, role }
+      // Check if user exists
+      const { data: existingUser } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', email.toLowerCase())
+        .maybeSingle();
+
+      if (existingUser) {
+        throw new Error('Un utilisateur avec cet email existe déjà');
+      }
+
+      // Create user with auth API
+      const { data: authData, error: signUpError } = await supabase.auth.signUp({
+        email: email.toLowerCase(),
+        password,
+        options: {
+          data: { role },
+          emailRedirectTo: `${window.location.origin}/login`
+        }
       });
 
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || 'Failed to create user');
+      if (signUpError) throw signUpError;
+      if (!authData.user) throw new Error('Échec de la création de l\'utilisateur');
+
+      // Create profile
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .insert([{
+          id: authData.user.id,
+          email: email.toLowerCase(),
+          role,
+          status: true
+        }]);
+
+      if (profileError) {
+        // Rollback: delete auth user if profile creation fails
+        await supabase.auth.admin.deleteUser(authData.user.id);
+        throw profileError;
+      }
 
       // Refresh user list
       await get().fetchUsers();
@@ -118,10 +150,9 @@ export const useUserStore = create<UserStore>((set, get) => ({
 
       if (deactivateError) throw deactivateError;
 
-      // Delete user data and auth account
-      const { error: deleteError } = await supabase.functions.invoke('delete-user', {
-        body: { user_id: id }
-      });
+      // Delete user data
+      const { error: deleteError } = await supabase
+        .rpc('delete_user_data_v2', { user_id_param: id });
 
       if (deleteError) throw deleteError;
 
