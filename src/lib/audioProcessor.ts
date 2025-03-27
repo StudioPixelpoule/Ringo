@@ -1,4 +1,5 @@
 import { createChunkedStream, validateAudioChunk } from './streamUtils';
+import { supabase } from './supabase';
 
 interface ProcessingProgress {
   stage: 'upload' | 'processing' | 'extraction' | 'complete';

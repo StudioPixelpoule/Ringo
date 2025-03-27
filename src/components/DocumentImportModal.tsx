@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase';
 import { FileIcon } from './FileIcon';
 import { logError } from '../lib/errorLogger';
 import { uploadFileInChunks } from '../lib/uploadUtils';
+import { processAudioFile } from '../lib/audioProcessor';
 
 interface ProcessingStatus {
   isProcessing: boolean;
@@ -389,6 +390,23 @@ export function DocumentImportModal() {
           canCancel: true
         });
 
+        // Process audio with OpenAI
+        const result = await processAudioFile(
+          selectedFile,
+          import.meta.env.VITE_OPENAI_API_KEY,
+          (progress) => {
+            setProcessingStatus({
+              isProcessing: true,
+              progress: 60 + (progress.progress * 0.4),
+              stage: progress.stage,
+              message: progress.message,
+              canCancel: progress.canCancel
+            });
+          },
+          abortControllerRef.current.signal
+        );
+
+        // Create document entry
         await uploadDocument(selectedFile, currentFolder.id, {
           type: documentType,
           description: sanitizedDescription,
@@ -397,17 +415,7 @@ export function DocumentImportModal() {
           url: uploadedPath
         }, {
           signal: abortControllerRef.current.signal,
-          onProgress: (progress) => {
-            if (typeof progress === 'object') {
-              setProcessingStatus({
-                isProcessing: true,
-                progress: 60 + (progress.progress * 0.4),
-                stage: 'processing',
-                message: progress.message,
-                canCancel: true
-              });
-            }
-          }
+          content: JSON.stringify(result)
         });
 
         setProcessingStatus({
@@ -705,5 +713,3 @@ export function DocumentImportModal() {
     </div>
   );
 }
-
-export { DocumentImportModal }

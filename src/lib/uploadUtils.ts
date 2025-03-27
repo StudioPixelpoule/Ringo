@@ -190,10 +190,13 @@ export async function uploadFileInChunks(
         }))
       };
 
+      // Convert manifest to string for storage
+      const manifestContent = JSON.stringify(manifest, null, 2);
+
       // Upload manifest
       onProgress?.({ progress: 95, message: 'Création du manifeste...' });
       const manifestPath = `${filePath}_manifest.json`;
-      const manifestBlob = new Blob([JSON.stringify(manifest, null, 2)], { 
+      const manifestBlob = new Blob([manifestContent], { 
         type: 'application/json' 
       });
 
@@ -206,11 +209,12 @@ export async function uploadFileInChunks(
 
       if (manifestError) throw manifestError;
 
-      // Update cache
+      // Update cache with manifest content
       const { error: cachingError } = await supabase
         .from('document_cache')
         .upsert([{
           hash: fileHash,
+          content: manifestContent,
           file_name: file.name,
           file_type: file.type,
           file_size: file.size,
@@ -234,11 +238,20 @@ export async function uploadFileInChunks(
 
       if (uploadError) throw uploadError;
 
+      // Get file content for cache
+      let content = '';
+      if (file.type.startsWith('text/') || file.type === 'application/json') {
+        content = await file.text();
+      } else {
+        content = `Binary file: ${file.name} (${file.type})`;
+      }
+
       // Update cache for regular files
       const { error: cachingError } = await supabase
         .from('document_cache')
         .upsert([{
           hash: fileHash,
+          content,
           file_name: file.name,
           file_type: file.type,
           file_size: file.size,
