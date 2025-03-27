@@ -4,24 +4,19 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   optimizeDeps: {
-    include: ['xlsx']
+    include: ['xlsx', 'mammoth', 'tesseract.js', 'pdfjs-dist']
   },
   build: {
     target: 'esnext',
     minify: 'esbuild',
+    reportCompressedSize: false,
+    chunkSizeWarningLimit: 2000,
     rollupOptions: {
       output: {
         manualChunks: {
-          'vendor': [
-            'react',
-            'react-dom',
-            'react-router-dom',
-            '@supabase/supabase-js'
-          ],
-          'ui': [
-            'lucide-react',
-            'framer-motion'
-          ],
+          'react-core': ['react', 'react-dom', 'react-router-dom'],
+          'supabase': ['@supabase/supabase-js'],
+          'ui': ['lucide-react', 'framer-motion'],
           'markdown': [
             'react-markdown',
             'react-syntax-highlighter',
@@ -35,17 +30,33 @@ export default defineConfig({
             'xlsx',
             'papaparse',
             'pdfjs-dist'
+          ],
+          'file-processing': [
+            'spark-md5',
+            'web-streams-polyfill'
           ]
         }
       }
-    },
-    chunkSizeWarningLimit: 1000
+    }
   },
   server: {
+    hmr: {
+      overlay: false // Disable error overlay to prevent crashes
+    },
+    watch: {
+      usePolling: true, // Use polling for more reliable file watching
+      interval: 100 // Check for changes every 100ms
+    },
     headers: {
-      'Cache-Control': 'public, max-age=31536000',
+      'Cache-Control': 'no-store', // Prevent caching during development
       'Cross-Origin-Opener-Policy': 'same-origin',
       'Cross-Origin-Embedder-Policy': 'require-corp'
+    }
+  },
+  esbuild: {
+    logOverride: { 'this-is-undefined-in-esm': 'silent' },
+    supported: {
+      'top-level-await': true
     }
   }
 });

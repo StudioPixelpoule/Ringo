@@ -15,6 +15,8 @@ export function Login() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
+
     setLoading(true);
     setError(null);
 
@@ -89,6 +91,7 @@ export function Login() {
                 className="w-full px-4 py-3 rounded-md bg-white/20 border border-white/30 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/50"
                 placeholder="votre@email.com"
                 required
+                disabled={loading}
               />
             </div>
 
@@ -104,6 +107,7 @@ export function Login() {
                 className="w-full px-4 py-3 rounded-md bg-white/20 border border-white/30 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/50"
                 placeholder="••••••••"
                 required
+                disabled={loading}
               />
             </div>
 
