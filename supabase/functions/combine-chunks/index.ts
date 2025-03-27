@@ -16,6 +16,8 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+const BATCH_SIZE = 5; // Process 5 chunks at a time
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -45,27 +47,52 @@ serve(async (req) => {
       }
     });
 
-    // Download and combine chunks
-    const chunks: Uint8Array[] = [];
-    for (let i = 0; i < totalChunks; i++) {
-      const { data, error } = await supabase.storage
-        .from('documents')
-        .download(`${filePath}_part_${i}`);
+    // Process chunks in batches
+    const totalBatches = Math.ceil(totalChunks / BATCH_SIZE);
+    let combinedArray = new Uint8Array(0);
 
-      if (error) throw error;
-      
-      const chunk = new Uint8Array(await data.arrayBuffer());
-      chunks.push(chunk);
-    }
+    for (let batch = 0; batch < totalBatches; batch++) {
+      const batchChunks: Uint8Array[] = [];
+      const startChunk = batch * BATCH_SIZE;
+      const endChunk = Math.min(startChunk + BATCH_SIZE, totalChunks);
 
-    // Combine chunks
-    const combinedSize = chunks.reduce((size, chunk) => size + chunk.length, 0);
-    const combinedArray = new Uint8Array(combinedSize);
-    let offset = 0;
-    
-    for (const chunk of chunks) {
-      combinedArray.set(chunk, offset);
-      offset += chunk.length;
+      // Download chunks for this batch
+      for (let i = startChunk; i < endChunk; i++) {
+        const { data, error: downloadError } = await supabase.storage
+          .from('documents')
+          .download(`${filePath}_part_${i}`);
+
+        if (downloadError) {
+          console.error(`Error downloading chunk ${i}:`, downloadError);
+          throw downloadError;
+        }
+
+        const chunk = new Uint8Array(await data.arrayBuffer());
+        batchChunks.push(chunk);
+      }
+
+      // Combine this batch with previous chunks
+      const batchSize = batchChunks.reduce((size, chunk) => size + chunk.length, 0);
+      const newArray = new Uint8Array(combinedArray.length + batchSize);
+      newArray.set(combinedArray, 0);
+
+      let offset = combinedArray.length;
+      for (const chunk of batchChunks) {
+        newArray.set(chunk, offset);
+        offset += chunk.length;
+      }
+
+      combinedArray = newArray;
+
+      // Clean up processed chunks
+      for (let i = startChunk; i < endChunk; i++) {
+        await supabase.storage
+          .from('documents')
+          .remove([`${filePath}_part_${i}`])
+          .catch(error => {
+            console.warn(`Failed to cleanup chunk ${i}:`, error);
+          });
+      }
     }
 
     // Upload combined file
@@ -77,7 +104,10 @@ serve(async (req) => {
         upsert: true
       });
 
-    if (uploadError) throw uploadError;
+    if (uploadError) {
+      console.error('Error uploading combined file:', uploadError);
+      throw uploadError;
+    }
 
     // Store file info in cache
     const { error: cacheError } = await supabase
@@ -90,7 +120,10 @@ serve(async (req) => {
         cached_at: new Date().toISOString()
       }]);
 
-    if (cacheError) throw cacheError;
+    if (cacheError) {
+      console.error('Error updating cache:', cacheError);
+      throw cacheError;
+    }
 
     return new Response(
       JSON.stringify({ success: true }),

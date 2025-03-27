@@ -705,3 +705,5 @@ export function DocumentImportModal() {
     </div>
   );
 }
+
+export { DocumentImportModal }

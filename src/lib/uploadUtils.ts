@@ -59,21 +59,39 @@ async function retryWithBackoff<T>(
 
   for (let i = 0; i < retries; i++) {
     try {
+      // Check and refresh token if necessary before each attempt
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) {
+        window.location.href = '/login';
+        throw new Error('Session expired');
+      }
+
       return await operation();
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
       
-      // Log retry attempt
+      if (
+        lastError.message.includes('Invalid Refresh Token') || 
+        lastError.message.includes('JWT expired') ||
+        lastError.message.includes('refresh_token_not_found')
+      ) {
+        console.log('Auth error detected, forcing token refresh...');
+        try {
+          await supabase.auth.refreshSession();
+        } catch (refreshError) {
+          console.error('Token refresh failed:', refreshError);
+          throw lastError;
+        }
+      }
+      
       console.warn(`Retry ${i + 1}/${retries} failed for ${context}:`, error);
       
       if (i < retries - 1) {
-        const delay = baseDelay * Math.pow(2, i); // Exponential backoff
-        await wait(delay);
+        await wait(baseDelay * Math.pow(2, i));
       }
     }
   }
 
-  // Log final failure
   console.error(`All ${retries} retries failed for ${context}:`, lastError);
   throw lastError;
 }
@@ -89,9 +107,6 @@ export async function uploadFileInChunks(
   }
 
   try {
-    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-    let uploadedChunks = 0;
-
     // Calculate file hash for deduplication
     onProgress?.({ progress: 0, message: 'Calcul de l\'empreinte du fichier...' });
     const fileHash = await calculateFileHash(file);
@@ -116,85 +131,126 @@ export async function uploadFileInChunks(
       return filePath;
     }
 
-    // Upload file in chunks
-    for (let i = 0; i < totalChunks; i++) {
-      if (signal?.aborted) {
-        throw new Error('Upload cancelled');
+    // Pour les fichiers volumineux, utiliser une approche par manifeste
+    if (file.size > 50 * 1024 * 1024) { // Plus de 50MB
+      console.log(`Large file detected (${(file.size/1024/1024).toFixed(2)}MB), using manifest approach`);
+      
+      const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+      let uploadedChunks = 0;
+
+      // Upload all chunks
+      for (let i = 0; i < totalChunks; i++) {
+        if (signal?.aborted) {
+          throw new Error('Upload cancelled');
+        }
+
+        const start = i * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, file.size);
+        const chunk = file.slice(start, end);
+        const chunkPath = `${filePath}_chunk_${i}`;
+
+        await retryWithBackoff(
+          async () => {
+            const { error: uploadError } = await supabase.storage
+              .from('documents')
+              .upload(chunkPath, chunk, {
+                cacheControl: '3600',
+                upsert: false
+              });
+
+            if (uploadError) throw uploadError;
+          },
+          3,
+          1000,
+          `chunk upload ${i + 1}/${totalChunks}`
+        );
+
+        uploadedChunks++;
+        const progress = Math.round((uploadedChunks / totalChunks) * 90);
+        onProgress?.({ 
+          progress, 
+          message: `Téléversement du fichier... ${progress}%` 
+        });
       }
 
-      const start = i * CHUNK_SIZE;
-      const end = Math.min(start + CHUNK_SIZE, file.size);
-      const chunk = file.slice(start, end);
+      // Create manifest file
+      const manifest = {
+        originalFile: file.name,
+        fileHash,
+        fileType: file.type,
+        fileSize: file.size,
+        createdAt: new Date().toISOString(),
+        totalChunks,
+        chunkSize: CHUNK_SIZE,
+        chunks: Array.from({ length: totalChunks }, (_, i) => ({
+          index: i,
+          path: `${filePath}_chunk_${i}`,
+          start: i * CHUNK_SIZE,
+          end: Math.min((i + 1) * CHUNK_SIZE, file.size)
+        }))
+      };
 
-      await retryWithBackoff(
-        async () => {
-          const { error: uploadError } = await supabase.storage
-            .from('documents')
-            .upload(`${filePath}_part_${i}`, chunk, {
-              cacheControl: '3600',
-              upsert: false
-            });
-
-          if (uploadError) throw uploadError;
-        },
-        3,
-        1000,
-        `chunk upload ${i + 1}/${totalChunks}`
-      );
-
-      uploadedChunks++;
-      const progress = Math.round((uploadedChunks / totalChunks) * 100);
-      onProgress?.({ 
-        progress, 
-        message: `Téléversement du fichier... ${progress}%` 
+      // Upload manifest
+      onProgress?.({ progress: 95, message: 'Création du manifeste...' });
+      const manifestPath = `${filePath}_manifest.json`;
+      const manifestBlob = new Blob([JSON.stringify(manifest, null, 2)], { 
+        type: 'application/json' 
       });
-    }
 
-    // Combine chunks
-    onProgress?.({ progress: 95, message: 'Finalisation du téléversement...' });
-    
-    const { error: combineError } = await retryWithBackoff(
-      () => supabase.functions.invoke('combine-chunks', {
-        body: { 
-          filePath,
-          totalChunks,
-          fileHash,
-          fileName: file.name,
-          fileType: file.type,
-          fileSize: file.size
-        }
-      }),
-      3,
-      1000,
-      'combine chunks'
-    );
-
-    if (combineError) {
-      // Log detailed error information
-      logError(combineError, {
-        context: 'combine-chunks',
-        file: {
-          name: file.name,
-          type: file.type,
-          size: file.size
-        },
-        chunks: totalChunks
-      });
-      throw combineError;
-    }
-
-    // Cleanup temporary chunks
-    for (let i = 0; i < totalChunks; i++) {
-      await supabase.storage
+      const { error: manifestError } = await supabase.storage
         .from('documents')
-        .remove([`${filePath}_part_${i}`])
-        .catch(error => {
-          console.warn(`Failed to cleanup chunk ${i}:`, error);
+        .upload(manifestPath, manifestBlob, {
+          cacheControl: '3600',
+          upsert: true
         });
-    }
 
-    onProgress?.({ progress: 100, message: 'Téléversement terminé' });
-    return filePath;
+      if (manifestError) throw manifestError;
+
+      // Update cache
+      const { error: cachingError } = await supabase
+        .from('document_cache')
+        .upsert([{
+          hash: fileHash,
+          file_name: file.name,
+          file_type: file.type,
+          file_size: file.size,
+          cached_at: new Date().toISOString(),
+          is_chunked: true,
+          manifest_path: manifestPath
+        }]);
+
+      if (cachingError) throw cachingError;
+
+      onProgress?.({ progress: 100, message: 'Téléversement terminé' });
+      return manifestPath;
+    } else {
+      // Pour les fichiers plus petits, upload direct
+      const { error: uploadError } = await supabase.storage
+        .from('documents')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: true
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Update cache for regular files
+      const { error: cachingError } = await supabase
+        .from('document_cache')
+        .upsert([{
+          hash: fileHash,
+          file_name: file.name,
+          file_type: file.type,
+          file_size: file.size,
+          cached_at: new Date().toISOString(),
+          is_chunked: false
+        }]);
+
+      if (cachingError) throw cachingError;
+
+      onProgress?.({ progress: 100, message: 'Téléversement terminé' });
+      return filePath;
+    }
   } catch (error) {
     // Log detailed error information
     logError(error instanceof Error ? error : new Error(String(error)), {
