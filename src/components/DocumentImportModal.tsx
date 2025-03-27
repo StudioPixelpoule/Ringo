@@ -6,6 +6,7 @@ import { useDocumentStore, Document, Folder } from '../lib/documentStore';
 import { supabase } from '../lib/supabase';
 import { FileIcon } from './FileIcon';
 import { logError } from '../lib/errorLogger';
+import { uploadFileInChunks } from '../lib/uploadUtils';
 
 interface ProcessingStatus {
   isProcessing: boolean;
@@ -334,7 +335,8 @@ export function DocumentImportModal() {
         isProcessing: true,
         progress: 0,
         stage: 'preparation',
-        message: 'Préparation du document...'
+        message: 'Préparation du document...',
+        canCancel: true
       });
 
       const extension = selectedFile.name.split('.').pop()?.toLowerCase();
@@ -359,25 +361,32 @@ export function DocumentImportModal() {
           isProcessing: true,
           progress: 30,
           stage: 'processing',
-          message: 'Téléversement du fichier audio...'
+          message: 'Téléversement du fichier audio...',
+          canCancel: true
         });
 
-        const { error: uploadError, data: uploadData } = await supabase.storage
-          .from('documents')
-          .upload(filePath, selectedFile, {
-            cacheControl: '3600',
-            upsert: false,
-            contentType: selectedFile.type
-          });
-
-        if (uploadError) throw uploadError;
-        if (!uploadData?.path) throw new Error('Failed to upload file');
+        // Use chunked upload for audio files
+        const uploadedPath = await uploadFileInChunks(
+          selectedFile,
+          filePath,
+          (progress) => {
+            setProcessingStatus({
+              isProcessing: true,
+              progress: 30 + (progress.progress * 0.3),
+              stage: 'processing',
+              message: progress.message,
+              canCancel: true
+            });
+          },
+          abortControllerRef.current.signal
+        );
 
         setProcessingStatus({
           isProcessing: true,
           progress: 60,
           stage: 'processing',
-          message: 'Traitement du fichier audio...'
+          message: 'Traitement du fichier audio...',
+          canCancel: true
         });
 
         await uploadDocument(selectedFile, currentFolder.id, {
@@ -385,7 +394,7 @@ export function DocumentImportModal() {
           description: sanitizedDescription,
           processed: true,
           size: selectedFile.size,
-          url: uploadData.path
+          url: uploadedPath
         }, {
           signal: abortControllerRef.current.signal,
           onProgress: (progress) => {
@@ -394,7 +403,8 @@ export function DocumentImportModal() {
                 isProcessing: true,
                 progress: 60 + (progress.progress * 0.4),
                 stage: 'processing',
-                message: progress.message
+                message: progress.message,
+                canCancel: true
               });
             }
           }
@@ -416,24 +426,69 @@ export function DocumentImportModal() {
         return;
       }
 
-      await uploadDocument(selectedFile, currentFolder.id, {
-        type: documentType,
-        description: sanitizedDescription,
-        processed: true,
-        size: selectedFile.size
-      }, {
-        signal: abortControllerRef.current.signal,
-        onProgress: (progress) => {
-          if (typeof progress === 'object') {
+      // For other file types, use chunked upload if size exceeds threshold
+      if (selectedFile.size > 6 * 1024 * 1024) { // 6MB threshold
+        const fileExt = selectedFile.name.split('.').pop()?.toLowerCase() || '';
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+        const filePath = `documents/${fileName}`;
+
+        const uploadedPath = await uploadFileInChunks(
+          selectedFile,
+          filePath,
+          (progress) => {
             setProcessingStatus({
               isProcessing: true,
-              progress: progress.progress,
-              stage: progress.stage,
-              message: progress.message
+              progress: progress.progress * 0.5,
+              stage: 'processing',
+              message: progress.message,
+              canCancel: true
             });
+          },
+          abortControllerRef.current.signal
+        );
+
+        await uploadDocument(selectedFile, currentFolder.id, {
+          type: documentType,
+          description: sanitizedDescription,
+          processed: true,
+          size: selectedFile.size,
+          url: uploadedPath
+        }, {
+          signal: abortControllerRef.current.signal,
+          onProgress: (progress) => {
+            if (typeof progress === 'object') {
+              setProcessingStatus({
+                isProcessing: true,
+                progress: 50 + (progress.progress * 0.5),
+                stage: progress.stage,
+                message: progress.message,
+                canCancel: true
+              });
+            }
           }
-        }
-      });
+        });
+      } else {
+        // Regular upload for small files
+        await uploadDocument(selectedFile, currentFolder.id, {
+          type: documentType,
+          description: sanitizedDescription,
+          processed: true,
+          size: selectedFile.size
+        }, {
+          signal: abortControllerRef.current.signal,
+          onProgress: (progress) => {
+            if (typeof progress === 'object') {
+              setProcessingStatus({
+                isProcessing: true,
+                progress: progress.progress,
+                stage: progress.stage,
+                message: progress.message,
+                canCancel: true
+              });
+            }
+          }
+        });
+      }
 
       setProcessingStatus({
         isProcessing: false,

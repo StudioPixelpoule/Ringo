@@ -23,7 +23,12 @@ export async function logError(
       .insert([{
         error: error instanceof Error ? error.message : error,
         stack: error instanceof Error ? error.stack : undefined,
-        context: context || {},
+        context: {
+          ...context,
+          userAgent: navigator.userAgent,
+          timestamp: new Date().toISOString(),
+          url: window.location.href
+        },
         user_id: user?.id,
         status: 'new'
       }]);
