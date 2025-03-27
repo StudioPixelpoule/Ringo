@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { X, Upload, FileText, FolderPlus, ChevronRight, Edit2, Trash2, Check, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -8,6 +8,10 @@ import { FileIcon } from './FileIcon';
 import { logError } from '../lib/errorLogger';
 import { uploadFileInChunks } from '../lib/uploadUtils';
 import { processAudioFile } from '../lib/audioProcessor';
+import { processDocument } from '../lib/documentProcessor';
+
+// Maximum file size for direct upload (50MB)
+const MAX_DIRECT_UPLOAD_SIZE = 50 * 1024 * 1024;
 
 interface ProcessingStatus {
   isProcessing: boolean;
@@ -326,9 +330,10 @@ export function DocumentImportModal() {
     }
   };
 
-  const handleUpload = async () => {
+  const handleUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!currentFolder || !selectedFile || processingStatus.isProcessing) return;
-    
+
     abortControllerRef.current = new AbortController();
     
     try {
@@ -336,16 +341,16 @@ export function DocumentImportModal() {
         isProcessing: true,
         progress: 0,
         stage: 'preparation',
-        message: 'Préparation du document...',
+        message: 'Préparation...',
         canCancel: true
       });
 
       const extension = selectedFile.name.split('.').pop()?.toLowerCase();
       const documentType = extension === 'pdf' ? 'pdf' :
-                         ['doc', 'docx'].includes(extension || '') ? 'doc' :
-                         ['json', 'csv', 'xlsx', 'xls'].includes(extension || '') ? 'data' :
-                         ['mp3', 'wav', 'wave', 'aac', 'ogg', 'webm'].includes(extension || '') ? 'audio' :
-                         extension === 'html' ? 'report' : 'unknown';
+                       ['doc', 'docx'].includes(extension || '') ? 'doc' :
+                       ['json', 'csv', 'xlsx', 'xls'].includes(extension || '') ? 'data' :
+                       ['mp3', 'wav', 'wave', 'aac', 'ogg', 'webm'].includes(extension || '') ? 'audio' :
+                       extension === 'html' ? 'report' : 'unknown';
 
       const sanitizedDescription = description
         .replace(/[^a-zA-Z0-9\s]/g, '_')
@@ -354,105 +359,163 @@ export function DocumentImportModal() {
         .replace(/^_|_$/g, '');
 
       if (documentType === 'audio') {
-        const fileExt = selectedFile.name.split('.').pop()?.toLowerCase() || '';
-        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-        const filePath = `documents/${fileName}`;
+        try {
+          const fileExt = selectedFile.name.split('.').pop()?.toLowerCase() || '';
+          const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+          const filePath = `documents/${fileName}`;
 
-        setProcessingStatus({
-          isProcessing: true,
-          progress: 30,
-          stage: 'processing',
-          message: 'Téléversement du fichier audio...',
-          canCancel: true
-        });
+          setProcessingStatus({
+            isProcessing: true,
+            progress: 30,
+            stage: 'processing',
+            message: 'Téléversement du fichier audio...',
+            canCancel: true
+          });
 
-        // Use chunked upload for audio files
-        const uploadedPath = await uploadFileInChunks(
-          selectedFile,
-          filePath,
-          (progress) => {
-            setProcessingStatus({
-              isProcessing: true,
-              progress: 30 + (progress.progress * 0.3),
-              stage: 'processing',
-              message: progress.message,
-              canCancel: true
-            });
-          },
-          abortControllerRef.current.signal
-        );
+          // Use chunked upload for large audio files
+          if (selectedFile.size > MAX_DIRECT_UPLOAD_SIZE) {
+            const uploadedPath = await uploadFileInChunks(
+              selectedFile,
+              filePath,
+              (progress) => {
+                setProcessingStatus({
+                  isProcessing: true,
+                  progress: 30 + (progress.progress * 0.3),
+                  stage: 'processing',
+                  message: progress.message,
+                  canCancel: true
+                });
+              },
+              abortControllerRef.current.signal
+            );
 
-        setProcessingStatus({
-          isProcessing: true,
-          progress: 60,
-          stage: 'processing',
-          message: 'Traitement du fichier audio...',
-          canCancel: true
-        });
+            // Create document record with chunking info
+            const { data: doc, error: docError } = await supabase
+              .from('documents')
+              .insert([{
+                folder_id: currentFolder.id,
+                name: selectedFile.name,
+                type: documentType,
+                description: sanitizedDescription,
+                url: uploadedPath,
+                size: selectedFile.size,
+                is_chunked: true,
+                manifest_path: `${filePath}_manifest.json`
+              }])
+              .select()
+              .single();
 
-        // Process audio with OpenAI
-        const result = await processAudioFile(
-          selectedFile,
-          import.meta.env.VITE_OPENAI_API_KEY,
-          (progress) => {
-            setProcessingStatus({
-              isProcessing: true,
-              progress: 60 + (progress.progress * 0.4),
-              stage: progress.stage,
-              message: progress.message,
-              canCancel: progress.canCancel
-            });
-          },
-          abortControllerRef.current.signal
-        );
+            if (docError) throw docError;
 
-        // Create document entry
-        const { data: doc, error: docError } = await supabase
-          .from('documents')
-          .insert([{
-            folder_id: currentFolder.id,
-            name: selectedFile.name,
-            type: documentType,
-            description: sanitizedDescription,
-            url: uploadedPath,
-            size: selectedFile.size,
-            is_chunked: true,
-            manifest_path: `${filePath}_manifest.json`
-          }])
-          .select()
-          .single();
+            // Process audio
+            const result = await processAudioFile(
+              selectedFile,
+              import.meta.env.VITE_OPENAI_API_KEY,
+              (progress) => {
+                setProcessingStatus({
+                  isProcessing: true,
+                  progress: 60 + (progress.progress * 0.3),
+                  stage: progress.stage,
+                  message: progress.message,
+                  canCancel: true
+                });
+              },
+              abortControllerRef.current.signal
+            );
 
-        if (docError) throw docError;
+            // Store transcription content
+            const { error: contentError } = await supabase
+              .from('document_contents')
+              .insert([{
+                document_id: doc.id,
+                content: JSON.stringify(result),
+                is_chunked: false,
+                chunk_index: null,
+                total_chunks: null
+              }]);
 
-        // Store transcription content
-        const { error: contentError } = await supabase
-          .from('document_contents')
-          .insert([{
-            document_id: doc.id,
-            content: JSON.stringify(result),
-            is_chunked: false // Transcription is stored as a single piece
-          }]);
+            if (contentError) throw contentError;
+          } else {
+            // Direct upload for small audio files
+            const { error: uploadError } = await supabase.storage
+              .from('documents')
+              .upload(filePath, selectedFile, {
+                cacheControl: '3600',
+                upsert: false
+              });
 
-        if (contentError) throw contentError;
+            if (uploadError) throw uploadError;
 
-        setProcessingStatus({
-          isProcessing: false,
-          progress: 100,
-          stage: 'complete',
-          message: 'Document traité avec succès !'
-        });
+            // Create document record
+            const { data: doc, error: docError } = await supabase
+              .from('documents')
+              .insert([{
+                folder_id: currentFolder.id,
+                name: selectedFile.name,
+                type: documentType,
+                description: sanitizedDescription,
+                url: filePath,
+                size: selectedFile.size,
+                is_chunked: false,
+                manifest_path: null
+              }])
+              .select()
+              .single();
 
-        setTimeout(() => {
-          setSelectedFile(null);
-          setDescription('');
-          setModalOpen(false);
-        }, 2000);
+            if (docError) throw docError;
 
-        return;
+            // Process audio
+            const result = await processAudioFile(
+              selectedFile,
+              import.meta.env.VITE_OPENAI_API_KEY,
+              (progress) => {
+                setProcessingStatus({
+                  isProcessing: true,
+                  progress: 60 + (progress.progress * 0.3),
+                  stage: progress.stage,
+                  message: progress.message,
+                  canCancel: true
+                });
+              },
+              abortControllerRef.current.signal
+            );
+
+            // Store transcription content
+            const { error: contentError } = await supabase
+              .from('document_contents')
+              .insert([{
+                document_id: doc.id,
+                content: JSON.stringify(result),
+                is_chunked: false,
+                chunk_index: null,
+                total_chunks: null
+              }]);
+
+            if (contentError) throw contentError;
+          }
+
+          setProcessingStatus({
+            isProcessing: false,
+            progress: 100,
+            stage: 'complete',
+            message: 'Document traité avec succès !'
+          });
+
+          setTimeout(() => {
+            setSelectedFile(null);
+            setDescription('');
+            setModalOpen(false);
+          }, 2000);
+
+          return;
+        } catch (error) {
+          console.error('Error processing audio:', error);
+          throw error;
+        }
       }
 
       // For other file types, use chunked upload if size exceeds threshold
-      if (selectedFile.size > 6 * 1024 * 1024) { // 6MB threshold
+      if (selectedFile.size > MAX_DIRECT_UPLOAD_SIZE) {
         const fileExt = selectedFile.name.split('.').pop()?.toLowerCase() || '';
         const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
         const filePath = `documents/${fileName}`;
@@ -472,49 +535,109 @@ export function DocumentImportModal() {
           abortControllerRef.current.signal
         );
 
-        await uploadDocument(selectedFile, currentFolder.id, {
-          type: documentType,
-          description: sanitizedDescription,
-          processed: true,
-          size: selectedFile.size,
-          url: uploadedPath,
-          is_chunked: true,
-          manifest_path: `${filePath}_manifest.json`
-        }, {
+        // Create document record with chunking info
+        const { data: doc, error: docError } = await supabase
+          .from('documents')
+          .insert([{
+            folder_id: currentFolder.id,
+            name: selectedFile.name,
+            type: documentType,
+            description: sanitizedDescription,
+            url: uploadedPath,
+            size: selectedFile.size,
+            is_chunked: true,
+            manifest_path: `${filePath}_manifest.json`
+          }])
+          .select()
+          .single();
+
+        if (docError) throw docError;
+
+        // Process and store content
+        const result = await processDocument(selectedFile, {
           signal: abortControllerRef.current.signal,
           onProgress: (progress) => {
-            if (typeof progress === 'object') {
-              setProcessingStatus({
-                isProcessing: true,
-                progress: 50 + (progress.progress * 0.5),
-                stage: progress.stage,
-                message: progress.message,
-                canCancel: true
-              });
-            }
+            setProcessingStatus({
+              isProcessing: true,
+              progress: 50 + (progress.progress * 0.5),
+              stage: progress.stage,
+              message: progress.message,
+              canCancel: true
+            });
           }
         });
+
+        // Store content
+        const { error: contentError } = await supabase
+          .from('document_contents')
+          .insert([{
+            document_id: doc.id,
+            content: result,
+            is_chunked: false,
+            chunk_index: null,
+            total_chunks: null
+          }]);
+
+        if (contentError) throw contentError;
       } else {
         // Regular upload for small files
-        await uploadDocument(selectedFile, currentFolder.id, {
-          type: documentType,
-          description: sanitizedDescription,
-          processed: true,
-          size: selectedFile.size
-        }, {
+        const fileExt = selectedFile.name.split('.').pop()?.toLowerCase() || '';
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+        const filePath = `documents/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('documents')
+          .upload(filePath, selectedFile, {
+            cacheControl: '3600',
+            upsert: true
+          });
+
+        if (uploadError) throw uploadError;
+
+        // Create document record
+        const { data: doc, error: docError } = await supabase
+          .from('documents')
+          .insert([{
+            folder_id: currentFolder.id,
+            name: selectedFile.name,
+            type: documentType,
+            description: sanitizedDescription,
+            url: filePath,
+            size: selectedFile.size,
+            is_chunked: false,
+            manifest_path: null
+          }])
+          .select()
+          .single();
+
+        if (docError) throw docError;
+
+        // Process and store content
+        const result = await processDocument(selectedFile, {
           signal: abortControllerRef.current.signal,
           onProgress: (progress) => {
-            if (typeof progress === 'object') {
-              setProcessingStatus({
-                isProcessing: true,
-                progress: progress.progress,
-                stage: progress.stage,
-                message: progress.message,
-                canCancel: true
-              });
-            }
+            setProcessingStatus({
+              isProcessing: true,
+              progress: progress.progress,
+              stage: progress.stage,
+              message: progress.message,
+              canCancel: true
+            });
           }
         });
+
+        // Store content
+        const { error: contentError } = await supabase
+          .from('document_contents')
+          .insert([{
+            document_id: doc.id,
+            content: result,
+            is_chunked: false,
+            chunk_index: null,
+            total_chunks: null
+          }]);
+
+        if (contentError) throw contentError;
       }
 
       setProcessingStatus({
@@ -531,8 +654,6 @@ export function DocumentImportModal() {
       }, 2000);
 
     } catch (error) {
-      console.error('Overall error:', error);
-      
       if (error instanceof Error && (error.name === 'AbortError' || error.message === 'Processing cancelled')) {
         setProcessingStatus({
           isProcessing: false,

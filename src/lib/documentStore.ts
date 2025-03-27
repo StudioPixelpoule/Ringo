@@ -20,6 +20,8 @@ export interface Document {
   processed: boolean;
   created_at: string;
   size?: number;
+  is_chunked?: boolean;
+  manifest_path?: string;
 }
 
 interface ProcessingStatus {
@@ -42,7 +44,7 @@ interface DocumentStore {
   
   setModalOpen: (isOpen: boolean) => void;
   createFolder: (name: string, parentId: string | null) => Promise<void>;
-  uploadDocument: (file: File, folderId: string, metadata: Partial<Document>) => Promise<Document>;
+  uploadDocument: (file: File, folderId: string, metadata: Partial<Document>, options?: { signal?: AbortSignal; onProgress?: (progress: ProcessingStatus) => void }) => Promise<Document>;
   fetchFolders: () => Promise<void>;
   fetchDocuments: (folderId: string) => Promise<void>;
   fetchAllDocuments: () => Promise<void>;
@@ -52,6 +54,7 @@ interface DocumentStore {
   selectDocument: (id: string) => void;
   unselectDocument: (id: string) => void;
   clearSelectedDocuments: () => void;
+  setError: (error: string) => void;
   clearError: () => void;
 }
 
@@ -98,9 +101,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     }
   },
 
-  uploadDocument: async (file, folderId, metadata) => {
-    const abortController = new AbortController();
-    
+  uploadDocument: async (file, folderId, metadata, options) => {
     set({
       loading: true,
       error: null,
@@ -113,91 +114,68 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       }
     });
 
-    let uploadedPath: string | null = null;
-
     try {
       console.log("📄 Traitement du document:", file.name);
 
+      // Create document record first
+      const { data: doc, error: docError } = await supabase
+        .from('documents')
+        .insert([{
+          folder_id: folderId,
+          name: file.name,
+          type: metadata.type,
+          description: metadata.description,
+          url: metadata.url,
+          size: metadata.size,
+          is_chunked: metadata.is_chunked,
+          manifest_path: metadata.manifest_path,
+          processed: false
+        }])
+        .select()
+        .single();
+
+      if (docError) throw docError;
+
+      // Process document content
       const result = await processDocument(file, {
         openaiApiKey: import.meta.env.VITE_OPENAI_API_KEY,
         onProgress: (progress) => {
+          options?.onProgress?.(progress);
           set({ processingStatus: progress });
         },
-        signal: abortController.signal
+        signal: options?.signal
       });
 
       if (!result) {
         throw new Error('Échec du traitement du document');
       }
 
-      console.log("✅ Document traité");
-      set({ processingStatus: {
-        isProcessing: true,
-        progress: 75,
-        stage: 'upload',
-        message: 'Enregistrement...',
-        canCancel: true
-      }});
-
-      // Upload du fichier
-      const fileExt = file.name.split('.').pop()?.toLowerCase() || '';
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-      const filePath = `documents/${fileName}`;
-
-      const { error: uploadError, data } = await supabase.storage
-        .from('documents')
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: false,
-          contentType: file.type
-        });
-
-      if (uploadError) throw uploadError;
-      if (!data?.path) throw new Error('Échec upload: Pas de chemin retourné');
-
-      uploadedPath = data.path;
-      console.log("✅ Fichier uploadé:", uploadedPath);
-
-      // Création de l'enregistrement
-      const { data: doc, error: dbError } = await supabase
-        .from('documents')
-        .insert([{
-          folder_id: folderId,
-          name: file.name,
-          type: file.type.startsWith('audio/') ? 'audio' : fileExt,
-          url: data.path,
-          size: file.size,
-          ...metadata,
-        }])
-        .select()
-        .single();
-
-      if (dbError) throw dbError;
-
       // Store document content
       const { error: contentError } = await supabase
         .from('document_contents')
         .insert([{
           document_id: doc.id,
-          content: JSON.stringify(result)
+          content: result,
+          is_chunked: metadata.is_chunked || false,
+          chunk_index: metadata.is_chunked ? 0 : null,
+          total_chunks: metadata.is_chunked ? 1 : null
         }]);
 
       if (contentError) throw contentError;
 
-      console.log("✅ Document enregistré:", doc);
+      // Update document as processed
+      const { error: updateError } = await supabase
+        .from('documents')
+        .update({ processed: true })
+        .eq('id', doc.id);
+
+      if (updateError) throw updateError;
 
       const documents = get().documents;
-      set({ documents: [...documents, doc] });
+      set({ documents: [...documents, { ...doc, processed: true }] });
 
-      return doc;
+      return { ...doc, processed: true };
     } catch (error) {
-      if (uploadedPath) {
-        await supabase.storage
-          .from('documents')
-          .remove([uploadedPath])
-          .catch(console.error);
-      }
-
       console.error("🚨 Erreur upload document:", error);
       set({ error: error instanceof Error ? error.message : 'Erreur upload document' });
       throw error;
@@ -355,5 +333,6 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     set({ selectedDocuments: [] });
   },
 
+  setError: (error) => set({ error }),
   clearError: () => set({ error: null }),
 }));

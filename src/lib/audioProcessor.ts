@@ -48,14 +48,24 @@ async function processAudioChunk(chunk: Blob, apiKey: string, signal?: AbortSign
   formData.append('prompt', 'Transcription en français. Respecter la ponctuation.');
 
   try {
-    // Use the passed signal for the fetch request
+    // Check if operation was cancelled
+    if (signal?.aborted) {
+      throw new Error('Processing cancelled');
+    }
+
+    const controller = new AbortController();
+    // Link the parent signal to the fetch controller
+    if (signal) {
+      signal.addEventListener('abort', () => controller.abort());
+    }
+
     const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
       },
       body: formData,
-      signal // Use the passed signal
+      signal: controller.signal
     });
 
     if (!response.ok) {
@@ -79,7 +89,7 @@ async function processAudioChunk(chunk: Blob, apiKey: string, signal?: AbortSign
     };
   } catch (error) {
     // Check if the error is an AbortError
-    if (error instanceof Error && error.name === 'AbortError') {
+    if (error instanceof Error && (error.name === 'AbortError' || error.message === 'Processing cancelled')) {
       throw new Error('Processing cancelled');
     }
     console.error('[Audio Processing] Chunk processing error:', error);
@@ -94,15 +104,15 @@ export async function processAudioFile(
   signal?: AbortSignal
 ): Promise<AudioProcessingResult> {
   try {
+    // Check if operation was cancelled
+    if (signal?.aborted) {
+      throw new Error('Processing cancelled');
+    }
+
     console.log(`[Audio Processing] Starting processing: ${file.name}`);
 
     if (!apiKey) {
       throw new Error('OpenAI API key is not configured');
-    }
-
-    // Check if operation was cancelled
-    if (signal?.aborted) {
-      throw new Error('Processing cancelled');
     }
 
     // Validate file type
@@ -232,10 +242,13 @@ export async function processAudioFile(
     // Properly handle AbortError
     if (error instanceof Error) {
       if (error.name === 'AbortError' || error.message === 'Processing cancelled') {
+        console.log('[Audio Processing] Processing cancelled by user');
         throw new Error('Traitement annulé');
       }
+      console.error('[Audio Processing] Error:', error);
       throw new Error(`Échec de la transcription: ${error.message}`);
     }
+    console.error('[Audio Processing] Unexpected error:', error);
     throw new Error('Une erreur inattendue est survenue lors de la transcription');
   }
 }

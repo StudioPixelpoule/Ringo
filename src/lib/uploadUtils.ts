@@ -115,7 +115,7 @@ export async function uploadFileInChunks(
     const { data: existingFile, error: cacheError } = await retryWithBackoff(
       () => supabase
         .from('document_cache')
-        .select('hash')
+        .select('*')
         .eq('hash', fileHash)
         .limit(1)
         .maybeSingle(),
@@ -131,14 +131,12 @@ export async function uploadFileInChunks(
       return filePath;
     }
 
-    // Pour les fichiers volumineux, utiliser une approche par manifeste
-    if (file.size > 50 * 1024 * 1024) { // Plus de 50MB
-      console.log(`Large file detected (${(file.size/1024/1024).toFixed(2)}MB), using manifest approach`);
-      
+    // For large files, use chunked upload with manifest
+    if (file.size > CHUNK_SIZE) {
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
       let uploadedChunks = 0;
 
-      // Upload all chunks
+      // Upload chunks
       for (let i = 0; i < totalChunks; i++) {
         if (signal?.aborted) {
           throw new Error('Upload cancelled');
@@ -173,7 +171,7 @@ export async function uploadFileInChunks(
         });
       }
 
-      // Create manifest file
+      // Create manifest
       const manifest = {
         originalFile: file.name,
         fileHash,
@@ -190,13 +188,10 @@ export async function uploadFileInChunks(
         }))
       };
 
-      // Convert manifest to string for storage
-      const manifestContent = JSON.stringify(manifest, null, 2);
-
       // Upload manifest
       onProgress?.({ progress: 95, message: 'Création du manifeste...' });
       const manifestPath = `${filePath}_manifest.json`;
-      const manifestBlob = new Blob([manifestContent], { 
+      const manifestBlob = new Blob([JSON.stringify(manifest, null, 2)], { 
         type: 'application/json' 
       });
 
@@ -209,26 +204,24 @@ export async function uploadFileInChunks(
 
       if (manifestError) throw manifestError;
 
-      // Update cache with manifest content
-      const { error: cachingError } = await supabase
+      // Update cache
+      const { error: cacheError } = await supabase
         .from('document_cache')
-        .upsert([{
+        .upsert({
           hash: fileHash,
-          content: manifestContent,
+          content: JSON.stringify(manifest),
           file_name: file.name,
           file_type: file.type,
           file_size: file.size,
-          cached_at: new Date().toISOString(),
-          is_chunked: true,
-          manifest_path: manifestPath
-        }]);
+          cached_at: new Date().toISOString()
+        });
 
-      if (cachingError) throw cachingError;
+      if (cacheError) throw cacheError;
 
       onProgress?.({ progress: 100, message: 'Téléversement terminé' });
       return manifestPath;
     } else {
-      // Pour les fichiers plus petits, upload direct
+      // Regular upload for small files
       const { error: uploadError } = await supabase.storage
         .from('documents')
         .upload(filePath, file, {
@@ -246,26 +239,24 @@ export async function uploadFileInChunks(
         content = `Binary file: ${file.name} (${file.type})`;
       }
 
-      // Update cache for regular files
-      const { error: cachingError } = await supabase
+      // Update cache
+      const { error: cacheError } = await supabase
         .from('document_cache')
-        .upsert([{
+        .upsert({
           hash: fileHash,
           content,
           file_name: file.name,
           file_type: file.type,
           file_size: file.size,
-          cached_at: new Date().toISOString(),
-          is_chunked: false
-        }]);
+          cached_at: new Date().toISOString()
+        });
 
-      if (cachingError) throw cachingError;
+      if (cacheError) throw cacheError;
 
       onProgress?.({ progress: 100, message: 'Téléversement terminé' });
       return filePath;
     }
   } catch (error) {
-    // Log detailed error information
     logError(error instanceof Error ? error : new Error(String(error)), {
       context: 'uploadFileInChunks',
       file: {
