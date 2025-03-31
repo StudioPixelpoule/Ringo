@@ -1,11 +1,11 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.7'
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "npm:@supabase/supabase-js@2.39.7";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Max-Age': '86400',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Content-Type": "application/json"
 };
 
 serve(async (req) => {
@@ -20,6 +20,15 @@ serve(async (req) => {
       throw new Error('Method not allowed');
     }
 
+    const body = await req.json();
+    console.log("Request body:", body);
+
+    const { user_id } = body;
+
+    if (!user_id) {
+      throw new Error('user_id is required');
+    }
+
     // Create authenticated Supabase client using the service role key
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -32,22 +41,20 @@ serve(async (req) => {
       }
     );
 
-    // Get the request body
-    const { user_id } = await req.json();
-
-    if (!user_id) {
-      throw new Error('user_id is required');
-    }
-
     // First check if user exists and get their role
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
-      .select('role')
+      .select('role, email')
       .eq('id', user_id)
       .single();
 
     if (profileError) {
+      console.error("Profile error:", profileError);
       throw new Error('Failed to fetch user profile');
+    }
+
+    if (!profile) {
+      throw new Error('User not found');
     }
 
     // Don't allow deleting the last super admin
@@ -59,6 +66,7 @@ serve(async (req) => {
         .eq('status', true);
 
       if (countError) {
+        console.error("Count error:", countError);
         throw new Error('Failed to check super admin count');
       }
 
@@ -67,30 +75,56 @@ serve(async (req) => {
       }
     }
 
-    // Delete all user data
-    const { error: deleteDataError } = await supabaseAdmin
-      .rpc('delete_user_data_v2', { user_id_param: user_id });
+    // Delete user data using RPC function with retries
+    const maxRetries = 3;
+    let lastError = null;
 
-    if (deleteDataError) {
-      throw new Error('Failed to delete user data');
-    }
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const { error: deleteDataError } = await supabaseAdmin
+          .rpc('delete_user_data_v2', { user_id_param: user_id });
 
-    // Delete the user from auth.users
-    const { error: deleteUserError } = await supabaseAdmin.auth.admin.deleteUser(
-      user_id
-    );
+        if (!deleteDataError) {
+          // If successful, delete the user from auth.users
+          const { error: deleteUserError } = await supabaseAdmin.auth.admin.deleteUser(
+            user_id
+          );
 
-    if (deleteUserError) {
-      throw new Error('Failed to delete user account');
-    }
+          if (deleteUserError) {
+            console.error("Delete user error:", deleteUserError);
+            throw new Error('Failed to delete user account');
+          }
 
-    return new Response(
-      JSON.stringify({ success: true }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
+          console.log("User successfully deleted:", user_id);
+
+          return new Response(
+            JSON.stringify({ success: true }),
+            {
+              headers: corsHeaders,
+              status: 200,
+            }
+          );
+        }
+
+        lastError = deleteDataError;
+        console.error(`Attempt ${attempt} failed:`, deleteDataError);
+
+        // Wait before retrying
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, attempt * 1000));
+        }
+      } catch (error) {
+        lastError = error;
+        console.error(`Attempt ${attempt} failed:`, error);
+
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, attempt * 1000));
+        }
       }
-    );
+    }
+
+    // If we get here, all retries failed
+    throw lastError || new Error('Failed to delete user data after multiple attempts');
   } catch (error) {
     console.error('Error in delete-user function:', error);
     
@@ -99,7 +133,7 @@ serve(async (req) => {
         error: error instanceof Error ? error.message : 'An error occurred while deleting the user'
       }),
       {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: corsHeaders,
         status: 400
       }
     );

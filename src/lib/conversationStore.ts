@@ -360,6 +360,18 @@ INSTRUCTIONS: Le texte ci-dessus contient le contenu complet du document "${doc.
 
     set({ loading: true, error: null });
     try {
+      // Check if document is already linked
+      const { data: existingLink } = await supabase
+        .from('conversation_documents')
+        .select('id')
+        .eq('conversation_id', conversation.id)
+        .eq('document_id', documentId)
+        .maybeSingle();
+
+      if (existingLink) {
+        throw new Error('Ce document est déjà lié à la conversation');
+      }
+
       const { error } = await supabase
         .from('conversation_documents')
         .insert([{
@@ -410,7 +422,27 @@ INSTRUCTIONS: Le texte ci-dessus contient le contenu complet du document "${doc.
 
       if (error) throw error;
       
-      await get().fetchConversationDocuments(conversation.id);
+      // Update local state
+      set(state => ({
+        documents: state.documents.filter(d => d.document_id !== documentId)
+      }));
+
+      // Add system message about document removal
+      const removedDoc = get().documents.find(d => d.document_id === documentId);
+      if (removedDoc) {
+        const { data: systemMessage, error: messageError } = await supabase
+          .from('messages')
+          .insert([{
+            conversation_id: conversation.id,
+            sender: 'assistant',
+            content: `Le document "${removedDoc.documents.name}" a été retiré de la conversation. Je ne l'utiliserai plus pour mes réponses.`
+          }])
+          .select()
+          .single();
+
+        if (messageError) throw messageError;
+        set({ messages: [...get().messages, systemMessage] });
+      }
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Error unlinking document' });
     } finally {

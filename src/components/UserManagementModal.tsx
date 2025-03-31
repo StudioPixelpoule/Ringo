@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Check, UserCog, AlertCircle, UserPlus, Trash2, Users, Loader2 } from 'lucide-react';
+import { X, Check, UserCog, AlertTriangle, UserPlus, Trash2, Users, Loader2 } from 'lucide-react';
 import { useUserStore, Profile } from '../lib/store';
 
 export function UserManagementModal() {
@@ -24,13 +24,16 @@ export function UserManagementModal() {
   const [roleFilter, setRoleFilter] = useState<'all' | 'super_admin' | 'admin' | 'user'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isModalOpen) {
       fetchUsers();
     } else {
       clearError();
+      setLocalError(null);
     }
   }, [isModalOpen, fetchUsers, clearError]);
 
@@ -50,18 +53,35 @@ export function UserManagementModal() {
 
   const handleDelete = async (user: Profile) => {
     if (window.confirm(`⚠️ ATTENTION: Cette action est irréversible!\n\nÊtes-vous sûr de vouloir supprimer définitivement l'utilisateur ${user.email} ?\nToutes ses données seront perdues.`)) {
-      setIsDeleting(true);
+      setIsDeleting(user.id);
       try {
         await deleteUser(user.id);
       } finally {
-        setIsDeleting(false);
+        setIsDeleting(null);
       }
     }
   };
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newUserEmail || !newUserPassword) return;
+    if (!newUserEmail || !newUserPassword || isSubmitting) return;
+
+    // Validate email format
+    const emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+    if (!emailRegex.test(newUserEmail.trim())) {
+      setLocalError('Format d\'email invalide');
+      return;
+    }
+
+    // Validate password length
+    if (newUserPassword.length < 8) {
+      setLocalError('Le mot de passe doit contenir au moins 8 caractères');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setLocalError(null);
+    clearError();
 
     try {
       await createUser({
@@ -76,10 +96,11 @@ export function UserManagementModal() {
       setIsAddingUser(false);
     } catch (error) {
       console.error('Error creating user:', error);
+      setLocalError(error instanceof Error ? error.message : 'Une erreur est survenue lors de la création de l\'utilisateur');
+    } finally {
+      setIsSubmitting(false);
     }
   };
-
-  const isSuperAdmin = currentUserRole === 'super_admin';
 
   // Filter users based on current filters
   const filteredUsers = users.filter(user => {
@@ -91,6 +112,8 @@ export function UserManagementModal() {
     }
     return true;
   });
+
+  const isSuperAdmin = currentUserRole === 'super_admin';
 
   if (!isModalOpen) return null;
 
@@ -123,12 +146,15 @@ export function UserManagementModal() {
         </div>
 
         <div className="p-6 overflow-y-auto">
-          {error && (
+          {(error || localError) && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4 flex items-center gap-2">
-              <AlertCircle size={20} />
-              <span>{error}</span>
+              <AlertTriangle size={20} />
+              <span>{error || localError}</span>
               <button
-                onClick={clearError}
+                onClick={() => {
+                  clearError();
+                  setLocalError(null);
+                }}
                 className="ml-auto text-red-700 hover:text-red-900"
               >
                 <X size={16} />
@@ -179,7 +205,7 @@ export function UserManagementModal() {
                       <option value="user">Utilisateur</option>
                       <option value="admin">Administrateur</option>
                       {isSuperAdmin && (
-                        <option value="super_admin">Super Admin</option>
+                        <option value="super_admin">S-Administrateur</option>
                       )}
                     </select>
                   </div>
@@ -187,16 +213,31 @@ export function UserManagementModal() {
                 <div className="flex justify-end gap-3">
                   <button
                     type="button"
-                    onClick={() => setIsAddingUser(false)}
+                    onClick={() => {
+                      setIsAddingUser(false);
+                      setLocalError(null);
+                      clearError();
+                    }}
                     className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
                   >
                     Annuler
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-[#f15922] text-white rounded-md hover:bg-[#f15922]/90"
+                    disabled={isSubmitting}
+                    className="px-4 py-2 bg-[#f15922] text-white rounded-md hover:bg-[#f15922]/90 disabled:opacity-50 flex items-center gap-2"
                   >
-                    Créer l'utilisateur
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="animate-spin" size={18} />
+                        <span>Création en cours...</span>
+                      </>
+                    ) : (
+                      <>
+                        <UserPlus size={18} />
+                        <span>Créer l'utilisateur</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </form>
@@ -288,9 +329,7 @@ export function UserManagementModal() {
                   filteredUsers.map((user) => (
                     <tr key={user.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">
-                          {user.email}
-                        </div>
+                        <div className="text-sm font-medium text-gray-900">{user.email}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <select
@@ -335,7 +374,7 @@ export function UserManagementModal() {
                         <div className="flex items-center justify-end gap-2">
                           <button
                             onClick={() => handleDelete(user)}
-                            disabled={isDeleting || (!isSuperAdmin && user.role === 'super_admin')}
+                            disabled={isDeleting === user.id || (!isSuperAdmin && user.role === 'super_admin')}
                             className={`text-red-500 hover:text-red-700 p-2 hover:bg-red-50 rounded-lg transition-colors inline-flex items-center ${
                               !isSuperAdmin && user.role === 'super_admin'
                                 ? 'opacity-50 cursor-not-allowed'
@@ -343,7 +382,7 @@ export function UserManagementModal() {
                             }`}
                             title="Supprimer définitivement"
                           >
-                            {isDeleting ? (
+                            {isDeleting === user.id ? (
                               <Loader2 size={18} className="animate-spin" />
                             ) : (
                               <Trash2 size={18} />

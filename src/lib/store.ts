@@ -69,17 +69,6 @@ export const useUserStore = create<UserStore>((set, get) => ({
   createUser: async ({ email, password, role }) => {
     set({ loading: true, error: null });
     try {
-      // Check if user exists
-      const { data: existingUser } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('email', email.toLowerCase())
-        .maybeSingle();
-
-      if (existingUser) {
-        throw new Error('Un utilisateur avec cet email existe déjà');
-      }
-
       // Call Edge Function to create user
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
         method: 'POST',
@@ -105,7 +94,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
     }
   },
 
-  updateUser: async (id: string, data: Partial<Profile>) => {
+  updateUser: async (id, data) => {
     set({ loading: true, error: null });
     try {
       const { error } = await supabase
@@ -122,9 +111,31 @@ export const useUserStore = create<UserStore>((set, get) => ({
     }
   },
 
-  deleteUser: async (id: string) => {
+  deleteUser: async (id) => {
     set({ loading: true, error: null });
     try {
+      // First check if user exists and get their role
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('role, email')
+        .eq('id', id)
+        .single();
+
+      if (profileError) throw new Error('Failed to fetch user profile');
+      if (!profile) throw new Error('User not found');
+
+      // Don't allow deleting the last super admin
+      if (profile.role === 'super_admin') {
+        const { count, error: countError } = await supabase
+          .from('profiles')
+          .select('id', { count: 'exact', head: true })
+          .eq('role', 'super_admin')
+          .eq('status', true);
+
+        if (countError) throw new Error('Failed to check super admin count');
+        if (count === 1) throw new Error('Cannot delete the last super admin');
+      }
+
       // Call Edge Function to delete user
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-user`, {
         method: 'POST',
@@ -136,8 +147,9 @@ export const useUserStore = create<UserStore>((set, get) => ({
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to delete user');
+        const errorData = await response.json();
+        console.error('Server response:', errorData);
+        throw new Error(errorData.error || 'Failed to delete user');
       }
 
       // Update local state
@@ -146,6 +158,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
     } catch (error) {
       console.error('Error deleting user:', error);
       set({ error: error instanceof Error ? error.message : 'Failed to delete user' });
+      throw error;
     } finally {
       set({ loading: false });
     }

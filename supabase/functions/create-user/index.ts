@@ -1,11 +1,11 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.7'
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "npm:@supabase/supabase-js@2.39.7";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Max-Age': '86400',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Content-Type": "application/json"
 };
 
 serve(async (req) => {
@@ -20,20 +20,10 @@ serve(async (req) => {
       throw new Error('Method not allowed');
     }
 
-    // Create authenticated Supabase client using the service role key
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-      }
-    );
+    const body = await req.json();
+    console.log("Request body:", body);
 
-    // Get the request body
-    const { email, password, role } = await req.json();
+    const { email, password, role } = body;
 
     // Validate required fields
     if (!email || !password || !role) {
@@ -57,6 +47,18 @@ serve(async (req) => {
       throw new Error('Invalid role');
     }
 
+    // Create authenticated Supabase client using the service role key
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    );
+
     // Check if email already exists
     const { data: existingUser } = await supabaseAdmin
       .from('profiles')
@@ -68,30 +70,30 @@ serve(async (req) => {
       throw new Error('Email already exists');
     }
 
-    // Create the user
-    const { data: user, error: createError } = await supabaseAdmin.auth.admin.createUser({
+    // Create user with auth API
+    const { data: authData, error: signUpError } = await supabaseAdmin.auth.admin.createUser({
       email: email.toLowerCase(),
       password,
       email_confirm: true,
       user_metadata: { role }
     });
 
-    if (createError) throw createError;
-    if (!user.user) throw new Error('Failed to create user');
+    if (signUpError) throw signUpError;
+    if (!authData.user) throw new Error('Failed to create user');
 
     // Create profile
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
       .insert([{
-        id: user.user.id,
+        id: authData.user.id,
         email: email.toLowerCase(),
         role,
         status: true
       }]);
 
     if (profileError) {
-      // Rollback: delete the auth user if profile creation fails
-      await supabaseAdmin.auth.admin.deleteUser(user.user.id);
+      // Rollback: delete auth user if profile creation fails
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
       throw profileError;
     }
 
@@ -99,9 +101,9 @@ serve(async (req) => {
     await supabaseAdmin
       .from('error_logs')
       .insert([{
-        error: 'User created',
+        error: 'User created successfully',
         context: {
-          user_id: user.user.id,
+          user_id: authData.user.id,
           email: email.toLowerCase(),
           role,
           created_at: new Date().toISOString()
@@ -113,13 +115,13 @@ serve(async (req) => {
       JSON.stringify({ 
         success: true, 
         user: {
-          id: user.user.id,
-          email: user.user.email,
+          id: authData.user.id,
+          email: authData.user.email,
           role
         }
       }),
       {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: corsHeaders,
         status: 200,
       }
     );
@@ -131,7 +133,7 @@ serve(async (req) => {
         error: error instanceof Error ? error.message : 'An error occurred while creating the user'
       }),
       {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: corsHeaders,
         status: 400
       }
     );
