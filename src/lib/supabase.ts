@@ -38,9 +38,17 @@ supabase.auth.onAuthStateChange((event, session) => {
   }
 });
 
-// Add session refresh on focus
+// Add session refresh on focus with debounce
 let refreshTimeout: NodeJS.Timeout;
+let lastRefreshTime = 0;
+const REFRESH_COOLDOWN = 5000; // 5 seconds cooldown between refreshes
+
 window.addEventListener('focus', () => {
+  const now = Date.now();
+  if (now - lastRefreshTime < REFRESH_COOLDOWN) {
+    return; // Skip if within cooldown period
+  }
+
   clearTimeout(refreshTimeout);
   refreshTimeout = setTimeout(() => {
     supabase.auth.getSession()
@@ -49,6 +57,7 @@ window.addEventListener('focus', () => {
           // No valid session, redirect to login
           window.location.href = '/login';
         }
+        lastRefreshTime = Date.now();
       })
       .catch((error) => {
         console.error('Session refresh error:', error);
@@ -88,6 +97,7 @@ export const isAuthenticated = async (): Promise<boolean> => {
 export const getUserRole = async (): Promise<string | null> => {
   const maxRetries = 3;
   const baseDelay = 1000; // 1 second
+  const retryBackoff = 1.5; // Exponential backoff multiplier
 
   const retryFetch = async (attempt: number = 1): Promise<string | null> => {
     try {
@@ -132,7 +142,7 @@ export const getUserRole = async (): Promise<string | null> => {
       console.error(`Attempt ${attempt} failed:`, error);
 
       if (attempt < maxRetries) {
-        const delay = baseDelay * Math.pow(2, attempt - 1); // Exponential backoff
+        const delay = baseDelay * Math.pow(retryBackoff, attempt - 1);
         console.warn(`Network error occurred. Retrying in ${delay}ms...`);
         await new Promise(resolve => setTimeout(resolve, delay));
         return retryFetch(attempt + 1);
