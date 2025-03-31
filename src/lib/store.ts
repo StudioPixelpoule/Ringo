@@ -69,6 +69,17 @@ export const useUserStore = create<UserStore>((set, get) => ({
   createUser: async ({ email, password, role }) => {
     set({ loading: true, error: null });
     try {
+      // Check if user exists
+      const { data: existingUser } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', email.toLowerCase())
+        .maybeSingle();
+
+      if (existingUser) {
+        throw new Error('Un utilisateur avec cet email existe déjà');
+      }
+
       // Call Edge Function to create user
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
         method: 'POST',
@@ -80,13 +91,14 @@ export const useUserStore = create<UserStore>((set, get) => ({
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to create user');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create user');
       }
 
       // Refresh user list
       await get().fetchUsers();
     } catch (error) {
+      console.error('Error creating user:', error);
       set({ error: error instanceof Error ? error.message : 'Failed to create user' });
       throw error;
     } finally {
@@ -149,7 +161,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
       if (!response.ok) {
         const errorData = await response.json();
         console.error('Server response:', errorData);
-        throw new Error(errorData.error || 'Failed to delete user');
+        throw new Error(errorData.error || `Failed to delete user: ${response.status} ${response.statusText}`);
       }
 
       // Update local state

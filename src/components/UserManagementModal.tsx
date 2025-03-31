@@ -1,20 +1,33 @@
 import React, { useState, useEffect } from 'react';
-import { X, Check, UserCog, AlertTriangle, UserPlus, Trash2, Users, Loader2 } from 'lucide-react';
+import { 
+  X, 
+  Send, 
+  Check, 
+  Clock, 
+  CheckCircle, 
+  XCircle, 
+  AlertTriangle, 
+  Ban,
+  UserCog,
+  UserPlus,
+  Trash2,
+  Loader2
+} from 'lucide-react';
 import { useUserStore, Profile } from '../lib/store';
 
 export function UserManagementModal() {
-  const {
-    users,
-    loading,
-    error,
-    isModalOpen,
+  const { 
+    users, 
+    loading, 
+    error, 
+    isModalOpen, 
     userRole: currentUserRole,
-    fetchUsers,
+    fetchUsers, 
+    createUser,
     updateUser,
     deleteUser,
-    createUser,
     setModalOpen,
-    clearError,
+    clearError 
   } = useUserStore();
 
   const [isAddingUser, setIsAddingUser] = useState(false);
@@ -37,29 +50,13 @@ export function UserManagementModal() {
     }
   }, [isModalOpen, fetchUsers, clearError]);
 
-  const handleRoleChange = async (user: Profile, newRole: 'admin' | 'user' | 'super_admin') => {
-    if (window.confirm(`Êtes-vous sûr de vouloir changer le rôle de ${user.email} en ${newRole} ?`)) {
-      await updateUser(user.id, { role: newRole });
-    }
+  const validateEmail = (email: string): boolean => {
+    const emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+    return emailRegex.test(email.trim());
   };
 
-  const handleStatusChange = async (user: Profile) => {
-    const newStatus = !user.status;
-    const action = newStatus ? 'activer' : 'désactiver';
-    if (window.confirm(`Êtes-vous sûr de vouloir ${action} l'utilisateur ${user.email} ?`)) {
-      await updateUser(user.id, { status: newStatus });
-    }
-  };
-
-  const handleDelete = async (user: Profile) => {
-    if (window.confirm(`⚠️ ATTENTION: Cette action est irréversible!\n\nÊtes-vous sûr de vouloir supprimer définitivement l'utilisateur ${user.email} ?\nToutes ses données seront perdues.`)) {
-      setIsDeleting(user.id);
-      try {
-        await deleteUser(user.id);
-      } finally {
-        setIsDeleting(null);
-      }
-    }
+  const validatePassword = (password: string): boolean => {
+    return password.length >= 8;
   };
 
   const handleCreateUser = async (e: React.FormEvent) => {
@@ -67,14 +64,13 @@ export function UserManagementModal() {
     if (!newUserEmail || !newUserPassword || isSubmitting) return;
 
     // Validate email format
-    const emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
-    if (!emailRegex.test(newUserEmail.trim())) {
+    if (!validateEmail(newUserEmail)) {
       setLocalError('Format d\'email invalide');
       return;
     }
 
     // Validate password length
-    if (newUserPassword.length < 8) {
+    if (!validatePassword(newUserPassword)) {
       setLocalError('Le mot de passe doit contenir au moins 8 caractères');
       return;
     }
@@ -99,6 +95,31 @@ export function UserManagementModal() {
       setLocalError(error instanceof Error ? error.message : 'Une erreur est survenue lors de la création de l\'utilisateur');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleRoleChange = async (user: Profile, newRole: 'admin' | 'user' | 'super_admin') => {
+    if (window.confirm(`Êtes-vous sûr de vouloir changer le rôle de ${user.email} en ${newRole} ?`)) {
+      await updateUser(user.id, { role: newRole });
+    }
+  };
+
+  const handleStatusChange = async (user: Profile) => {
+    const newStatus = !user.status;
+    const action = newStatus ? 'activer' : 'désactiver';
+    if (window.confirm(`Êtes-vous sûr de vouloir ${action} l'utilisateur ${user.email} ?`)) {
+      await updateUser(user.id, { status: newStatus });
+    }
+  };
+
+  const handleDelete = async (user: Profile) => {
+    if (window.confirm(`⚠️ ATTENTION: Cette action est irréversible!\n\nÊtes-vous sûr de vouloir supprimer définitivement l'utilisateur ${user.email} ?\nToutes ses données seront perdues.`)) {
+      setIsDeleting(user.id);
+      try {
+        await deleteUser(user.id);
+      } finally {
+        setIsDeleting(null);
+      }
     }
   };
 

@@ -91,44 +91,47 @@ export const getUserRole = async (): Promise<string | null> => {
 
   const retryFetch = async (attempt: number = 1): Promise<string | null> => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.warn('No authenticated user found');
+      // Check and refresh session if needed
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      if (!session) {
+        console.warn('No session found, redirecting to login');
         window.location.href = '/login';
         return null;
       }
 
-      const { data, error } = await supabase
+      // Get user profile with role
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('role, status')
-        .eq('id', user.id)
+        .eq('id', session.user.id)
         .single();
 
-      if (error) {
-        if (error.code === 'PGRST301' || error.code === '401') {
-          console.warn('Authentication error:', error);
+      if (profileError) {
+        if (profileError.code === 'PGRST301' || profileError.code === '401') {
+          console.warn('Authentication error:', profileError);
           window.location.href = '/login';
           return null;
         }
-        throw error;
+        throw profileError;
       }
 
-      if (!data) {
+      if (!profile) {
         console.warn('No profile found for user');
         return null;
       }
 
-      if (!data.status) {
+      if (!profile.status) {
         console.warn('User profile is inactive');
         await supabase.auth.signOut();
         return null;
       }
 
-      return data.role;
+      return profile.role;
     } catch (error) {
       console.error(`Attempt ${attempt} failed:`, error);
 
-      if (attempt < maxRetries && error instanceof TypeError && error.message === 'Failed to fetch') {
+      if (attempt < maxRetries) {
         const delay = baseDelay * Math.pow(2, attempt - 1); // Exponential backoff
         console.warn(`Network error occurred. Retrying in ${delay}ms...`);
         await new Promise(resolve => setTimeout(resolve, delay));
