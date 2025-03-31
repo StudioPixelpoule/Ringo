@@ -83,13 +83,18 @@ serve(async (req) => {
 
     // Create profile
     const { error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .insert([{
-        id: authData.user.id,
-        email: email.toLowerCase(),
-        role,
-        status: true
-      }]);
+  .from('profiles')
+  .upsert([{
+    id: authData.user.id,
+    email: email.toLowerCase(),
+    role,
+    status: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  }], {
+    onConflict: 'id', // Spécifie la colonne pour gérer les conflits
+    ignoreDuplicates: false // Met à jour l'enregistrement s'il existe déjà
+  });
 
     if (profileError) {
       // Rollback: delete auth user if profile creation fails
