@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Check, UserCog, AlertCircle, UserPlus, Trash2, Users, Loader2 } from 'lucide-react';
 import { useUserStore, Profile } from '../lib/store';
 
@@ -24,6 +24,7 @@ export function UserManagementModal() {
   const [roleFilter, setRoleFilter] = useState<'all' | 'super_admin' | 'admin' | 'user'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     if (isModalOpen) {
@@ -49,7 +50,12 @@ export function UserManagementModal() {
 
   const handleDelete = async (user: Profile) => {
     if (window.confirm(`⚠️ ATTENTION: Cette action est irréversible!\n\nÊtes-vous sûr de vouloir supprimer définitivement l'utilisateur ${user.email} ?\nToutes ses données seront perdues.`)) {
-      await deleteUser(user.id);
+      setIsDeleting(true);
+      try {
+        await deleteUser(user.id);
+      } finally {
+        setIsDeleting(false);
+      }
     }
   };
 
@@ -329,15 +335,19 @@ export function UserManagementModal() {
                         <div className="flex items-center justify-end gap-2">
                           <button
                             onClick={() => handleDelete(user)}
+                            disabled={isDeleting || (!isSuperAdmin && user.role === 'super_admin')}
                             className={`text-red-500 hover:text-red-700 p-2 hover:bg-red-50 rounded-lg transition-colors inline-flex items-center ${
                               !isSuperAdmin && user.role === 'super_admin'
                                 ? 'opacity-50 cursor-not-allowed'
                                 : ''
                             }`}
                             title="Supprimer définitivement"
-                            disabled={!isSuperAdmin && user.role === 'super_admin'}
                           >
-                            <Trash2 size={18} />
+                            {isDeleting ? (
+                              <Loader2 size={18} className="animate-spin" />
+                            ) : (
+                              <Trash2 size={18} />
+                            )}
                           </button>
                         </div>
                       </td>

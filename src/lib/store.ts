@@ -80,33 +80,19 @@ export const useUserStore = create<UserStore>((set, get) => ({
         throw new Error('Un utilisateur avec cet email existe déjà');
       }
 
-      // Create user with auth API
-      const { data: authData, error: signUpError } = await supabase.auth.signUp({
-        email: email.toLowerCase(),
-        password,
-        options: {
-          data: { role },
-          emailRedirectTo: `${window.location.origin}/login`
-        }
+      // Call Edge Function to create user
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password, role })
       });
 
-      if (signUpError) throw signUpError;
-      if (!authData.user) throw new Error('Échec de la création de l\'utilisateur');
-
-      // Create profile
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert([{
-          id: authData.user.id,
-          email: email.toLowerCase(),
-          role,
-          status: true
-        }]);
-
-      if (profileError) {
-        // Rollback: delete auth user if profile creation fails
-        await supabase.auth.admin.deleteUser(authData.user.id);
-        throw profileError;
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create user');
       }
 
       // Refresh user list
@@ -139,22 +125,20 @@ export const useUserStore = create<UserStore>((set, get) => ({
   deleteUser: async (id: string) => {
     set({ loading: true, error: null });
     try {
-      // First deactivate the user
-      const { error: deactivateError } = await supabase
-        .from('profiles')
-        .update({ 
-          status: false, 
-          updated_at: new Date().toISOString() 
-        })
-        .eq('id', id);
+      // Call Edge Function to delete user
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-user`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ user_id: id })
+      });
 
-      if (deactivateError) throw deactivateError;
-
-      // Delete user data
-      const { error: deleteError } = await supabase
-        .rpc('delete_user_data_v2', { user_id_param: id });
-
-      if (deleteError) throw deleteError;
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to delete user');
+      }
 
       // Update local state
       const users = get().users;

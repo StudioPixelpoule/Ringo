@@ -19,7 +19,7 @@ export interface ChatMessage {
   content: string;
 }
 
-const SYSTEM_PROMPT = `Tu es Ringo, un assistant IA expert en analyse de documents.
+const SYSTEM_PROMPT = `Tu es un expert en analyse de documents spécialisé dans la génération de rapports.
 
 Pour une meilleure lisibilité, structure tes réponses avec :
 
@@ -27,55 +27,27 @@ Pour une meilleure lisibilité, structure tes réponses avec :
 - Des sous-titres en utilisant "###" pour les sous-sections
 - Des points importants en **gras**
 - Des listes à puces pour énumérer des éléments
-- Des sauts de ligne pour aérer le texte
-
-Pour les documents textuels :
-- Analyse le contenu et la structure en profondeur
-- Identifie et explique les sections principales
-- Met en évidence les informations critiques
-- Propose une synthèse détaillée et argumentée
-- Fournis des exemples concrets tirés des documents
-
-Pour l'analyse croisée des documents :
-- Compare systématiquement les contenus de manière approfondie
-- Identifie et explique les points communs et les différences
-- Relève et analyse les éventuelles contradictions
-- Montre comment les documents se complètent et s'enrichissent
-- Propose une synthèse globale intégrant tous les aspects
-
-Pour chaque point important :
-- Cite les passages pertinents des documents
-- Explique le contexte et les implications
-- Fournis une analyse détaillée
-- Propose des recommandations concrètes
-
-À la fin de chaque réponse, propose des suggestions pour approfondir l'analyse :
-
-## Pour approfondir...
-- "Souhaitez-vous des détails supplémentaires sur certains points ?"
-- "Je peux analyser plus en profondeur certains aspects, lesquels vous intéressent ?"
-- "Voulez-vous explorer d'autres perspectives ou angles d'analyse ?"
-
-Sois exhaustif et précis dans tes réponses tout en maintenant une structure claire.`;
+- Des sauts de ligne pour aérer le texte`;
 
 // Constants for token limits
 const MAX_TOKENS = 128000; // GPT-4 Turbo context window
-const MAX_TOKENS_PER_DOC = Math.floor(MAX_TOKENS * 0.7 / 10); // Allow up to 10 docs
-const MAX_SYSTEM_TOKENS = 2000;
-const MAX_HISTORY_TOKENS = 4000;
+const MAX_TOKENS_PER_DOC = Math.floor(MAX_TOKENS * 0.7); // 70% of context for documents
+const MAX_SYSTEM_TOKENS = 2000; // Reserve 2K tokens for system messages
+const MAX_HISTORY_TOKENS = 4000; // Reserve 4K tokens for conversation history
 
+// Function to estimate tokens (4 chars ≈ 1 token)
 function estimateTokens(text: string): number {
-  // GPT models use ~4 characters per token on average
   return Math.ceil(text.length / 4);
 }
 
-function truncateText(text: string, maxTokens: number): string {
+// Function to truncate text to a specific token limit
+function truncateToTokenLimit(text: string, maxTokens: number): string {
   const estimatedTokens = estimateTokens(text);
   if (estimatedTokens <= maxTokens) {
     return text;
   }
 
-  // Split into paragraphs and accumulate until we hit the token limit
+  // Split into paragraphs and accumulate until limit
   const paragraphs = text.split('\n\n');
   let result = '';
   let currentTokens = 0;
@@ -92,20 +64,20 @@ function truncateText(text: string, maxTokens: number): string {
   return result + '\n\n[Texte tronqué pour respecter la limite de tokens]';
 }
 
+// Function to find relevant content based on query
 function findRelevantContent(query: string, content: string, maxTokens: number): string {
   const paragraphs = content.split('\n\n');
   
-  // Score paragraphs based on query relevance
+  // Score paragraphs based on relevance
   const scoredParagraphs = paragraphs.map(p => {
-    // Split query into words and phrases
-    const queryTerms = [
-      ...query.toLowerCase().split(/\s+/),
-      ...query.toLowerCase().match(/".+?"/g)?.map(m => m.slice(1, -1)) || []
-    ];
-
+    // Split query into words
+    const queryTerms = query.toLowerCase().split(/\s+/);
+    
     // Calculate base score from term matches
     const baseScore = queryTerms.reduce((score, term) => {
-      const regex = new RegExp(term, 'gi');
+      // Escape special regex characters
+      const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(escapedTerm, 'gi');
       const matches = (p.match(regex) || []).length;
       return score + matches;
     }, 0);
@@ -114,7 +86,7 @@ function findRelevantContent(query: string, content: string, maxTokens: number):
     const hasHeader = /^#{1,3}\s/.test(p);
     const hasNumbers = /\d+/.test(p);
     const hasKeyPhrases = /(important|clé|critique|essentiel|conclusion|recommand|analyse|résultat)/i.test(p);
-    const isShortParagraph = p.length < 200; // Prefer concise paragraphs
+    const isShortParagraph = p.length < 200;
 
     // Calculate final score with weights
     let finalScore = baseScore;
@@ -132,7 +104,6 @@ function findRelevantContent(query: string, content: string, maxTokens: number):
   // Build context with most relevant content
   let result = '';
   let tokens = 0;
-  let contextAdded = false;
 
   // Always include high-scoring paragraphs
   for (const para of scoredParagraphs) {
@@ -140,15 +111,11 @@ function findRelevantContent(query: string, content: string, maxTokens: number):
     
     const paraTokens = estimateTokens(para.text);
     if (tokens + paraTokens > maxTokens) {
-      if (!contextAdded && result === '') {
-        result = para.text;
-      }
       break;
     }
     
     result += (result ? '\n\n' : '') + para.text;
     tokens += paraTokens;
-    contextAdded = true;
   }
 
   // If no relevant content found, include introduction and conclusion
@@ -157,13 +124,14 @@ function findRelevantContent(query: string, content: string, maxTokens: number):
     const conclusion = paragraphs[paragraphs.length - 1] || '';
     result = [intro, conclusion].filter(Boolean).join('\n\n');
     if (estimateTokens(result) > maxTokens) {
-      result = truncateText(result, maxTokens);
+      result = truncateToTokenLimit(result, maxTokens);
     }
   }
 
   return result;
 }
 
+// Function to prepare document content
 function prepareDocumentContent(documents: string[], query: string): string {
   // Calculate token budget per document
   const maxTokensPerDoc = Math.floor(
@@ -287,7 +255,7 @@ export async function generateChatResponse(messages: ChatMessage[], documentCont
 }
 
 export async function generateChatResponseStreaming(
-  messages: ChatMessage[],
+  messages: ChatMessage[], 
   documentContent?: string,
   onChunk: (chunk: string) => void
 ): Promise<string> {
@@ -298,14 +266,6 @@ export async function generateChatResponseStreaming(
 
     const preparedMessages = prepareMessages(messages, documentContent);
     let fullResponse = '';
-    let pendingFormatting = {
-      codeBlock: false,
-      listItem: false,
-      heading: false,
-      emphasis: false,
-      strong: false,
-      link: false
-    };
 
     const stream = await openai.chat.completions.create({
       model: 'gpt-4-turbo-preview',
@@ -322,37 +282,7 @@ export async function generateChatResponseStreaming(
       const content = chunk.choices[0]?.delta?.content || '';
       if (!content) continue;
 
-      // Detect and handle formatting elements
-      if (content.includes('```')) {
-        pendingFormatting.codeBlock = !pendingFormatting.codeBlock;
-      }
-      if (content.match(/^#+\s/)) {
-        pendingFormatting.heading = true;
-      }
-      if (content.includes('\n')) {
-        pendingFormatting.heading = false;
-        pendingFormatting.listItem = false;
-      }
-      if (content.match(/^[-*]\s/)) {
-        pendingFormatting.listItem = true;
-      }
-      if (content.includes('**')) {
-        pendingFormatting.strong = !pendingFormatting.strong;
-      }
-      if (content.includes('*') && !content.includes('**')) {
-        pendingFormatting.emphasis = !pendingFormatting.emphasis;
-      }
-      if (content.includes('[')) {
-        pendingFormatting.link = true;
-      }
-      if (content.includes(')') && pendingFormatting.link) {
-        pendingFormatting.link = false;
-      }
-
-      // Add content to full response
       fullResponse += content;
-
-      // Send chunk with formatting preserved
       onChunk(content);
     }
 

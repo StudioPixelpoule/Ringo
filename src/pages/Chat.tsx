@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, ArrowRight, LogOut, Database, FileText, Globe, AlertTriangle } from 'lucide-react';
+import { Users, ArrowRight, LogOut, Database, FileText, Globe, AlertTriangle, Settings } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 import { Logo } from '../components/Logo';
 import { SmallLogo } from '../components/SmallLogo';
@@ -13,13 +13,13 @@ import { FileExplorer } from '../components/FileExplorer';
 import { ConversationList } from '../components/ConversationList';
 import { DocumentList } from '../components/DocumentList';
 import { MessageItem } from '../components/MessageItem';
+import { ReportManager } from '../components/ReportManager';
 import { ReportTemplateManager } from '../components/ReportTemplateManager';
-import { ReportGeneratorWidget } from '../components/ReportGeneratorWidget';
 import { FeedbackButton } from '../components/FeedbackButton';
 import { FeedbackManager } from '../components/FeedbackManager';
 import { WebContentImporter } from '../components/WebContentImporter';
 import { ErrorLogViewer } from '../components/ErrorLogViewer';
-import { supabase } from '../lib/supabase';
+import { supabase, getUserRole } from '../lib/supabase';
 import { useUserStore } from '../lib/store';
 import { useDocumentStore } from '../lib/documentStore';
 import { useConversationStore } from '../lib/conversationStore';
@@ -39,6 +39,7 @@ export function Chat({ session }: ChatProps) {
   const [isWebsiteImportOpen, setWebsiteImportOpen] = useState(false);
   const [userHasScrolled, setUserHasScrolled] = useState(false);
   const [isErrorLogOpen, setErrorLogOpen] = useState(false);
+  const [isReportManagerOpen, setReportManagerOpen] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -63,80 +64,50 @@ export function Chat({ session }: ChatProps) {
     .pop()?.index;
 
   useEffect(() => {
-    const errorHandler = (event: ErrorEvent) => {
-      logError(event.error, {
-        location: window.location.href,
-        timestamp: new Date().toISOString()
-      });
-    };
-
-    const rejectionHandler = (event: PromiseRejectionEvent) => {
-      logError(
-        event.reason instanceof Error ? event.reason : new Error(String(event.reason)),
-        {
-          type: 'unhandled_rejection',
-          location: window.location.href,
-          timestamp: new Date().toISOString()
-        }
-      );
-    };
-
-    window.addEventListener('error', errorHandler);
-    window.addEventListener('unhandledrejection', rejectionHandler);
-
-    return () => {
-      window.removeEventListener('error', errorHandler);
-      window.removeEventListener('unhandledrejection', rejectionHandler);
-    };
-  }, []);
-
-  useEffect(() => {
     const fetchUserRole = async () => {
-      try {
-        // First validate session
-        const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) throw sessionError;
-        if (!currentSession) {
-          console.warn('No active session');
-          window.location.href = '/login';
-          return;
-        }
+      const maxRetries = 3;
+      const baseDelay = 1000; // 1 second
 
-        // Then fetch profile
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('role, status')
-          .eq('id', session.user.id)
-          .single();
-
-        if (error) {
-          console.error('Error fetching user profile:', error);
-          if (error.code === 'PGRST301' || error.code === '401') {
-            window.location.href = '/login';
-            return;
+      const retryFetch = async (attempt: number = 1): Promise<void> => {
+        try {
+          const role = await getUserRole();
+          if (role) {
+            setUserRole(role);
+          } else {
+            throw new Error('Failed to get user role');
           }
-          throw error;
-        }
+        } catch (error) {
+          // Log the error for debugging
+          console.error(`Attempt ${attempt} failed:`, error);
 
-        if (!data) {
-          console.warn('No profile found for user');
-          return;
-        }
+          // Check if we should retry
+          if (attempt < maxRetries) {
+            const delay = baseDelay * Math.pow(2, attempt - 1); // Exponential backoff
+            console.log(`Retrying in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            return retryFetch(attempt + 1);
+          }
 
-        if (!data.status) {
-          console.warn('User profile is inactive');
-          await supabase.auth.signOut();
-          return;
+          // If all retries failed, check error type
+          if (error instanceof Error) {
+            if (error.message.includes('JWT expired') || 
+                error.message.includes('Invalid JWT') ||
+                error.message.includes('Failed to fetch')) {
+              console.error('Authentication error:', error);
+              window.location.href = '/login';
+              return;
+            }
+            throw error;
+          }
+          throw new Error('Failed to fetch user role');
         }
+      };
 
-        setUserRole(data.role);
+      try {
+        await retryFetch();
       } catch (error) {
-        console.error('Error in fetchUserRole:', error);
-        if (error?.message?.includes('JWT expired') || 
-            error?.message?.includes('Invalid JWT')) {
-          window.location.href = '/login';
-          return;
-        }
+        console.error('All retries failed:', error);
+        logError(error);
       }
     };
 
@@ -311,7 +282,7 @@ export function Chat({ session }: ChatProps) {
                 className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
                 aria-label="Report templates"
               >
-                <FileText size={18} strokeWidth={2.5} />
+                <Settings size={18} strokeWidth={2.5} />
               </button>
               {/* Show feedback manager only to super admin */}
               {isSuperAdmin && <FeedbackManager />}
@@ -415,7 +386,13 @@ export function Chat({ session }: ChatProps) {
       </div>
 
       {currentConversation && conversationDocuments.length > 0 && (
-        <ReportGeneratorWidget />
+        <button
+          onClick={() => setReportManagerOpen(true)}
+          className="fixed bottom-24 right-8 z-10 flex items-center gap-2 bg-white p-3 rounded-full shadow-md hover:shadow-lg transition-all"
+        >
+          <FileText size={20} color="#f15922" />
+          <span className="text-[#f15922] font-medium">Rapports</span>
+        </button>
       )}
 
       <FeedbackButton />
@@ -445,6 +422,12 @@ export function Chat({ session }: ChatProps) {
           />
         </>
       )}
+
+      {/* Report Manager */}
+      <ReportManager
+        isOpen={isReportManagerOpen}
+        onClose={() => setReportManagerOpen(false)}
+      />
       
       {/* Only render error log viewer for super admin */}
       {isSuperAdmin && (
