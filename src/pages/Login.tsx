@@ -49,7 +49,25 @@ export function Login() {
         throw signInError;
       }
 
-      // If successful, navigate to home
+      // Check if user needs to change password
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: userProfile, error: userProfileError } = await supabase
+          .from('profiles')
+          .select('password_changed')
+          .eq('id', user.id)
+          .single();
+        
+        if (userProfileError) throw userProfileError;
+        
+        // If password_changed is false or null, redirect to change password page
+        if (userProfile && (userProfile.password_changed === false || userProfile.password_changed === null)) {
+          navigate('/change-password');
+          return;
+        }
+      }
+
+      // If password is already changed, navigate to home
       navigate('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Une erreur est survenue');
