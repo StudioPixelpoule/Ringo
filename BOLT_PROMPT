@@ -1,0 +1,259 @@
+# RINGO - Assistant IA pour l'Analyse de Documents
+
+## Description du Projet
+
+RINGO est une application web moderne qui permet aux utilisateurs d'analyser des documents en utilisant l'IA. Elle offre une interface intuitive pour télécharger, organiser et analyser des documents de différents formats (PDF, Word, Excel, Audio, etc.).
+
+## Technologies Principales
+
+- React 18 avec TypeScript
+- Vite comme bundler
+- Supabase pour la base de données et l'authentification
+- OpenAI GPT-4 pour l'analyse de documents
+- Tailwind CSS pour le styling
+- Framer Motion pour les animations
+- Lucide React pour les icônes
+
+## Architecture de l'Application
+
+### Base de Données
+
+1. Tables Principales :
+   - `profiles` : Gestion des utilisateurs et rôles
+   - `folders` : Organisation hiérarchique des documents
+   - `documents` : Stockage des métadonnées des documents
+   - `document_contents` : Contenu extrait des documents
+   - `conversations` : Conversations avec l'IA
+   - `messages` : Messages dans les conversations
+   - `conversation_documents` : Liaison documents-conversations
+   - `user_feedback` : Retours utilisateurs
+   - `error_logs` : Journalisation des erreurs
+
+2. Fonctions et Triggers :
+   - Gestion automatique des dates de mise à jour
+   - Nettoyage automatique des données temporaires
+   - Validation des données et contraintes
+
+3. Politiques de Sécurité (RLS) :
+   - Isolation des données par utilisateur
+   - Contrôle d'accès basé sur les rôles
+   - Protection des ressources sensibles
+
+### Structure des Dossiers
+
+```
+src/
+├── components/     # Composants React réutilisables
+├── lib/           # Utilitaires et services
+├── pages/         # Composants de pages
+└── styles/        # Styles CSS globaux
+
+supabase/
+├── functions/     # Edge Functions
+└── migrations/    # Migrations de base de données
+```
+
+### Fonctionnalités Clés
+
+1. Authentification et Autorisation :
+   - Connexion par email/mot de passe
+   - Gestion des rôles (super_admin, admin, user)
+   - Changement de mot de passe obligatoire
+   - Système d'invitation des utilisateurs
+
+2. Gestion des Documents :
+   - Upload de fichiers avec support multi-formats
+   - Extraction de contenu (texte, données)
+   - Organisation en dossiers
+   - Prévisualisation des documents
+
+3. Conversations IA :
+   - Chat contextuel avec les documents
+   - Streaming des réponses
+   - Historique des conversations
+   - Liaison documents-conversations
+
+4. Rapports :
+   - Génération de rapports basés sur les documents
+   - Templates personnalisables
+   - Export en différents formats
+   - Organisation en dossiers
+
+5. Administration :
+   - Gestion des utilisateurs
+   - Monitoring des erreurs
+   - Gestion des retours utilisateurs
+   - Configuration système
+
+### Styles et Design
+
+1. Thème Principal :
+   - Couleurs : 
+     - Principal : #f15922 (orange)
+     - Secondaire : #dba747 (doré)
+     - Accent : #2F4F4F (vert foncé)
+   - Police : Inter, system-ui
+   - Design neumorphique pour les boutons et cartes
+
+2. Composants UI :
+   - Boutons neumorphiques
+   - Cartes avec ombres douces
+   - Animations fluides
+   - Indicateurs de chargement élégants
+
+### Sécurité
+
+1. Authentification :
+   - Validation des emails
+   - Force minimale des mots de passe
+   - Protection contre les attaques par force brute
+   - Gestion des sessions
+
+2. Autorisation :
+   - Politiques RLS strictes
+   - Vérification des rôles
+   - Protection des routes
+   - Validation des tokens
+
+3. Protection des Données :
+   - Chiffrement des fichiers
+   - Validation des types MIME
+   - Nettoyage des métadonnées
+   - Limites de taille de fichiers
+
+### Déploiement
+
+1. Configuration :
+   - Variables d'environnement
+   - Configuration Vite
+   - Configuration Supabase
+   - Configuration OpenAI
+
+2. Performance :
+   - Chunking des fichiers volumineux
+   - Mise en cache des documents
+   - Lazy loading des composants
+   - Optimisation des images
+
+3. Monitoring :
+   - Journalisation des erreurs
+   - Suivi des performances
+   - Alertes système
+   - Métriques d'utilisation
+
+## Instructions de Développement
+
+1. Configuration Initiale :
+   ```bash
+   # Installation des dépendances
+   npm install
+   
+   # Configuration de l'environnement
+   cp .env.example .env
+   
+   # Démarrage du serveur de développement
+   npm run dev
+   ```
+
+2. Structure des Commits :
+   ```
+   type(scope): description
+   
+   - feat: Nouvelle fonctionnalité
+   - fix: Correction de bug
+   - docs: Documentation
+   - style: Formatage
+   - refactor: Refactorisation
+   - test: Tests
+   - chore: Maintenance
+   ```
+
+3. Standards de Code :
+   - ESLint pour le linting
+   - Prettier pour le formatage
+   - TypeScript strict mode
+   - Tests unitaires avec Vitest
+
+4. Gestion des Erreurs :
+   - Logging centralisé
+   - Retours utilisateur clairs
+   - Récupération gracieuse
+   - Maintenance des sessions
+
+## Bonnes Pratiques
+
+1. Code :
+   - Composants fonctionnels React
+   - Hooks personnalisés pour la logique
+   - Types TypeScript stricts
+   - Documentation des fonctions
+
+2. Performance :
+   - Memoization des composants
+   - Optimisation des requêtes
+   - Gestion du state efficace
+   - Chunking des gros fichiers
+
+3. Sécurité :
+   - Validation des entrées
+   - Sanitization des sorties
+   - Protection CSRF
+   - Rate limiting
+
+4. UX :
+   - Feedback immédiat
+   - Messages d'erreur clairs
+   - Animations fluides
+   - Interface responsive
+
+## Workflow de Développement
+
+1. Nouvelle Fonctionnalité :
+   - Créer une branche feature/
+   - Développer avec TDD
+   - Tester localement
+   - Créer une PR
+
+2. Correction de Bug :
+   - Créer une branche fix/
+   - Reproduire le bug
+   - Corriger et tester
+   - Documenter la solution
+
+3. Refactorisation :
+   - Identifier les améliorations
+   - Créer une branche refactor/
+   - Maintenir les tests
+   - Vérifier les performances
+
+4. Déploiement :
+   - Tests de pré-production
+   - Vérification des migrations
+   - Backup des données
+   - Déploiement progressif
+
+## Maintenance
+
+1. Mises à Jour :
+   - Dépendances npm
+   - Versions Supabase
+   - Modèles OpenAI
+   - Correctifs de sécurité
+
+2. Monitoring :
+   - Logs d'erreurs
+   - Performances système
+   - Utilisation des ressources
+   - Feedback utilisateurs
+
+3. Backup :
+   - Base de données
+   - Fichiers utilisateurs
+   - Configuration système
+   - Logs système
+
+4. Documentation :
+   - Guide utilisateur
+   - Documentation technique
+   - Changelog
+   - Procédures de déploiement

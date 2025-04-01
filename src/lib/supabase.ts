@@ -28,6 +28,8 @@ supabase.auth.getSession().catch(console.error);
 
 // Set up auth state change listener
 supabase.auth.onAuthStateChange((event, session) => {
+  console.log('Auth state change event:', event);
+  
   if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
     // Clear any cached data
     localStorage.clear();
@@ -101,6 +103,8 @@ export const getUserRole = async (): Promise<string | null> => {
 
   const retryFetch = async (attempt: number = 1): Promise<string | null> => {
     try {
+      console.log(`getUserRole attempt ${attempt}...`);
+      
       // Check and refresh session if needed
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       if (sessionError) throw sessionError;
@@ -137,6 +141,7 @@ export const getUserRole = async (): Promise<string | null> => {
         return null;
       }
 
+      console.log('User role retrieved:', profile.role);
       return profile.role;
     } catch (error) {
       console.error(`Attempt ${attempt} failed:`, error);

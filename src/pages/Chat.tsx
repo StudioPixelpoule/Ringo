@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, ArrowRight, LogOut, Database, FileText, Globe, AlertTriangle, Settings } from 'lucide-react';
+import { Users, ArrowRight, LogOut, Database, FileText, Globe, AlertTriangle, Settings, Clock } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 import { Logo } from '../components/Logo';
 import { SmallLogo } from '../components/SmallLogo';
@@ -19,6 +19,8 @@ import { FeedbackButton } from '../components/FeedbackButton';
 import { FeedbackManager } from '../components/FeedbackManager';
 import { WebContentImporter } from '../components/WebContentImporter';
 import { ErrorLogViewer } from '../components/ErrorLogViewer';
+import { HelpRequestManager } from '../components/HelpRequestManager';
+import { HelpRequestButton } from '../components/HelpRequestButton';
 import { supabase, getUserRole } from '../lib/supabase';
 import { useUserStore } from '../lib/store';
 import { useDocumentStore } from '../lib/documentStore';
@@ -28,11 +30,13 @@ import './Chat.css';
 
 interface ChatProps {
   session: Session;
+  userRole?: string;
+  authInitialized?: boolean;
 }
 
-export function Chat({ session }: ChatProps) {
+export function Chat({ session, userRole: propUserRole, authInitialized }: ChatProps) {
   const [input, setInput] = useState('');
-  const [userRole, setUserRole] = useState<string>('user');
+  const [userRole, setUserRole] = useState<string>(propUserRole || 'user');
   const [isFileExplorerOpen, setFileExplorerOpen] = useState(false);
   const [isFileManagementOpen, setFileManagementOpen] = useState(false);
   const [isTemplateManagerOpen, setTemplateManagerOpen] = useState(false);
@@ -64,56 +68,66 @@ export function Chat({ session }: ChatProps) {
     .pop()?.index;
 
   useEffect(() => {
-    const fetchUserRole = async () => {
-      const maxRetries = 3;
-      const baseDelay = 1000; // 1 second
+    // Only fetch user role if not provided as prop
+    if (!propUserRole && !authInitialized) {
+      const fetchUserRole = async () => {
+        const maxRetries = 3;
+        const baseDelay = 1000; // 1 second
 
-      const retryFetch = async (attempt: number = 1): Promise<void> => {
-        try {
-          const role = await getUserRole();
-          if (role) {
-            setUserRole(role);
-          } else {
-            throw new Error('Failed to get user role');
-          }
-        } catch (error) {
-          // Log the error for debugging
-          console.error(`Attempt ${attempt} failed:`, error);
-
-          // Check if we should retry
-          if (attempt < maxRetries) {
-            const delay = baseDelay * Math.pow(2, attempt - 1); // Exponential backoff
-            console.log(`Retrying in ${delay}ms...`);
-            await new Promise(resolve => setTimeout(resolve, delay));
-            return retryFetch(attempt + 1);
-          }
-
-          // If all retries failed, check error type
-          if (error instanceof Error) {
-            if (error.message.includes('JWT expired') || 
-                error.message.includes('Invalid JWT') ||
-                error.message.includes('Failed to fetch')) {
-              console.error('Authentication error:', error);
-              window.location.href = '/login';
-              return;
+        const retryFetch = async (attempt: number = 1): Promise<void> => {
+          try {
+            console.log(`Chat component fetching user role (attempt ${attempt})...`);
+            const role = await getUserRole();
+            if (role) {
+              console.log('Chat component received role:', role);
+              setUserRole(role);
+            } else {
+              throw new Error('Failed to get user role');
             }
-            throw error;
+          } catch (error) {
+            // Log the error for debugging
+            console.error(`Attempt ${attempt} failed:`, error);
+
+            // Check if we should retry
+            if (attempt < maxRetries) {
+              const delay = baseDelay * Math.pow(2, attempt - 1); // Exponential backoff
+              console.log(`Retrying in ${delay}ms...`);
+              await new Promise(resolve => setTimeout(resolve, delay));
+              return retryFetch(attempt + 1);
+            }
+
+            // If all retries failed, check error type
+            if (error instanceof Error) {
+              if (error.message.includes('JWT expired') || 
+                  error.message.includes('Invalid JWT') ||
+                  error.message.includes('Failed to fetch')) {
+                console.error('Authentication error:', error);
+                window.location.href = '/login';
+                return;
+              }
+              throw error;
+            }
+            throw new Error('Failed to fetch user role');
           }
-          throw new Error('Failed to fetch user role');
+        };
+
+        try {
+          await retryFetch();
+        } catch (error) {
+          console.error('All retries failed:', error);
+          logError(error);
         }
       };
 
-      try {
-        await retryFetch();
-      } catch (error) {
-        console.error('All retries failed:', error);
-        logError(error);
-      }
-    };
-
-    fetchUserRole();
+      fetchUserRole();
+    } else if (propUserRole) {
+      // Use the role provided as prop
+      console.log('Using provided user role:', propUserRole);
+      setUserRole(propUserRole);
+    }
+    
     fetchConversations();
-  }, [session, fetchConversations]);
+  }, [session, fetchConversations, propUserRole, authInitialized]);
 
   // Handle scroll detection
   const handleScroll = () => {
@@ -215,21 +229,25 @@ export function Chat({ session }: ChatProps) {
               </div>
             </div>
           </h1>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
             <button 
               onClick={handleLogout}
               className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
               aria-label="Logout"
+              title="Déconnexion"
             >
               <LogOut size={18} strokeWidth={2.5} />
             </button>
+            <HelpRequestButton />
             <div className="border-l border-white/20 pl-4 flex flex-col">
               <span className="text-white/90 text-sm">{session.user.email}</span>
               {userRole === 'super_admin' ? (
                 <span className="text-white/70 text-xs">S-Admin</span>
               ) : userRole === 'admin' ? (
                 <span className="text-white/70 text-xs">Admin</span>
-              ) : null}
+              ) : (
+                <span className="text-white/70 text-xs">Utilisateur</span>
+              )}
             </div>
           </div>
         </div>
@@ -248,9 +266,11 @@ export function Chat({ session }: ChatProps) {
                 onClick={() => setUserModalOpen(true)}
                 className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
                 aria-label="User management"
+                title="Gestion des utilisateurs"
               >
                 <Users size={18} strokeWidth={2.5} />
               </button>
+              <HelpRequestManager />
             </>
           )}
           {/* Show document management buttons to both admin and super admin */}
@@ -260,6 +280,7 @@ export function Chat({ session }: ChatProps) {
                 onClick={() => setDocumentModalOpen(true)}
                 className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
                 aria-label="Document import"
+                title="Importer un document"
               >
                 <DocumentIcon />
               </button>
@@ -267,6 +288,7 @@ export function Chat({ session }: ChatProps) {
                 onClick={handleWebsiteImport}
                 className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
                 aria-label="Website import"
+                title="Importer du contenu web"
               >
                 <Globe size={18} strokeWidth={2.5} />
               </button>
@@ -274,6 +296,7 @@ export function Chat({ session }: ChatProps) {
                 onClick={() => setFileManagementOpen(true)}
                 className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
                 aria-label="File management"
+                title="Gestion des fichiers"
               >
                 <DocumentListIcon />
               </button>
@@ -281,6 +304,7 @@ export function Chat({ session }: ChatProps) {
                 onClick={() => setTemplateManagerOpen(true)}
                 className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white hover:text-white/90 focus:outline-none"
                 aria-label="Report templates"
+                title="Modèles de rapports"
               >
                 <Settings size={18} strokeWidth={2.5} />
               </button>
@@ -388,7 +412,7 @@ export function Chat({ session }: ChatProps) {
       {currentConversation && conversationDocuments.length > 0 && (
         <button
           onClick={() => setReportManagerOpen(true)}
-          className="fixed bottom-24 right-8 z-10 flex items-center gap-2 bg-white p-3 rounded-full shadow-md hover:shadow-lg transition-all"
+          className="fixed bottom-8 right-8 z-10 flex items-center gap-2 bg-white p-3 rounded-full shadow-md hover:shadow-lg transition-all"
         >
           <FileText size={20} color="#f15922" />
           <span className="text-[#f15922] font-medium">Rapports</span>
@@ -400,17 +424,21 @@ export function Chat({ session }: ChatProps) {
       {/* Only render user management modal for super admin */}
       {isSuperAdmin && <UserManagementModal />}
       
-      {/* Render other modals for admin and super admin */}
+      {/* Render document import modal for admin and super admin */}
+      {isAdminOrSuperAdmin && <DocumentImportModal />}
+      
+      {/* File explorer should be available to all users */}
+      <FileExplorer
+        isOpen={isFileExplorerOpen}
+        onClose={() => setFileExplorerOpen(false)}
+      />
+      
+      {/* Render other admin-only modals */}
       {isAdminOrSuperAdmin && (
         <>
-          <DocumentImportModal />
           <FileManagementModal
             isOpen={isFileManagementOpen}
             onClose={() => setFileManagementOpen(false)}
-          />
-          <FileExplorer
-            isOpen={isFileExplorerOpen}
-            onClose={() => setFileExplorerOpen(false)}
           />
           <ReportTemplateManager
             isOpen={isTemplateManagerOpen}
@@ -423,7 +451,7 @@ export function Chat({ session }: ChatProps) {
         </>
       )}
 
-      {/* Report Manager */}
+      {/* Report Manager should be available to all users */}
       <ReportManager
         isOpen={isReportManagerOpen}
         onClose={() => setReportManagerOpen(false)}

@@ -16,6 +16,16 @@ export async function logError(
   context?: Record<string, any>
 ) {
   try {
+    // Check if we're in a production environment
+    const isProduction = import.meta.env.PROD;
+    
+    // In development, just log to console
+    if (!isProduction) {
+      console.error('Error logged (dev mode):', error);
+      console.info('Error context:', context);
+      return;
+    }
+    
     const { data: { user } } = await supabase.auth.getUser();
 
     const { error: dbError } = await supabase
@@ -27,7 +37,12 @@ export async function logError(
           ...context,
           userAgent: navigator.userAgent,
           timestamp: new Date().toISOString(),
-          url: window.location.href
+          url: window.location.href,
+          referrer: document.referrer,
+          viewport: {
+            width: window.innerWidth,
+            height: window.innerHeight
+          }
         },
         user_id: user?.id,
         status: 'new'

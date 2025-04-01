@@ -23,4 +23,8 @@ createRoot(document.getElementById('root')!).render(
 );
 
 // Préchargement après le rendu initial
-requestIdleCallback(preloadModules);
+if ('requestIdleCallback' in window) {
+  (window as any).requestIdleCallback(preloadModules);
+} else {
+  setTimeout(preloadModules, 1000);
+}

@@ -1,0 +1,303 @@
+# Interface Utilisateur RINGO
+
+## Structure Globale
+
+### En-tête (Header)
+- **Position :** Fixe en haut de l'écran
+- **Hauteur :** 64px
+- **Couleur de fond :** #f15922 (Orange RINGO)
+- **Contenu :**
+  - Logo RINGO (gauche)
+  - Logo IRSST (centre)
+  - Menu utilisateur (droite)
+    - Email de l'utilisateur
+    - Rôle (Admin/Super Admin)
+    - Bouton de déconnexion
+
+### Barre Latérale (Sidebar)
+- **Position :** Gauche de l'écran
+- **Largeur :** 25% de l'écran
+- **Couleur de fond :** #dba747 (Doré RINGO)
+- **Contenu :**
+  - Liste des conversations
+  - Bouton "Nouvelle conversation"
+  - Indicateurs de statut
+
+### Zone Principale
+- **Position :** Centre/Droite de l'écran
+- **Largeur :** 75% de l'écran
+- **Couleur de fond :** Blanc
+- **Structure :**
+  - Liste des documents actifs
+  - Zone de chat
+  - Zone de saisie
+
+## Composants Détaillés
+
+### 1. Barre de Navigation
+```
++------------------+----------------------+------------------+
+|   Logo RINGO     |      Logo IRSST     |   Menu Utilisateur
+|   [Icon + Text]  |      [Image]        |   [Email + Role]
++------------------+----------------------+------------------+
+```
+
+#### Boutons d'Administration
+- Style neumorphique blanc sur orange
+- Icônes Lucide React
+- Espacement : 8px
+- Taille : 32x32px
+- Animations au hover
+
+### 2. Liste des Conversations
+```
++----------------------------------------+
+|  Conversations                    [+]   |
+|----------------------------------------|
+|  > Conversation 1                       |
+|    Dernier message...                   |
+|----------------------------------------|
+|  > Conversation 2                       |
+|    Dernier message...                   |
++----------------------------------------+
+```
+
+#### Éléments de Conversation
+- Titre tronqué si trop long
+- Horodatage
+- Indicateurs de statut
+- Actions au survol (éditer, supprimer)
+- Animation de sélection
+
+### 3. Zone de Documents
+```
++----------------------------------------+
+| Documents actifs                        |
+|----------------------------------------|
+| [Doc 1] [Doc 2] [Doc 3] [+]            |
++----------------------------------------+
+```
+
+#### Tags de Document
+- Style neumorphique léger
+- Icône selon type de fichier
+- Bouton de suppression
+- Animation de retrait
+
+### 4. Zone de Chat
+```
++----------------------------------------+
+| Messages                               |
+|----------------------------------------|
+| Utilisateur                   12:34    |
+| Message de l'utilisateur              |
+|                                       |
+| Assistant                    12:35    |
+| Réponse de l'assistant               |
+|----------------------------------------|
+| [Database] [Input Field]    [Send]     |
++----------------------------------------+
+```
+
+#### Messages
+- Alignement : 
+  - Utilisateur : Droite
+  - Assistant : Gauche
+- Couleurs :
+  - Utilisateur : #f15922 (Orange)
+  - Assistant : Gris clair
+- Markdown supporté
+- Animations de streaming
+
+#### Zone de Saisie
+- Hauteur adaptative
+- Placeholder texte
+- Raccourcis clavier
+- Bouton d'envoi animé
+
+### 5. Modales
+
+#### Import de Document
+```
++----------------------------------------+
+| Importer un document                   |
+|----------------------------------------|
+| [Zone de drop]    [Arborescence]       |
+|                                        |
+| [Métadonnées]     [Boutons d'action]   |
++----------------------------------------+
+```
+
+#### Gestion des Utilisateurs
+```
++----------------------------------------+
+| Gestion des utilisateurs               |
+|----------------------------------------|
+| [Filtres]                              |
+| [Liste des utilisateurs]               |
+| [Actions par utilisateur]              |
++----------------------------------------+
+```
+
+#### Feedback
+```
++----------------------------------------+
+| Votre avis compte !                    |
+|----------------------------------------|
+| [Zone de texte]                        |
+| [Envoyer]                              |
++----------------------------------------+
+```
+
+## Styles Globaux
+
+### 1. Typographie
+- **Police principale :** Inter
+- **Hiérarchie :**
+  - H1 : 24px, Bold
+  - H2 : 20px, SemiBold
+  - H3 : 18px, SemiBold
+  - Texte : 16px, Regular
+  - Small : 14px, Regular
+
+### 2. Couleurs
+- **Primaire :** #f15922 (Orange RINGO)
+- **Secondaire :** #dba747 (Doré RINGO)
+- **Accent :** #2F4F4F (Vert foncé)
+- **Texte :**
+  - Principal : #333333
+  - Secondaire : #666666
+  - Tertiaire : #999999
+- **Fond :**
+  - Principal : #FFFFFF
+  - Secondaire : #F8F9FA
+  - Tertiaire : #E9ECEF
+
+### 3. Ombres
+```css
+/* Neumorphique léger */
+box-shadow: 
+  4px 4px 8px rgba(0, 0, 0, 0.1),
+  -4px -4px 8px rgba(255, 255, 255, 0.9);
+
+/* Neumorphique prononcé */
+box-shadow: 
+  8px 8px 16px rgba(0, 0, 0, 0.15),
+  -8px -8px 16px rgba(255, 255, 255, 0.95);
+
+/* Neumorphique inversé (pressed) */
+box-shadow: 
+  inset 4px 4px 8px rgba(0, 0, 0, 0.15),
+  inset -4px -4px 8px rgba(255, 255, 255, 0.95);
+```
+
+### 4. Bordures
+- Radius : 8px (standard), 12px (large), 24px (extra-large)
+- Épaisseur : 1px
+- Style : solid
+- Couleur : rgba(0, 0, 0, 0.1)
+
+### 5. Espacements
+- 4px : Très petit
+- 8px : Petit
+- 16px : Moyen
+- 24px : Grand
+- 32px : Très grand
+- 48px : Extra grand
+
+### 6. Animations
+```css
+/* Transition standard */
+transition: all 0.2s ease;
+
+/* Hover scale */
+transform: scale(1.02);
+
+/* Press effect */
+transform: translateY(1px);
+
+/* Fade in */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Slide up */
+@keyframes slideUp {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+```
+
+## États et Interactions
+
+### 1. Boutons
+- **Normal :** Neumorphique léger
+- **Hover :** Scale up + ombre plus prononcée
+- **Active :** Neumorphique inversé
+- **Disabled :** Opacité réduite
+
+### 2. Inputs
+- **Normal :** Neumorphique inversé léger
+- **Focus :** Ring orange + ombre plus prononcée
+- **Error :** Ring rouge
+- **Success :** Ring vert
+
+### 3. Cards
+- **Normal :** Neumorphique léger
+- **Hover :** Ombre plus prononcée
+- **Active :** Scale down léger
+
+### 4. Loading States
+- **Spinner :** Animation de rotation
+- **Skeleton :** Pulse animation
+- **Progress :** Animation de remplissage
+
+### 5. Feedback
+- **Success :** Vert + check icon
+- **Error :** Rouge + alert icon
+- **Warning :** Orange + warning icon
+- **Info :** Bleu + info icon
+
+## Responsive Design
+
+### 1. Breakpoints
+```css
+/* Desktop-first approach */
+sm: '1024px'  /* Force desktop-first */
+md: '1280px'
+lg: '1440px'
+xl: '1680px'
+2xl: '1920px'
+```
+
+### 2. Adaptations
+- Sidebar collapsible
+- Modales full-screen
+- Taille de texte adaptative
+- Espacement responsive
+
+### 3. Touch Interactions
+- Zones de tap plus grandes
+- Feedback tactile
+- Swipe actions
+- Pull-to-refresh
+
+## Accessibilité
+
+### 1. Contraste
+- Ratio minimum : 4.5:1
+- Texte sur fond coloré : 7:1
+- Icônes importantes : 3:1
+
+### 2. Navigation
+- Focus visible
+- Skip links
+- Ordre logique
+- Landmarks ARIA
+
+### 3. Interactions
+- Keyboard accessible
+- Screen reader friendly
+- Touch targets >= 44px
+- Reduced motion support

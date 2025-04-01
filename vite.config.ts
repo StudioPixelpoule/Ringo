@@ -37,7 +37,9 @@ export default defineConfig({
           ]
         }
       }
-    }
+    },
+    sourcemap: false,
+    assetsInlineLimit: 4096
   },
   server: {
     hmr: {

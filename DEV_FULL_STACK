@@ -1,0 +1,769 @@
+# Documentation Technique RINGO
+
+## Architecture Globale
+
+### 1. Stack Technique
+
+#### Frontend
+- React 18.3.1 avec TypeScript
+- Vite 5.4.2 comme bundler
+- Tailwind CSS pour le styling
+- Framer Motion pour les animations
+- Zustand pour la gestion d'état
+- React Router pour le routing
+
+#### Backend
+- Supabase comme backend serverless
+- PostgreSQL comme base de données
+- Edge Functions pour la logique serveur
+- Storage pour les fichiers
+- RLS (Row Level Security) pour la sécurité
+
+#### IA & Traitement
+- OpenAI GPT-4 pour l'analyse
+- Tesseract.js pour l'OCR
+- PDF.js pour le traitement PDF
+- Mammoth pour les documents Word
+- XLSX pour les fichiers Excel
+
+### 2. Structure de la Base de Données
+
+#### Tables Principales
+
+```sql
+-- Utilisateurs et Profils
+profiles (
+  id uuid PRIMARY KEY,
+  email text UNIQUE,
+  role text CHECK (role IN ('super_admin', 'admin', 'user')),
+  status boolean DEFAULT true,
+  password_changed boolean DEFAULT false,
+  created_at timestamptz,
+  updated_at timestamptz
+);
+
+-- Dossiers
+folders (
+  id uuid PRIMARY KEY,
+  name text,
+  parent_id uuid REFERENCES folders,
+  created_at timestamptz,
+  updated_at timestamptz
+);
+
+-- Documents
+documents (
+  id uuid PRIMARY KEY,
+  folder_id uuid REFERENCES folders,
+  name text,
+  type text,
+  url text,
+  size bigint,
+  processed boolean,
+  is_chunked boolean,
+  manifest_path text,
+  created_at timestamptz,
+  updated_at timestamptz
+);
+
+-- Contenu des Documents
+document_contents (
+  id uuid PRIMARY KEY,
+  document_id uuid REFERENCES documents,
+  content text,
+  is_chunked boolean,
+  chunk_index integer,
+  total_chunks integer,
+  created_at timestamptz,
+  updated_at timestamptz
+);
+
+-- Conversations
+conversations (
+  id uuid PRIMARY KEY,
+  user_id uuid REFERENCES auth.users,
+  title text,
+  created_at timestamptz
+);
+
+-- Messages
+messages (
+  id uuid PRIMARY KEY,
+  conversation_id uuid REFERENCES conversations,
+  sender text CHECK (sender IN ('user', 'assistant')),
+  content text,
+  created_at timestamptz
+);
+
+-- Documents dans les Conversations
+conversation_documents (
+  id uuid PRIMARY KEY,
+  conversation_id uuid REFERENCES conversations,
+  document_id uuid REFERENCES documents,
+  created_at timestamptz,
+  UNIQUE(conversation_id, document_id)
+);
+```
+
+#### Tables de Support
+
+```sql
+-- Cache des Documents
+document_cache (
+  hash text PRIMARY KEY,
+  content text,
+  file_name text,
+  file_type text,
+  file_size bigint,
+  cached_at timestamptz
+);
+
+-- Feedback Utilisateurs
+user_feedback (
+  id uuid PRIMARY KEY,
+  user_id uuid REFERENCES auth.users,
+  content text,
+  created_at timestamptz,
+  read_at timestamptz,
+  status text DEFAULT 'unread'
+);
+
+-- Logs d'Erreurs
+error_logs (
+  id uuid PRIMARY KEY,
+  error text,
+  stack text,
+  context jsonb,
+  user_id uuid,
+  created_at timestamptz,
+  status text,
+  resolution text
+);
+
+-- Invitations Utilisateurs
+user_invitations (
+  id uuid PRIMARY KEY,
+  email text,
+  role text,
+  token text UNIQUE,
+  invited_by uuid,
+  expires_at timestamptz,
+  created_at timestamptz,
+  accepted_at timestamptz,
+  status text
+);
+```
+
+### 3. Edge Functions
+
+#### create-user
+```typescript
+// Création d'utilisateur avec validation
+async function createUser(email: string, password: string, role: string) {
+  // Validation des entrées
+  // Création du compte auth
+  // Création du profil
+  // Envoi email de bienvenue
+}
+```
+
+#### delete-user
+```typescript
+// Suppression d'utilisateur avec nettoyage
+async function deleteUser(userId: string) {
+  // Vérification des permissions
+  // Suppression des données associées
+  // Suppression du compte auth
+  // Journalisation
+}
+```
+
+#### process-audio
+```typescript
+// Traitement des fichiers audio
+async function processAudio(file: File) {
+  // Transcription avec Whisper
+  // Stockage du résultat
+  // Nettoyage des fichiers temporaires
+}
+```
+
+### 4. Système de Fichiers
+
+#### Structure de Stockage
+```
+documents/
+├── [timestamp]-[hash].[ext]    # Fichiers simples
+├── [timestamp]-[hash]/         # Fichiers découpés
+│   ├── manifest.json
+│   ├── chunk_0.[ext]
+│   └── chunk_n.[ext]
+└── cache/                      # Cache des traitements
+```
+
+#### Manifest Format
+```json
+{
+  "fileId": "uuid",
+  "originalName": "string",
+  "type": "string",
+  "size": "number",
+  "chunks": [
+    {
+      "index": "number",
+      "path": "string",
+      "size": "number"
+    }
+  ]
+}
+```
+
+### 5. Gestion d'État
+
+#### Stores Zustand
+
+```typescript
+// User Store
+interface UserStore {
+  users: Profile[];
+  loading: boolean;
+  error: string | null;
+  fetchUsers(): Promise<void>;
+  createUser(data: UserData): Promise<void>;
+  updateUser(id: string, data: Partial<Profile>): Promise<void>;
+  deleteUser(id: string): Promise<void>;
+}
+
+// Document Store
+interface DocumentStore {
+  documents: Document[];
+  currentFolder: Folder | null;
+  loading: boolean;
+  error: string | null;
+  uploadDocument(file: File, folderId: string): Promise<void>;
+  fetchDocuments(folderId: string): Promise<void>;
+  deleteDocument(id: string): Promise<void>;
+}
+
+// Conversation Store
+interface ConversationStore {
+  conversations: Conversation[];
+  currentConversation: Conversation | null;
+  messages: Message[];
+  loading: boolean;
+  error: string | null;
+  sendMessage(content: string): Promise<void>;
+  createConversation(title: string): Promise<void>;
+  deleteConversation(id: string): Promise<void>;
+}
+```
+
+### 6. Sécurité
+
+#### Politiques RLS
+
+```sql
+-- Profiles
+CREATE POLICY "Users can read own profile"
+  ON profiles FOR SELECT
+  USING (auth.uid() = id);
+
+-- Documents
+CREATE POLICY "Users can read documents"
+  ON documents FOR SELECT
+  USING (EXISTS (
+    SELECT 1 FROM profiles
+    WHERE id = auth.uid()
+    AND status = true
+  ));
+
+-- Conversations
+CREATE POLICY "Users can manage own conversations"
+  ON conversations FOR ALL
+  USING (user_id = auth.uid());
+```
+
+#### Validation des Entrées
+
+```typescript
+// Validation d'email
+const emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+
+// Validation de fichier
+const allowedTypes = ['application/pdf', 'text/plain', ...];
+const maxSize = 100 * 1024 * 1024; // 100MB
+
+// Validation de contenu
+const sanitizeContent = (content: string) => {
+  return DOMPurify.sanitize(content, {
+    ALLOWED_TAGS: ['p', 'b', 'i', 'em', 'strong', 'a'],
+    ALLOWED_ATTR: ['href']
+  });
+};
+```
+
+### 7. Traitement des Documents
+
+#### Pipeline de Traitement
+
+```typescript
+async function processDocument(file: File) {
+  // 1. Validation initiale
+  validateFile(file);
+
+  // 2. Préparation
+  const hash = await calculateHash(file);
+  checkCache(hash);
+
+  // 3. Traitement selon type
+  switch (file.type) {
+    case 'application/pdf':
+      return processPDF(file);
+    case 'audio/*':
+      return processAudio(file);
+    // ...autres types
+  }
+
+  // 4. Stockage
+  const url = await uploadToStorage(file);
+  await saveToDatabase(url, metadata);
+
+  // 5. Post-traitement
+  await updateCache(hash, result);
+  return result;
+}
+```
+
+#### Chunking de Fichiers
+
+```typescript
+async function uploadInChunks(file: File) {
+  const chunkSize = 6 * 1024 * 1024; // 6MB
+  const chunks = Math.ceil(file.size / chunkSize);
+  
+  // Créer manifest
+  const manifest = {
+    fileId: uuid(),
+    chunks: []
+  };
+
+  // Upload des chunks
+  for (let i = 0; i < chunks; i++) {
+    const start = i * chunkSize;
+    const end = Math.min(start + chunkSize, file.size);
+    const chunk = file.slice(start, end);
+    
+    const chunkPath = await uploadChunk(chunk, i);
+    manifest.chunks.push({ index: i, path: chunkPath });
+  }
+
+  // Upload manifest
+  return uploadManifest(manifest);
+}
+```
+
+### 8. Système de Chat
+
+#### Gestion du Streaming
+
+```typescript
+async function streamResponse(messages: Message[]) {
+  const response = await fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages }),
+  });
+
+  const reader = response.body?.getReader();
+  const decoder = new TextDecoder();
+
+  while (true) {
+    const { done, value } = await reader?.read();
+    if (done) break;
+    
+    const chunk = decoder.decode(value);
+    yield chunk;
+  }
+}
+```
+
+#### Contexte des Documents
+
+```typescript
+function prepareContext(documents: Document[]) {
+  return documents.map(doc => `
+====== DÉBUT DU DOCUMENT: ${doc.name} ======
+
+${doc.content}
+
+====== FIN DU DOCUMENT: ${doc.name} ======
+`).join('\n\n');
+}
+```
+
+### 9. Tests
+
+#### Configuration Vitest
+
+```typescript
+// vitest.config.ts
+export default {
+  test: {
+    environment: 'jsdom',
+    setupFiles: ['./src/test/setup.ts'],
+    coverage: {
+      reporter: ['text', 'json', 'html'],
+      exclude: ['node_modules/', 'src/test/']
+    }
+  }
+};
+```
+
+#### Exemples de Tests
+
+```typescript
+// Test de composant
+describe('DocumentList', () => {
+  it('renders documents correctly', () => {
+    const documents = [/* ... */];
+    const { getByText } = render(<DocumentList documents={documents} />);
+    expect(getByText(documents[0].name)).toBeInTheDocument();
+  });
+});
+
+// Test de store
+describe('useDocumentStore', () => {
+  it('uploads document successfully', async () => {
+    const store = useDocumentStore();
+    const file = new File(['content'], 'test.pdf');
+    await store.uploadDocument(file, 'folder-id');
+    expect(store.documents).toHaveLength(1);
+  });
+});
+```
+
+### 10. Performance
+
+#### Optimisations Frontend
+
+```typescript
+// Memoization des composants
+const MemoizedComponent = React.memo(({ data }) => {
+  return <div>{/* ... */}</div>;
+}, (prev, next) => prev.data.id === next.data.id);
+
+// Chunking des imports
+const HeavyComponent = React.lazy(() => import('./HeavyComponent'));
+
+// Virtualisation des listes
+const VirtualList = ({ items }) => (
+  <VirtualScroll
+    itemCount={items.length}
+    itemSize={50}
+    renderItem={({ index }) => (
+      <ListItem item={items[index]} />
+    )}
+  />
+);
+```
+
+#### Optimisations Backend
+
+```sql
+-- Indexes pour les requêtes fréquentes
+CREATE INDEX idx_documents_folder ON documents(folder_id);
+CREATE INDEX idx_messages_conversation ON messages(conversation_id);
+CREATE INDEX idx_document_content_search ON document_contents USING gin(to_tsvector('french', content));
+
+-- Materialized View pour les statistiques
+CREATE MATERIALIZED VIEW conversation_stats AS
+SELECT 
+  conversation_id,
+  COUNT(messages.*) as message_count,
+  MAX(messages.created_at) as last_message
+FROM conversations
+LEFT JOIN messages ON messages.conversation_id = conversations.id
+GROUP BY conversation_id;
+```
+
+### 11. Monitoring
+
+#### Logging d'Erreurs
+
+```typescript
+async function logError(error: Error, context?: any) {
+  await supabase.from('error_logs').insert({
+    error: error.message,
+    stack: error.stack,
+    context: {
+      ...context,
+      userAgent: navigator.userAgent,
+      timestamp: new Date().toISOString(),
+      url: window.location.href
+    }
+  });
+}
+```
+
+#### Métriques de Performance
+
+```typescript
+// Mesure du temps de chargement
+performance.mark('startLoad');
+await loadData();
+performance.mark('endLoad');
+performance.measure('loadTime', 'startLoad', 'endLoad');
+
+// Suivi des erreurs
+window.addEventListener('error', (event) => {
+  logError(event.error);
+});
+
+// Monitoring des ressources
+const observer = new PerformanceObserver((list) => {
+  list.getEntries().forEach((entry) => {
+    if (entry.entryType === 'resource') {
+      // Analyser les performances des ressources
+    }
+  });
+});
+```
+
+### 12. Déploiement
+
+#### Configuration Netlify
+
+```toml
+# netlify.toml
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+```
+
+#### Variables d'Environnement
+
+```env
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
+VITE_OPENAI_API_KEY=your-openai-key
+```
+
+## Guides de Développement
+
+### 1. Ajout d'une Nouvelle Fonctionnalité
+
+1. Planification
+   - Définir les besoins
+   - Concevoir l'interface
+   - Identifier les changements de base de données
+
+2. Développement
+   - Créer les migrations nécessaires
+   - Implémenter les composants React
+   - Ajouter les tests
+
+3. Tests
+   - Tests unitaires
+   - Tests d'intégration
+   - Tests manuels
+
+4. Déploiement
+   - Review code
+   - Tests en staging
+   - Déploiement progressif
+
+### 2. Modification de la Base de Données
+
+1. Création de Migration
+   ```sql
+   -- YYYYMMDDHHMMSS_descriptive_name.sql
+   /* 
+     # Description du changement
+     1. Changements
+     2. Sécurité
+   */
+   
+   -- Modifications
+   ALTER TABLE table_name ADD COLUMN column_name type;
+   
+   -- Indexes
+   CREATE INDEX idx_name ON table_name(column_name);
+   
+   -- Policies
+   CREATE POLICY "policy_name" ON table_name ...;
+   ```
+
+2. Application des Changements
+   ```bash
+   # Vérifier la migration
+   supabase db diff
+
+   # Appliquer la migration
+   supabase db push
+   ```
+
+### 3. Ajout de Composants
+
+1. Structure
+   ```typescript
+   // src/components/NewComponent.tsx
+   interface NewComponentProps {
+     prop1: string;
+     prop2: number;
+   }
+
+   export function NewComponent({ prop1, prop2 }: NewComponentProps) {
+     // State et hooks
+     const [state, setState] = useState();
+     
+     // Effets
+     useEffect(() => {
+       // Setup et cleanup
+     }, []);
+     
+     // Handlers
+     const handleEvent = () => {
+       // Logique
+     };
+     
+     // Rendu
+     return (
+       <div className="...">
+         {/* JSX */}
+       </div>
+     );
+   }
+   ```
+
+2. Styles
+   ```css
+   /* src/components/NewComponent.css */
+   .component-class {
+     @apply tailwind-classes;
+     /* Styles spécifiques */
+   }
+   ```
+
+### 4. Gestion des Erreurs
+
+1. Types d'Erreurs
+   ```typescript
+   class AppError extends Error {
+     constructor(
+       message: string,
+       public code: string,
+       public context?: any
+     ) {
+       super(message);
+       this.name = 'AppError';
+     }
+   }
+   ```
+
+2. Handling
+   ```typescript
+   try {
+     await riskyOperation();
+   } catch (error) {
+     if (error instanceof AppError) {
+       // Erreur applicative connue
+       handleAppError(error);
+     } else {
+       // Erreur inattendue
+       logError(error);
+       showErrorMessage();
+     }
+   }
+   ```
+
+## Maintenance
+
+### 1. Mises à Jour
+
+1. Dépendances
+   ```bash
+   # Vérifier les mises à jour
+   npm outdated
+   
+   # Mettre à jour
+   npm update
+   
+   # Vérifier les vulnérabilités
+   npm audit
+   ```
+
+2. Base de Données
+   ```sql
+   -- Nettoyage périodique
+   DELETE FROM document_cache 
+   WHERE cached_at < NOW() - INTERVAL '1 day';
+   
+   -- Optimisation
+   VACUUM ANALYZE table_name;
+   ```
+
+### 2. Backups
+
+1. Base de Données
+   ```bash
+   # Backup complet
+   pg_dump dbname > backup.sql
+   
+   # Restore
+   psql dbname < backup.sql
+   ```
+
+2. Fichiers
+   ```bash
+   # Backup du storage
+   supabase storage download bucket_name
+   
+   # Restore
+   supabase storage upload bucket_name
+   ```
+
+### 3. Monitoring
+
+1. Logs
+   ```typescript
+   // Niveaux de log
+   enum LogLevel {
+     DEBUG,
+     INFO,
+     WARN,
+     ERROR
+   }
+   
+   // Logger
+   function log(level: LogLevel, message: string, context?: any) {
+     // Logging logic
+   }
+   ```
+
+2. Alertes
+   ```typescript
+   // Seuils d'alerte
+   const THRESHOLDS = {
+     errorRate: 0.01, // 1%
+     responseTime: 1000, // 1s
+     diskUsage: 0.9 // 90%
+   };
+   
+   // Vérification
+   function checkThresholds() {
+     // Monitoring logic
+   }
+   ```
+
+## Conclusion
+
+Cette documentation fournit une vue d'ensemble technique complète de RINGO. Elle doit être maintenue à jour avec chaque modification significative du système. Les développeurs sont encouragés à la consulter et à la compléter selon les besoins.
+
+Pour toute question ou clarification, contacter l'équipe technique à :
+- Email : theboxoflio@gmail.com
+- GitHub : https://github.com/enmodesolutions/ringo

@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Logo } from '../components/Logo';
 import { SmallLogo } from '../components/SmallLogo';
 import { IrsstLogo } from '../components/IrsstLogo';
 import { Loader2 } from 'lucide-react';
+import { logError } from '../lib/errorLogger';
 
 export function ChangePassword() {
   const navigate = useNavigate();
@@ -14,6 +15,19 @@ export function ChangePassword() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
+
+  // Force redirect after successful password change
+  useEffect(() => {
+    if (success && !redirecting) {
+      const timer = setTimeout(() => {
+        setRedirecting(true);
+        window.location.href = '/'; // Force hard redirect to ensure state is reset
+      }, 1500);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [success, redirecting]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,14 +46,14 @@ export function ChangePassword() {
     setError(null);
 
     try {
-      // Mettre à jour le mot de passe
+      // Update password
       const { error: updateError } = await supabase.auth.updateUser({
         password: password
       });
 
       if (updateError) throw updateError;
 
-      // Marquer le mot de passe comme changé
+      // Mark password as changed
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not found');
 
@@ -50,12 +64,13 @@ export function ChangePassword() {
 
       if (profileError) throw profileError;
 
+      // Set success state
       setSuccess(true);
-      setTimeout(() => {
-        navigate('/');
-      }, 2000);
+      
+      // Redirect will happen via useEffect
     } catch (error) {
       console.error('Error changing password:', error);
+      logError(error);
       setError(error instanceof Error ? error.message : 'Une erreur est survenue');
     } finally {
       setLoading(false);
@@ -89,7 +104,16 @@ export function ChangePassword() {
           {success ? (
             <div className="bg-green-500/20 border border-green-500/50 text-white px-4 py-3 rounded-md text-center">
               <p className="mb-2">Mot de passe mis à jour avec succès !</p>
-              <p className="text-sm">Redirection vers l'accueil...</p>
+              <p className="text-sm">
+                {redirecting ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Loader2 size={16} className="animate-spin" />
+                    Redirection en cours...
+                  </span>
+                ) : (
+                  "Redirection vers l'accueil..."
+                )}
+              </p>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-6">

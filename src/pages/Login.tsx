@@ -21,6 +21,8 @@ export function Login() {
     setError(null);
 
     try {
+      console.log('Attempting login for:', email);
+      
       // First check if user exists and is active
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
@@ -29,6 +31,7 @@ export function Login() {
         .maybeSingle();
 
       if (profileError) {
+        console.error('Profile check error:', profileError);
         throw new Error('Erreur lors de la vérification du profil');
       }
 
@@ -37,28 +40,35 @@ export function Login() {
       }
 
       // Then attempt to sign in
-      const { error: signInError } = await supabase.auth.signInWithPassword({
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
         password
       });
 
       if (signInError) {
+        console.error('Sign in error:', signInError);
         if (signInError.message.includes('Invalid login credentials')) {
           throw new Error('Email ou mot de passe incorrect');
         }
         throw signInError;
       }
 
+      console.log('Login successful, user:', data.user);
+
       // Check if user needs to change password
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
+      if (data.user) {
         const { data: userProfile, error: userProfileError } = await supabase
           .from('profiles')
-          .select('password_changed')
-          .eq('id', user.id)
+          .select('password_changed, role')
+          .eq('id', data.user.id)
           .single();
         
-        if (userProfileError) throw userProfileError;
+        if (userProfileError) {
+          console.error('User profile fetch error:', userProfileError);
+          throw userProfileError;
+        }
+        
+        console.log('User profile:', userProfile);
         
         // If password_changed is false or null, redirect to change password page
         if (userProfile && (userProfile.password_changed === false || userProfile.password_changed === null)) {
@@ -70,6 +80,7 @@ export function Login() {
       // If password is already changed, navigate to home
       navigate('/');
     } catch (err) {
+      console.error('Login error:', err);
       setError(err instanceof Error ? err.message : 'Une erreur est survenue');
     } finally {
       setLoading(false);
