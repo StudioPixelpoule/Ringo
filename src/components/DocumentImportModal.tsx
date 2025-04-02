@@ -255,7 +255,6 @@ export function DocumentImportModal() {
       if (processingStatus.isProcessing && abortControllerRef.current) {
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
-
       }
     };
   }, [isModalOpen, fetchFolders, fetchAllDocuments, processingStatus.isProcessing]);
