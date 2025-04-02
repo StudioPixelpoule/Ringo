@@ -255,6 +255,7 @@ export function DocumentImportModal() {
       if (processingStatus.isProcessing && abortControllerRef.current) {
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
+
       }
     };
   }, [isModalOpen, fetchFolders, fetchAllDocuments, processingStatus.isProcessing]);
@@ -263,7 +264,7 @@ export function DocumentImportModal() {
     if (acceptedFiles.length > 0 && !processingStatus.isProcessing) {
       const file = acceptedFiles[0];
       setSelectedFile(file);
-      
+
       setProcessingStatus({
         isProcessing: false,
         progress: 0,
@@ -271,6 +272,7 @@ export function DocumentImportModal() {
         message: ''
       });
     }
+
   }, [processingStatus.isProcessing]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({

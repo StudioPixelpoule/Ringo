@@ -34,7 +34,7 @@ supabase.auth.onAuthStateChange((event, session) => {
   console.log('Auth state change event:', event);
   
   if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
-    // Clear any cached data
+    // Clear any cached data and redirect to login
     localStorage.clear();
     // Redirect to login
     window.location.href = '/login';
@@ -42,6 +42,23 @@ supabase.auth.onAuthStateChange((event, session) => {
     console.log('Session token refreshed');
   }
 });
+
+// Helper function to handle auth errors
+function handleAuthError(error: any) {
+  if (error?.message?.includes('refresh_token_not_found') || 
+      error?.message?.includes('JWT expired') || 
+      error?.message?.includes('Invalid JWT') ||
+      error?.message?.includes('Invalid Refresh Token')) {
+    console.log('Authentication error detected, clearing storage and redirecting to login');
+    // Clear all local storage to remove any invalid tokens
+    localStorage.clear();
+    
+    // Only redirect if we're not already on the login page
+    if (!window.location.pathname.includes('/login')) {
+      window.location.href = '/login';
+    }
+  }
+}
 
 // Add session refresh on focus with debounce
 let refreshTimeout: NodeJS.Timeout;
@@ -53,7 +70,7 @@ window.addEventListener('focus', () => {
   if (now - lastRefreshTime < REFRESH_COOLDOWN) {
     return; // Skip if within cooldown period
   }
-
+  
   clearTimeout(refreshTimeout);
   refreshTimeout = setTimeout(() => {
     supabase.auth.getSession()
@@ -81,23 +98,6 @@ window.addEventListener('unhandledrejection', (event) => {
     handleAuthError(event.reason);
   }
 });
-
-// Helper function to handle auth errors
-function handleAuthError(error: any) {
-  if (error?.message?.includes('refresh_token_not_found') || 
-      error?.message?.includes('JWT expired') || 
-      error?.message?.includes('Invalid JWT') ||
-      error?.message?.includes('Invalid Refresh Token')) {
-    console.log('Authentication error detected, clearing storage and redirecting to login');
-    // Clear all local storage to remove any invalid tokens
-    localStorage.clear();
-    
-    // Only redirect if we're not already on the login page
-    if (!window.location.pathname.includes('/login')) {
-      window.location.href = '/login';
-    }
-  }
-}
 
 // Helper function to check if user is authenticated
 export const isAuthenticated = async (): Promise<boolean> => {
@@ -194,6 +194,7 @@ export const getUserRole = async (): Promise<string | null> => {
     return null;
   }
 };
+
 
 // Helper function to check if user has admin privileges
 export const isAdmin = async (): Promise<boolean> => {
