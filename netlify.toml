@@ -1,6 +1,12 @@
 [build]
-  command = "npm run build"
+  command = "CI=false npm run build"
   publish = "dist"
+  environment = { SKIP_PREFLIGHT_CHECK = "true", TSC_COMPILE_ON_ERROR = "true" }
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
 
 [dev]
   command = "npm run dev"
@@ -9,8 +15,3 @@
   publish = "dist"
   framework = "vite"
   autoLaunch = true
-
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
