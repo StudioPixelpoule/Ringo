@@ -1,5 +1,5 @@
 [build]
-  command = "CI=false npm run build"
+  command = "CI=false npm run build-netlify"
   publish = "dist"
   environment = { SKIP_PREFLIGHT_CHECK = "true", TSC_COMPILE_ON_ERROR = "true" }
 
