@@ -195,6 +195,7 @@ const FolderTreeItem: React.FC<FolderTreeItemProps> = ({
 export function DocumentImportModal() {
   const [selectedPath, setSelectedPath] = useState<Folder[]>([]);
   const [description, setDescription] = useState('');
+  const [audioDescription, setAudioDescription] = useState(''); // Nouvelle state pour la description audio
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [processingStatus, setProcessingStatus] = useState<ProcessingStatus>({
     isProcessing: false,
@@ -246,6 +247,7 @@ export function DocumentImportModal() {
         });
         setSelectedFile(null);
         setDescription('');
+        setAudioDescription(''); // Réinitialisation de la description audio
       }
     }
 
@@ -300,6 +302,11 @@ export function DocumentImportModal() {
     return acc;
   }, {} as Record<string, number>);
 
+  // Détecter si le fichier est un fichier audio
+  const isAudioFile = selectedFile && 
+    (selectedFile.type.startsWith('audio/') || 
+     ['mp3', 'wav', 'wave', 'aac', 'ogg', 'webm'].includes(selectedFile.name.split('.').pop()?.toLowerCase() || ''));
+
   const handleFolderSelect = (folder: Folder) => {
     setCurrentFolder(folder);
   };
@@ -352,12 +359,6 @@ export function DocumentImportModal() {
                        ['mp3', 'wav', 'wave', 'aac', 'ogg', 'webm'].includes(extension || '') ? 'audio' :
                        extension === 'html' ? 'report' : 'unknown';
 
-      const sanitizedDescription = description
-        .replace(/[^a-zA-Z0-9\s]/g, '_')
-        .replace(/\s+/g, '_')
-        .replace(/_+/g, '_')
-        .replace(/^_|_$/g, '');
-
       if (documentType === 'audio') {
         try {
           const fileExt = selectedFile.name.split('.').pop()?.toLowerCase() || '';
@@ -389,14 +390,15 @@ export function DocumentImportModal() {
               abortControllerRef.current.signal
             );
 
-            // Create document record with chunking info
+            // Create document record with chunking info and both descriptions
             const { data: doc, error: docError } = await supabase
               .from('documents')
               .insert([{
                 folder_id: currentFolder.id,
                 name: selectedFile.name,
                 type: documentType,
-                description: sanitizedDescription,
+                description: description, // Description générale
+                group_name: audioDescription, // Utiliser group_name pour stocker la description audio
                 url: uploadedPath,
                 size: selectedFile.size,
                 is_chunked: true,
@@ -411,6 +413,7 @@ export function DocumentImportModal() {
             const result = await processAudioFile(
               selectedFile,
               import.meta.env.VITE_OPENAI_API_KEY,
+              audioDescription, // Passer la description audio spécifique
               (progress) => {
                 setProcessingStatus({
                   isProcessing: true,
@@ -446,14 +449,15 @@ export function DocumentImportModal() {
 
             if (uploadError) throw uploadError;
 
-            // Create document record
+            // Create document record with both descriptions
             const { data: doc, error: docError } = await supabase
               .from('documents')
               .insert([{
                 folder_id: currentFolder.id,
                 name: selectedFile.name,
                 type: documentType,
-                description: sanitizedDescription,
+                description: description, // Description générale
+                group_name: audioDescription, // Utiliser group_name pour stocker la description audio
                 url: filePath,
                 size: selectedFile.size,
                 is_chunked: false,
@@ -468,6 +472,7 @@ export function DocumentImportModal() {
             const result = await processAudioFile(
               selectedFile,
               import.meta.env.VITE_OPENAI_API_KEY,
+              audioDescription, // Passer la description audio spécifique
               (progress) => {
                 setProcessingStatus({
                   isProcessing: true,
@@ -504,6 +509,7 @@ export function DocumentImportModal() {
           setTimeout(() => {
             setSelectedFile(null);
             setDescription('');
+            setAudioDescription(''); // Réinitialiser la description audio
             setModalOpen(false);
           }, 2000);
 
@@ -514,7 +520,7 @@ export function DocumentImportModal() {
         }
       }
 
-      // For other file types, use chunked upload if size exceeds threshold
+      // Pour les autres types de fichiers, utiliser chunked upload si nécessaire
       if (selectedFile.size > MAX_DIRECT_UPLOAD_SIZE) {
         const fileExt = selectedFile.name.split('.').pop()?.toLowerCase() || '';
         const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
@@ -542,7 +548,7 @@ export function DocumentImportModal() {
             folder_id: currentFolder.id,
             name: selectedFile.name,
             type: documentType,
-            description: sanitizedDescription,
+            description: description,
             url: uploadedPath,
             size: selectedFile.size,
             is_chunked: true,
@@ -601,7 +607,7 @@ export function DocumentImportModal() {
             folder_id: currentFolder.id,
             name: selectedFile.name,
             type: documentType,
-            description: sanitizedDescription,
+            description: description,
             url: filePath,
             size: selectedFile.size,
             is_chunked: false,
@@ -650,6 +656,7 @@ export function DocumentImportModal() {
       setTimeout(() => {
         setSelectedFile(null);
         setDescription('');
+        setAudioDescription(''); // Réinitialiser la description audio
         setModalOpen(false);
       }, 2000);
 
@@ -795,6 +802,26 @@ export function DocumentImportModal() {
                   disabled={processingStatus.isProcessing}
                 />
               </div>
+
+              {/* Nouvelle description spécifique aux fichiers audio */}
+              {isAudioFile && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Description Spécifique Audio
+                  </label>
+                  <textarea
+                    value={audioDescription}
+                    onChange={(e) => setAudioDescription(e.target.value)}
+                    placeholder="Décrivez le contexte de cet enregistrement audio (sujet, participants, date...)"
+                    className="w-full px-3 py-2 border border-[#dba747] bg-[#dba747]/5 rounded-md focus:outline-none focus:ring-2 focus:ring-[#dba747] focus:border-transparent resize-none"
+                    rows={3}
+                    disabled={processingStatus.isProcessing}
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Cette description sera utilisée pour contextualiser la transcription audio.
+                  </p>
+                </div>
+              )}
 
               <button
                 onClick={handleUpload}

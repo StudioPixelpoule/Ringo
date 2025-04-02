@@ -23,6 +23,9 @@ export function Login() {
     try {
       console.log('Attempting login for:', email);
       
+      // Clear any existing auth data to prevent conflicts
+      localStorage.clear();
+      
       // First check if user exists and is active
       const { data: profile, error: profileError } = await supabase
         .from('profiles')

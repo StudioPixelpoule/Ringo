@@ -267,6 +267,8 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
             name,
             type,
             url,
+            description,
+            group_name,
             processed
           )
         `)
@@ -281,20 +283,96 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
           .map(doc => doc.documents)
           .filter(Boolean)
           .map(async doc => {
-            const { data: contentData } = await supabase
-              .from('document_contents')
-              .select('content')
-              .eq('document_id', doc.id)
-              .single();
-
-            return `
+            // Fetch document content safely with error handling
+            let documentContent = '';
+            try {
+              const { data: contentData, error: contentError } = await supabase
+                .from('document_contents')
+                .select('content')
+                .eq('document_id', doc.id)
+                .maybeSingle(); // Use maybeSingle instead of single to avoid 406 errors
+              
+              if (contentError) {
+                console.error('Error fetching document content:', contentError);
+                return `
 ====== DÉBUT DU DOCUMENT: ${doc.name} (${doc.type}) ======
-
-${contentData?.content || ''}
+${doc.description ? `DESCRIPTION: ${doc.description}\n\n` : ''}
+[Erreur lors de la récupération du contenu]
 
 ====== FIN DU DOCUMENT: ${doc.name} ======
 
-INSTRUCTIONS: Le texte ci-dessus contient le contenu complet du document "${doc.name}". Utilise ce contenu pour répondre aux questions de l'utilisateur.
+INSTRUCTIONS: Le contenu de ce document n'a pas pu être récupéré. Veuillez vous référer aux autres documents disponibles.
+`;
+              }
+              
+              documentContent = contentData?.content || '';
+            } catch (error) {
+              console.error('Error processing document content:', error);
+              return `
+====== DÉBUT DU DOCUMENT: ${doc.name} (${doc.type}) ======
+${doc.description ? `DESCRIPTION: ${doc.description}\n\n` : ''}
+[Erreur lors du traitement du contenu]
+
+====== FIN DU DOCUMENT: ${doc.name} ======
+
+INSTRUCTIONS: Le contenu de ce document n'a pas pu être traité. Veuillez vous référer aux autres documents disponibles.
+`;
+            }
+
+            // Pour les fichiers audio, vérifier si des informations spécifiques sont disponibles
+            if (doc.type === 'audio' && documentContent) {
+              const audioDescription = doc.group_name; // Récupérer la description audio spécifique
+              
+              try {
+                // Vérifier si le contenu est un JSON valide avant de le parser
+                if (documentContent.trim().startsWith('{') && documentContent.trim().endsWith('}')) {
+                  const audioData = JSON.parse(documentContent);
+                  
+                  // Vérifier si la description audio est déjà incluse dans le contenu
+                  const hasAudioDescription = 
+                    (typeof audioData.content === 'string' && audioData.content.includes("== CONTEXTE DE L'ENREGISTREMENT ==")) || 
+                    (audioData.metadata && audioData.metadata.audioDescription === audioDescription);
+                  
+                  if (!hasAudioDescription && audioDescription) {
+                    // Si pas déjà présente et fournie, ajouter au contenu du document
+                    if (audioData.metadata) {
+                      audioData.metadata.audioDescription = audioDescription;
+                    }
+                    
+                    // Formater de manière plus explicite pour l'IA
+                    if (typeof audioData.content === 'string') {
+                      audioData.content = `== CONTEXTE DE L'ENREGISTREMENT ==\n${audioDescription}\n\n== TRANSCRIPTION ==\n${audioData.content}`;
+                    }
+                    
+                    // Mettre à jour le contenu
+                    documentContent = JSON.stringify(audioData);
+                  }
+                } else {
+                  // Si ce n'est pas un JSON valide mais qu'il y a une description audio, l'ajouter manuellement
+                  if (audioDescription) {
+                    documentContent = `== CONTEXTE DE L'ENREGISTREMENT ==\n${audioDescription}\n\n== TRANSCRIPTION ==\n${documentContent}`;
+                  }
+                }
+              } catch (e) {
+                // Si erreur de parsing, ajouter la description audio manuellement si disponible
+                console.error('Erreur de parsing du contenu audio:', e);
+                if (audioDescription) {
+                  documentContent = `== CONTEXTE DE L'ENREGISTREMENT ==\n${audioDescription}\n\n== TRANSCRIPTION ==\n${documentContent}`;
+                }
+              }
+            }
+
+            return `
+====== DÉBUT DU DOCUMENT: ${doc.name} (${doc.type}) ======
+${doc.description ? `DESCRIPTION: ${doc.description}\n\n` : ''}
+${documentContent}
+
+====== FIN DU DOCUMENT: ${doc.name} ======
+
+INSTRUCTIONS: Le texte ci-dessus contient le contenu complet du document "${doc.name}". 
+${doc.description ? `La description générale fournie indique: "${doc.description}". ` : ''}
+${doc.type === 'audio' && doc.group_name ? `Le contexte de cet enregistrement audio est: "${doc.group_name}". ` : ''}
+Utilise ce contenu pour répondre aux questions de l'utilisateur.
 `;
           })
       );

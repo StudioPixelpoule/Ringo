@@ -24,7 +24,10 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 });
 
 // Initialize auth state
-supabase.auth.getSession().catch(console.error);
+supabase.auth.getSession().catch(error => {
+  console.error('Error getting initial session:', error);
+  handleAuthError(error);
+});
 
 // Set up auth state change listener
 supabase.auth.onAuthStateChange((event, session) => {
@@ -57,18 +60,13 @@ window.addEventListener('focus', () => {
       .then(({ data: { session } }) => {
         if (!session) {
           // No valid session, redirect to login
-          window.location.href = '/login';
+          handleAuthError(new Error('No valid session'));
         }
         lastRefreshTime = Date.now();
       })
       .catch((error) => {
         console.error('Session refresh error:', error);
-        if (error?.message?.includes('refresh_token_not_found') || 
-            error?.message?.includes('JWT expired') || 
-            error?.message?.includes('Invalid Refresh Token')) {
-          localStorage.clear();
-          window.location.href = '/login';
-        }
+        handleAuthError(error);
       });
   }, 1000);
 });
@@ -77,12 +75,29 @@ window.addEventListener('focus', () => {
 window.addEventListener('unhandledrejection', (event) => {
   if (event.reason?.name === 'AuthApiError' || 
       event.reason?.message?.includes('JWT expired') ||
-      event.reason?.message?.includes('Invalid JWT')) {
+      event.reason?.message?.includes('Invalid JWT') ||
+      event.reason?.message?.includes('Invalid Refresh Token')) {
     console.error('Auth API Error:', event.reason);
-    localStorage.clear();
-    window.location.href = '/login';
+    handleAuthError(event.reason);
   }
 });
+
+// Helper function to handle auth errors
+function handleAuthError(error: any) {
+  if (error?.message?.includes('refresh_token_not_found') || 
+      error?.message?.includes('JWT expired') || 
+      error?.message?.includes('Invalid JWT') ||
+      error?.message?.includes('Invalid Refresh Token')) {
+    console.log('Authentication error detected, clearing storage and redirecting to login');
+    // Clear all local storage to remove any invalid tokens
+    localStorage.clear();
+    
+    // Only redirect if we're not already on the login page
+    if (!window.location.pathname.includes('/login')) {
+      window.location.href = '/login';
+    }
+  }
+}
 
 // Helper function to check if user is authenticated
 export const isAuthenticated = async (): Promise<boolean> => {
@@ -91,6 +106,7 @@ export const isAuthenticated = async (): Promise<boolean> => {
     return !!session;
   } catch (error) {
     console.error('Auth check error:', error);
+    handleAuthError(error);
     return false;
   }
 };
@@ -107,7 +123,10 @@ export const getUserRole = async (): Promise<string | null> => {
       
       // Check and refresh session if needed
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError) throw sessionError;
+      if (sessionError) {
+        handleAuthError(sessionError);
+        throw sessionError;
+      }
       if (!session) {
         console.warn('No session found, redirecting to login');
         window.location.href = '/login';
@@ -124,7 +143,7 @@ export const getUserRole = async (): Promise<string | null> => {
       if (profileError) {
         if (profileError.code === 'PGRST301' || profileError.code === '401') {
           console.warn('Authentication error:', profileError);
-          window.location.href = '/login';
+          handleAuthError(profileError);
           return null;
         }
         throw profileError;
@@ -156,10 +175,11 @@ export const getUserRole = async (): Promise<string | null> => {
       if (error instanceof Error && (
         error.message.includes('JWT expired') ||
         error.message.includes('Invalid JWT') ||
-        error.message.includes('Invalid Refresh Token')
+        error.message.includes('Invalid Refresh Token') ||
+        error.message.includes('refresh_token_not_found')
       )) {
         console.error('Authentication error:', error);
-        window.location.href = '/login';
+        handleAuthError(error);
         return null;
       }
 

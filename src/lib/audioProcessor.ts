@@ -16,6 +16,7 @@ interface AudioProcessingResult {
     language?: string;
     fileType: string;
     fileName: string;
+    audioDescription?: string; // Ajout du champ description audio
     segments: Array<{
       start: number;
       end: number;
@@ -100,6 +101,7 @@ async function processAudioChunk(chunk: Blob, apiKey: string, signal?: AbortSign
 export async function processAudioFile(
   file: File,
   apiKey: string,
+  audioDescription?: string, // Paramètre pour la description audio spécifique
   onProgress?: (progress: ProcessingProgress) => void,
   signal?: AbortSignal
 ): Promise<AudioProcessingResult> {
@@ -212,15 +214,22 @@ export async function processAudioFile(
       throw new Error('Processing cancelled');
     }
 
-    // Prepare result
+    // Format du contenu avec la description audio si fournie
+    let enhancedContent = transcription;
+    if (audioDescription && audioDescription.trim()) {
+      enhancedContent = `== CONTEXTE DE L'ENREGISTREMENT ==\n${audioDescription.trim()}\n\n== TRANSCRIPTION ==\n${transcription}`;
+    }
+
+    // Prepare result with both descriptions
     const result: AudioProcessingResult = {
-      content: transcription,
+      content: enhancedContent,
       metadata: {
         title: file.name.replace(/\.[^/.]+$/, ''),
         duration: totalDuration,
         language: detectLanguage(transcription),
         fileType: file.type,
         fileName: file.name,
+        audioDescription: audioDescription?.trim(), // Ajouter la description audio aux métadonnées
         segments
       },
       confidence: 0.95,

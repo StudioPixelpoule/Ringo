@@ -11,6 +11,7 @@ export default defineConfig({
     minify: 'esbuild',
     reportCompressedSize: false,
     chunkSizeWarningLimit: 2000,
+    sourcemap: false,
     rollupOptions: {
       output: {
         manualChunks: {
@@ -38,7 +39,6 @@ export default defineConfig({
         }
       }
     },
-    sourcemap: false,
     assetsInlineLimit: 4096
   },
   server: {

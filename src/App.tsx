@@ -28,6 +28,7 @@ function App() {
       }
     }).catch(error => {
       console.error('Error getting session:', error);
+      handleAuthError(error);
       setLoading(false);
       setAuthInitialized(true);
     });
@@ -36,7 +37,7 @@ function App() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state change:', event);
+      console.log('Auth state change event:', event);
       
       if (event === 'TOKEN_REFRESHED') {
         setSession(session);
@@ -69,6 +70,17 @@ function App() {
     };
   }, []);
 
+  const handleAuthError = (error: any) => {
+    if (error?.message?.includes('refresh_token_not_found') || 
+        error?.message?.includes('JWT expired') || 
+        error?.message?.includes('Invalid JWT') ||
+        error?.message?.includes('Invalid Refresh Token')) {
+      console.log('Authentication error detected, clearing storage and redirecting to login');
+      localStorage.clear();
+      window.location.href = '/login';
+    }
+  };
+
   const fetchUserRole = async (userId: string) => {
     const maxRetries = 3;
     const baseDelay = 1000; // 1 second
@@ -86,8 +98,7 @@ function App() {
         if (error) {
           if (error.code === 'PGRST301' || error.code === '401') {
             console.error('Authentication error:', error);
-            localStorage.clear();
-            window.location.href = '/login';
+            handleAuthError(error);
             return;
           }
           throw error;
@@ -126,9 +137,10 @@ function App() {
         if (error instanceof Error) {
           if (error.message.includes('JWT expired') || 
               error.message.includes('Invalid JWT') ||
+              error.message.includes('Invalid Refresh Token') ||
               error.message.includes('Failed to fetch')) {
             console.error('Authentication error:', error);
-            window.location.href = '/login';
+            handleAuthError(error);
             return;
           }
           throw error;
