@@ -23,6 +23,25 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 });
 
+// Helper function to handle auth errors
+function handleAuthError(error: any) {
+  if (error?.message?.includes('refresh_token_not_found') || 
+      error?.message?.includes('JWT expired') || 
+      error?.message?.includes('Invalid JWT') ||
+      error?.message?.includes('Invalid Refresh Token') ||
+      error?.message?.includes('Invalid API key')) {
+    console.log('Authentication error detected, clearing storage and redirecting to login');
+    // Clear all local storage to remove any invalid tokens
+    localStorage.clear();
+    sessionStorage.clear();
+    
+    // Only redirect if we're not already on the login page
+    if (!window.location.pathname.includes('/login')) {
+      window.location.href = '/login';
+    }
+  }
+}
+
 // Initialize auth state
 supabase.auth.getSession().catch(error => {
   console.error('Error getting initial session:', error);
@@ -36,29 +55,13 @@ supabase.auth.onAuthStateChange((event, session) => {
   if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
     // Clear any cached data and redirect to login
     localStorage.clear();
+    sessionStorage.clear();
     // Redirect to login
     window.location.href = '/login';
   } else if (event === 'TOKEN_REFRESHED') {
     console.log('Session token refreshed');
   }
 });
-
-// Helper function to handle auth errors
-function handleAuthError(error: any) {
-  if (error?.message?.includes('refresh_token_not_found') || 
-      error?.message?.includes('JWT expired') || 
-      error?.message?.includes('Invalid JWT') ||
-      error?.message?.includes('Invalid Refresh Token')) {
-    console.log('Authentication error detected, clearing storage and redirecting to login');
-    // Clear all local storage to remove any invalid tokens
-    localStorage.clear();
-    
-    // Only redirect if we're not already on the login page
-    if (!window.location.pathname.includes('/login')) {
-      window.location.href = '/login';
-    }
-  }
-}
 
 // Add session refresh on focus with debounce
 let refreshTimeout: NodeJS.Timeout;
@@ -92,8 +95,7 @@ window.addEventListener('focus', () => {
 window.addEventListener('unhandledrejection', (event) => {
   if (event.reason?.name === 'AuthApiError' || 
       event.reason?.message?.includes('JWT expired') ||
-      event.reason?.message?.includes('Invalid JWT') ||
-      event.reason?.message?.includes('Invalid Refresh Token')) {
+      event.reason?.message?.includes('Invalid JWT')) {
     console.error('Auth API Error:', event.reason);
     handleAuthError(event.reason);
   }
@@ -176,7 +178,7 @@ export const getUserRole = async (): Promise<string | null> => {
         error.message.includes('JWT expired') ||
         error.message.includes('Invalid JWT') ||
         error.message.includes('Invalid Refresh Token') ||
-        error.message.includes('refresh_token_not_found')
+        error.message.includes('Invalid API key')
       )) {
         console.error('Authentication error:', error);
         handleAuthError(error);
@@ -194,7 +196,6 @@ export const getUserRole = async (): Promise<string | null> => {
     return null;
   }
 };
-
 
 // Helper function to check if user has admin privileges
 export const isAdmin = async (): Promise<boolean> => {

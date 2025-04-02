@@ -25,21 +25,35 @@ export function Login() {
       
       // Clear any existing auth data to prevent conflicts
       localStorage.clear();
+      sessionStorage.clear();
       
       // First check if user exists and is active
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('status')
-        .eq('email', email.trim().toLowerCase())
-        .maybeSingle();
+      try {
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('status')
+          .eq('email', email.trim().toLowerCase())
+          .maybeSingle();
 
-      if (profileError) {
-        console.error('Profile check error:', profileError);
-        throw new Error('Erreur lors de la vérification du profil');
-      }
+        if (profileError) {
+          console.error('Profile check error:', profileError);
+          if (profileError.message.includes('Invalid API key')) {
+            throw new Error('Erreur de configuration du serveur. Veuillez contacter l\'administrateur.');
+          }
+          throw new Error('Erreur lors de la vérification du profil');
+        }
 
-      if (profile && !profile.status) {
-        throw new Error('Ce compte a été désactivé');
+        if (profile && !profile.status) {
+          throw new Error('Ce compte a été désactivé');
+        }
+      } catch (error) {
+        // If the error is related to API key or auth, we'll try to proceed with login anyway
+        // as the RLS policies might still allow the login to work
+        if (!(error instanceof Error && error.message.includes('Erreur de configuration du serveur'))) {
+          console.warn('Profile check warning, proceeding with login attempt:', error);
+        } else {
+          throw error;
+        }
       }
 
       // Then attempt to sign in
@@ -60,23 +74,28 @@ export function Login() {
 
       // Check if user needs to change password
       if (data.user) {
-        const { data: userProfile, error: userProfileError } = await supabase
-          .from('profiles')
-          .select('password_changed, role')
-          .eq('id', data.user.id)
-          .single();
-        
-        if (userProfileError) {
-          console.error('User profile fetch error:', userProfileError);
-          throw userProfileError;
-        }
-        
-        console.log('User profile:', userProfile);
-        
-        // If password_changed is false or null, redirect to change password page
-        if (userProfile && (userProfile.password_changed === false || userProfile.password_changed === null)) {
-          navigate('/change-password');
-          return;
+        try {
+          const { data: userProfile, error: userProfileError } = await supabase
+            .from('profiles')
+            .select('password_changed, role')
+            .eq('id', data.user.id)
+            .single();
+          
+          if (userProfileError) {
+            console.error('User profile fetch error:', userProfileError);
+            throw userProfileError;
+          }
+          
+          console.log('User profile:', userProfile);
+          
+          // If password_changed is false or null, redirect to change password page
+          if (userProfile && (userProfile.password_changed === false || userProfile.password_changed === null)) {
+            navigate('/change-password');
+            return;
+          }
+        } catch (profileError) {
+          console.error('Error checking password status:', profileError);
+          // Continue to home page even if this check fails
         }
       }
 

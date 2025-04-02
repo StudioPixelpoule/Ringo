@@ -272,7 +272,6 @@ export function DocumentImportModal() {
         message: ''
       });
     }
-
   }, [processingStatus.isProcessing]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({

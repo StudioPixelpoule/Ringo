@@ -48,6 +48,7 @@ function App() {
         setSession(null);
         setUserRole('user');
         localStorage.clear();
+        sessionStorage.clear();
         window.location.href = '/login';
       } else if (event === 'SIGNED_IN') {
         setSession(session);
@@ -74,9 +75,11 @@ function App() {
     if (error?.message?.includes('refresh_token_not_found') || 
         error?.message?.includes('JWT expired') || 
         error?.message?.includes('Invalid JWT') ||
-        error?.message?.includes('Invalid Refresh Token')) {
+        error?.message?.includes('Invalid Refresh Token') ||
+        error?.message?.includes('Invalid API key')) {
       console.log('Authentication error detected, clearing storage and redirecting to login');
       localStorage.clear();
+      sessionStorage.clear();
       window.location.href = '/login';
     }
   };
@@ -134,18 +137,17 @@ function App() {
           return retryFetch(attempt + 1);
         }
 
-        if (error instanceof Error) {
-          if (error.message.includes('JWT expired') || 
-              error.message.includes('Invalid JWT') ||
-              error.message.includes('Invalid Refresh Token') ||
-              error.message.includes('Failed to fetch')) {
-            console.error('Authentication error:', error);
-            handleAuthError(error);
-            return;
-          }
-          throw error;
+        if (error instanceof Error && (
+          error.message.includes('JWT expired') || 
+          error.message.includes('Invalid JWT') ||
+          error.message.includes('Invalid Refresh Token') ||
+          error.message.includes('Failed to fetch') ||
+          error.message.includes('Invalid API key'))) {
+          console.error('Authentication error:', error);
+          handleAuthError(error);
+          return;
         }
-        throw new Error('Failed to fetch user role');
+        throw error;
       }
     };
 
