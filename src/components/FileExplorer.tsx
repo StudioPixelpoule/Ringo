@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronRight, Search, X, Send, Loader2, CheckSquare, Square } from 'lucide-react';
+import { ChevronRight, Search, X, Send, Loader2, CheckSquare, Square, Calendar, Filter, FileText } from 'lucide-react';
 import { useDocumentStore, Document, Folder } from '../lib/documentStore';
 import { useConversationStore } from '../lib/conversationStore';
 import { FileIcon } from './FileIcon';
@@ -185,6 +185,9 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [selectedDocuments, setSelectedDocuments] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'pdf' | 'doc' | 'data' | 'audio' | 'web'>('all');
+  const searchInputRef = useRef<HTMLInputElement>(null);
   
   const {
     folders,
@@ -205,6 +208,10 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
     if (isOpen) {
       fetchFolders();
       fetchAllDocuments();
+      // Focus search input when modal opens
+      setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 100);
     }
   }, [isOpen, fetchFolders, fetchAllDocuments]);
 
@@ -214,9 +221,43 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
   }, {} as Record<string, number>);
 
   const filteredDocuments = documents.filter(doc => {
-    const matchesSearch = doc.name.toLowerCase().includes(searchQuery.toLowerCase());
+    // Filter by folder
     const matchesFolder = !selectedFolder || doc.folder_id === selectedFolder.id;
-    return matchesSearch && matchesFolder;
+    if (!matchesFolder) return false;
+    
+    // Filter by search query
+    const matchesSearch = doc.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                         (doc.description && doc.description.toLowerCase().includes(searchQuery.toLowerCase()));
+    if (searchQuery && !matchesSearch) return false;
+    
+    // Filter by type
+    if (typeFilter !== 'all' && doc.type !== typeFilter) return false;
+    
+    // Filter by date
+    if (dateFilter !== 'all') {
+      const docDate = new Date(doc.created_at);
+      const now = new Date();
+      
+      switch (dateFilter) {
+        case 'today':
+          // Check if the document was created today
+          return docDate.toDateString() === now.toDateString();
+        
+        case 'week':
+          // Check if the document was created in the last 7 days
+          const weekAgo = new Date();
+          weekAgo.setDate(now.getDate() - 7);
+          return docDate >= weekAgo;
+        
+        case 'month':
+          // Check if the document was created in the last 30 days
+          const monthAgo = new Date();
+          monthAgo.setDate(now.getDate() - 30);
+          return docDate >= monthAgo;
+      }
+    }
+    
+    return true;
   });
 
   const toggleDocumentSelection = (documentId: string) => {
@@ -265,6 +306,22 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
     }
   };
 
+  const clearFilters = () => {
+    setSearchQuery('');
+    setDateFilter('all');
+    setTypeFilter('all');
+    // Focus search input after clearing
+    searchInputRef.current?.focus();
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Clear search on Escape key
+    if (e.key === 'Escape' && searchQuery) {
+      setSearchQuery('');
+      e.preventDefault();
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -278,47 +335,25 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <h2 className="text-xl font-medium text-gray-900">Explorateur de Documents</h2>
           <div className="flex items-center gap-4">
-            <div
-              className={`
-                relative flex items-center transition-all duration-200
-                ${isSearchFocused ? 'w-64' : 'w-48 hover:w-64'}
-              `}
-            >
-              <div
-                className={`
-                  absolute inset-0 rounded-lg transition-all duration-200
-                  ${isSearchFocused 
-                    ? 'bg-white shadow-md' 
-                    : 'bg-gray-100 group-hover:bg-gray-200'
-                  }
-                `}
-              />
-              <Search
-                size={16}
-                className={`
-                  absolute left-3 transition-colors duration-200
-                  ${isSearchFocused ? 'text-[#f15922]' : 'text-gray-400'}
-                `}
-              />
+            <div className="relative w-64">
+              <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                <Search size={16} className="text-gray-400" />
+              </div>
               <input
+                ref={searchInputRef}
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                onFocus={() => setIsSearchFocused(true)}
-                onBlur={() => setIsSearchFocused(false)}
-                placeholder="Rechercher..."
-                className={`
-                  w-full pl-9 pr-8 py-1.5 bg-transparent rounded-lg text-sm
-                  placeholder-gray-400 focus:outline-none transition-all duration-200
-                  ${isSearchFocused ? 'text-gray-900' : 'text-gray-600'}
-                `}
+                onKeyDown={handleSearchKeyDown}
+                placeholder="Rechercher par mots-clés..."
+                className="block w-full pl-10 pr-10 py-2 text-sm text-gray-900 border border-gray-300 rounded-lg bg-white focus:ring-[#f15922] focus:border-[#f15922]"
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-2 p-1 rounded-full hover:bg-gray-100"
+                  className="absolute inset-y-0 right-0 flex items-center pr-3"
                 >
-                  <X size={14} className="text-gray-400" />
+                  <X size={16} className="text-gray-400 hover:text-gray-600" />
                 </button>
               )}
             </div>
@@ -332,6 +367,7 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
         </div>
 
         <div className="flex-1 flex overflow-hidden">
+          {/* Folder tree (25%) */}
           <div className="w-1/4 border-r p-4 overflow-y-auto">
             <div className="space-y-2">
               {folders
@@ -349,20 +385,89 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
             </div>
           </div>
 
+          {/* Document list (50% or 75% depending on selection) */}
           <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Filters */}
+            <div className="p-4 border-b bg-gray-50">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">
+                  {selectedFolder ? selectedFolder.name : 'Tous les documents'}
+                </h3>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={clearFilters}
+                    className={`px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg ${
+                      searchQuery === '' && dateFilter === 'all' && typeFilter === 'all' 
+                        ? 'opacity-50 cursor-not-allowed' 
+                        : ''
+                    }`}
+                    disabled={searchQuery === '' && dateFilter === 'all' && typeFilter === 'all'}
+                  >
+                    Effacer les filtres
+                  </button>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-3 gap-4">
+                {/* Type filter */}
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                    <FileText size={16} className="text-gray-400" />
+                  </div>
+                  <select
+                    value={typeFilter}
+                    onChange={(e) => setTypeFilter(e.target.value as typeof typeFilter)}
+                    className="block w-full pl-10 pr-10 py-2 text-sm text-gray-900 border border-gray-300 rounded-lg bg-white focus:ring-[#f15922] focus:border-[#f15922]"
+                  >
+                    <option value="all">Tous les types</option>
+                    <option value="pdf">PDF</option>
+                    <option value="doc">Documents</option>
+                    <option value="data">Données</option>
+                    <option value="audio">Audio</option>
+                    <option value="web">Web</option>
+                  </select>
+                </div>
+                
+                {/* Date filter */}
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                    <Calendar size={16} className="text-gray-400" />
+                  </div>
+                  <select
+                    value={dateFilter}
+                    onChange={(e) => setDateFilter(e.target.value as typeof dateFilter)}
+                    className="block w-full pl-10 pr-10 py-2 text-sm text-gray-900 border border-gray-300 rounded-lg bg-white focus:ring-[#f15922] focus:border-[#f15922]"
+                  >
+                    <option value="all">Toutes les dates</option>
+                    <option value="today">Aujourd'hui</option>
+                    <option value="week">Cette semaine</option>
+                    <option value="month">Ce mois</option>
+                  </select>
+                </div>
+                
+                {/* Search count */}
+                <div className="flex items-center justify-end">
+                  <span className="text-sm text-gray-500">
+                    {filteredDocuments.length} document{filteredDocuments.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
+              </div>
+            </div>
+            
+            {/* Document list */}
             <div className="p-4 border-b flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleSelectAll}
                   className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-gray-100"
                 >
-                  {selectedDocuments.length === filteredDocuments.length ? (
+                  {selectedDocuments.length === filteredDocuments.length && filteredDocuments.length > 0 ? (
                     <CheckSquare size={18} className="text-[#f15922]" />
                   ) : (
                     <Square size={18} className="text-gray-600" />
                   )}
                   <span className="text-sm font-medium">
-                    {selectedDocuments.length === filteredDocuments.length
+                    {selectedDocuments.length === filteredDocuments.length && filteredDocuments.length > 0
                       ? 'Tout désélectionner'
                       : 'Tout sélectionner'}
                   </span>
@@ -374,19 +479,32 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
                 )}
               </div>
             </div>
+            
             <div className="flex-1 p-4 overflow-y-auto">
-              <div className="grid grid-cols-2 gap-4">
-                <AnimatePresence>
-                  {filteredDocuments.map(doc => (
-                    <FileCard
-                      key={doc.id}
-                      document={doc}
-                      isSelected={selectedDocuments.includes(doc.id)}
-                      onSelect={() => toggleDocumentSelection(doc.id)}
-                    />
-                  ))}
-                </AnimatePresence>
-              </div>
+              {loading ? (
+                <div className="flex items-center justify-center h-full">
+                  <Loader2 size={32} className="animate-spin text-[#f15922]" />
+                </div>
+              ) : filteredDocuments.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-gray-500">
+                  <FileText size={48} className="text-gray-300 mb-4" />
+                  <p className="text-lg font-medium">Aucun document trouvé</p>
+                  <p className="text-sm">Essayez de modifier vos critères de recherche</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  <AnimatePresence>
+                    {filteredDocuments.map(doc => (
+                      <FileCard
+                        key={doc.id}
+                        document={doc}
+                        isSelected={selectedDocuments.includes(doc.id)}
+                        onSelect={() => toggleDocumentSelection(doc.id)}
+                      />
+                    ))}
+                  </AnimatePresence>
+                </div>
+              )}
             </div>
           </div>
 

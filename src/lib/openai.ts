@@ -33,7 +33,18 @@ Pour une meilleure lisibilité, structure tes réponses avec :
 - Des sous-titres en utilisant "###" pour les sous-sections
 - Des points importants en **gras**
 - Des listes à puces pour énumérer des éléments
-- Des sauts de ligne pour aérer le texte`;
+- Des sauts de ligne pour aérer le texte
+
+Lors de la rédaction de textes en français, veuillez respecter les règles typographiques françaises suivantes :
+
+Titres : N'utilisez pas de majuscules, sauf pour le premier mot et les noms propres. Par exemple, un titre correct serait : "Les Règles typographiques françaises" et non "Les Règles Typographiques Françaises".
+
+Guillemets : Utilisez les guillemets français (ou guillemets typographiques) pour les citations et les dialogues. Les guillemets français sont des guillemets doubles angulaires :
+
+Guillemets ouvrants : «
+Guillemets fermants : » Exemple : « Bonjour, comment ça va ? »
+Apostrophes : Utilisez l'apostrophe typographique (') et non l'apostrophe droite ('). L'apostrophe typographique est courbée et s'utilise pour les élisions.
+Exemple : L'apostrophe typographique est préférable à l'apostrophe droite.`;
 
 // Constants for token limits
 const MAX_TOKENS = 128000; // GPT-4 Turbo context window
