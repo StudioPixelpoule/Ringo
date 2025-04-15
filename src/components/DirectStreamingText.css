@@ -1,3 +1,4 @@
+/* Message container with minimal spacing */
 .streaming-text-container {
   width: 100%;
   overflow-x: hidden;
@@ -9,21 +10,96 @@
   min-height: 20px;
   white-space: pre-wrap;
   word-break: break-word;
+  display: flex;
+  flex-direction: column;
+  transition: opacity 0.1s ease;
 }
 
-.typing-cursor {
-  display: inline-block;
-  width: 2px;
-  height: 1.2em;
-  background-color: #f15922;
-  vertical-align: middle;
-  margin-left: 1px;
-  animation: blink 1s step-end infinite;
+/* AJOUT du nouveau code pour le loader avec dimensions réduites */
+.thinking-loader-wrapper {
+  width: 80px;  /* Réduit de 200px à 80px */
+  height: 24px;  /* Réduit de 60px à 24px */
+  position: relative;
+  z-index: 1;
+  margin: 5px 0;  /* Aligné à gauche */
+  align-self: flex-start; /* Aligner au début du conteneur */
+  opacity: 1;
+  transition: opacity 0.2s ease-out;
+}
+.thinking-loader-circle {
+  width: 8px;  /* Réduit de 20px à 8px */
+  height: 8px;  /* Réduit de 20px à 8px */
+  position: absolute;
+  border-radius: 50%;
+  background-color: #f15a21;
+  left: 15%;
+  transform-origin: 50%;
+  animation: circle7124 .5s alternate infinite ease;
+}
+@keyframes circle7124 {
+  0% {
+    top: 24px;  /* Ajusté de 60px à 24px */
+    height: 3px;  /* Ajusté de 5px à 3px */
+    border-radius: 4px 4px 2px 2px;  /* Ajusté proportionnellement */
+    transform: scaleX(1.5);  /* Légèrement réduit de 1.7 à 1.5 */
+  }
+  40% {
+    height: 8px;  /* Ajusté de 20px à 8px */
+    border-radius: 50%;
+    transform: scaleX(1);
+  }
+  100% {
+    top: 0%;
+  }
+}
+.thinking-loader-circle:nth-child(2) {
+  left: 45%;
+  animation-delay: .2s;
+}
+.thinking-loader-circle:nth-child(3) {
+  left: auto;
+  right: 15%;
+  animation-delay: .3s;
+}
+.thinking-loader-shadow {
+  width: 8px;  /* Réduit de 20px à 8px */
+  height: 2px;  /* Réduit de 4px à 2px */
+  border-radius: 50%;
+  background-color: rgba(0,0,0,0.5);  /* Légèrement plus transparent */
+  position: absolute;
+  top: 26px;  /* Ajusté de 62px à 26px */
+  transform-origin: 50%;
+  z-index: -1;
+  left: 15%;
+  filter: blur(1px);
+  animation: shadow046 .5s alternate infinite ease;
+}
+@keyframes shadow046 {
+  0% {
+    transform: scaleX(1.5);
+  }
+  40% {
+    transform: scaleX(1);
+    opacity: .7;
+  }
+  100% {
+    transform: scaleX(.2);
+    opacity: .4;
+  }
+}
+.thinking-loader-shadow:nth-child(4) {
+  left: 45%;
+  animation-delay: .2s
+}
+.thinking-loader-shadow:nth-child(5) {
+  left: auto;
+  right: 15%;
+  animation-delay: .3s;
 }
 
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
+/* S'assurer que le markdown s'affiche en douceur */
+.streaming-text .enhanced-markdown {
+  transition: opacity 0.1s ease;
 }
 
 /* Preserve Markdown formatting during streaming */

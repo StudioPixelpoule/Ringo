@@ -18,6 +18,8 @@ export const DirectStreamingText: React.FC<DirectStreamingTextProps> = ({
 }) => {
   const [displayedContent, setDisplayedContent] = useState('');
   const [isComplete, setIsComplete] = useState(false);
+  // Ajout d'un nouvel état pour suivre si le streaming a commencé
+  const [hasStarted, setHasStarted] = useState(false);
   const markMessageAsStreamed = useConversationStore(state => state.markMessageAsStreamed);
   const contentRef = useRef(content);
   const streamingIdRef = useRef(messageId);
@@ -27,6 +29,7 @@ export const DirectStreamingText: React.FC<DirectStreamingTextProps> = ({
     if (messageId !== streamingIdRef.current) {
       setDisplayedContent('');
       setIsComplete(false);
+      setHasStarted(false);
       contentRef.current = content;
       streamingIdRef.current = messageId;
     }
@@ -53,8 +56,10 @@ export const DirectStreamingText: React.FC<DirectStreamingTextProps> = ({
       let chunk = '';
       let shouldPause = false;
       let currentChar = '';
+      let chunkSize = 0;
+      const maxChunkSize = 15; // Ajuster pour contrôler la taille des chunks
       
-      while (index < characters.length && !shouldPause) {
+      while (index < characters.length && !shouldPause && chunkSize < maxChunkSize) {
         currentChar = characters[index];
         const nextChars = characters.slice(index, index + 3).join('');
         const prevChar = index > 0 ? characters[index - 1] : '';
@@ -65,28 +70,34 @@ export const DirectStreamingText: React.FC<DirectStreamingTextProps> = ({
           chunk += nextChars;
           index += 3;
           shouldPause = true;
+          chunkSize += 3;
         } else if (nextChars.startsWith('**')) {
           markdownState.bold = !markdownState.bold;
           chunk += '**';
           index += 2;
+          chunkSize += 2;
         } else if (currentChar === '`' && !markdownState.codeBlock) {
           markdownState.inlineCode = !markdownState.inlineCode;
           chunk += currentChar;
           index++;
+          chunkSize++;
         } else if (currentChar === '*' && !markdownState.bold && prevChar !== '*') {
           markdownState.italic = !markdownState.italic;
           chunk += currentChar;
           index++;
+          chunkSize++;
         } else if (currentChar === '[' && !markdownState.link) {
           markdownState.link = true;
           chunk += currentChar;
           index++;
+          chunkSize++;
         } else if (currentChar === ']' && markdownState.link) {
           // Capture the entire link syntax
           const linkEnd = content.indexOf(')', index);
           if (linkEnd > -1) {
             chunk += content.slice(index, linkEnd + 1);
             index = linkEnd + 1;
+            chunkSize += (linkEnd + 1 - index);
           }
           markdownState.link = false;
         } else if (currentChar === '#' && (prevChar === '\n' || index === 0)) {
@@ -95,9 +106,11 @@ export const DirectStreamingText: React.FC<DirectStreamingTextProps> = ({
           if (headingEnd > -1) {
             chunk += content.slice(index, headingEnd + 1);
             index = headingEnd + 1;
+            chunkSize += (headingEnd + 1 - index);
           } else {
             chunk += content.slice(index);
             index = characters.length;
+            chunkSize += (characters.length - index);
           }
           shouldPause = true;
         } else if (currentChar === '-' && (prevChar === '\n' || index === 0)) {
@@ -106,9 +119,11 @@ export const DirectStreamingText: React.FC<DirectStreamingTextProps> = ({
           if (itemEnd > -1) {
             chunk += content.slice(index, itemEnd + 1);
             index = itemEnd + 1;
+            chunkSize += (itemEnd + 1 - index);
           } else {
             chunk += content.slice(index);
             index = characters.length;
+            chunkSize += (characters.length - index);
           }
           shouldPause = true;
         } else if (currentChar === '>' && (prevChar === '\n' || index === 0)) {
@@ -117,24 +132,60 @@ export const DirectStreamingText: React.FC<DirectStreamingTextProps> = ({
           if (quoteEnd > -1) {
             chunk += content.slice(index, quoteEnd + 1);
             index = quoteEnd + 1;
+            chunkSize += (quoteEnd + 1 - index);
           } else {
             chunk += content.slice(index);
             index = characters.length;
+            chunkSize += (characters.length - index);
           }
           shouldPause = true;
+        } else if (currentChar === '.' || currentChar === '!' || currentChar === '?') {
+          // Amélioration des pauses naturelles
+          shouldPause = true;
+          chunk += currentChar;
+          index++;
+          chunkSize++;
+          
+          // Capturer les espaces après la ponctuation
+          if (index < characters.length && characters[index] === ' ') {
+            chunk += characters[index];
+            index++;
+            chunkSize++;
+          }
+        } else if (currentChar === ',' || currentChar === ';' || currentChar === ':') {
+          shouldPause = Math.random() > 0.25; // 75% de chance de pause
+          chunk += currentChar;
+          index++;
+          chunkSize++;
+        } else if (currentChar === ' ') {
+          // Capturer des mots entiers pour plus de fluidité
+          chunk += currentChar;
+          index++;
+          chunkSize++;
+          
+          // Essayer de capturer le mot suivant en entier
+          let wordBuffer = '';
+          while (index < characters.length && 
+                characters[index] !== ' ' && 
+                !'.!?,;:)('.includes(characters[index]) &&
+                chunkSize < maxChunkSize) {
+            wordBuffer += characters[index];
+            index++;
+            chunkSize++;
+          }
+          
+          // Ajouter le mot au chunk
+          chunk += wordBuffer;
+          
+          // Si on a capturé un mot complet, considérer une pause
+          if (wordBuffer.length >= 5) {
+            shouldPause = Math.random() > 0.6; // 40% de chance de pause après un mot long
+          }
         } else {
           // Regular character
           chunk += currentChar;
           index++;
-          
-          // Natural pauses
-          if (currentChar === '.' || currentChar === '!' || currentChar === '?') {
-            shouldPause = true;
-          } else if (currentChar === ',' || currentChar === ';') {
-            shouldPause = Math.random() > 0.5;
-          } else if (currentChar === ' ') {
-            shouldPause = Math.random() > 0.8;
-          }
+          chunkSize++;
         }
       }
       
@@ -154,19 +205,33 @@ export const DirectStreamingText: React.FC<DirectStreamingTextProps> = ({
       const { chunk, shouldPause, currentChar } = getNextChunk();
       
       if (isMounted) {
+        // Marquer que le streaming a commencé dès que nous avons le premier morceau
+        setHasStarted(true);
         setDisplayedContent(prev => prev + chunk);
       }
       
-      const delay = shouldPause ? 
-        currentChar === '.' || currentChar === '!' || currentChar === '?' ? 300 : 
-        currentChar === ',' || currentChar === ';' ? 150 :
-        currentChar === ' ' ? 50 : speed
-        : speed;
+      // Délais plus courts et plus naturels (valeurs en ms)
+      const baseSpeed = speed * 0.8; // Légèrement plus rapide que l'original
+      let delay = baseSpeed;
+      
+      if (shouldPause) {
+        if (currentChar === '.' || currentChar === '!' || currentChar === '?') {
+          delay = 240; // Plus court que 300ms
+        } else if (currentChar === ',' || currentChar === ';') {
+          delay = 120; // Plus court que 150ms
+        } else {
+          delay = 30; // Plus court que 50ms
+        }
+      }
+      
+      // Ajouter une légère variation aléatoire pour plus de naturel
+      delay += Math.random() * 20 - 10; // +/- 10ms
       
       setTimeout(processNextChunk, delay);
     };
     
-    processNextChunk();
+    // Réduire le délai initial à 800ms pour commencer plus rapidement
+    setTimeout(processNextChunk, 800);
     
     return () => {
       isMounted = false;
@@ -179,8 +244,19 @@ export const DirectStreamingText: React.FC<DirectStreamingTextProps> = ({
         <EnhancedMarkdown content={content} />
       ) : (
         <div className="streaming-text">
-          <EnhancedMarkdown content={displayedContent} />
-          <span className="typing-cursor" />
+          {!hasStarted && (
+            // L'animation s'affiche en haut du conteneur tant que le streaming n'a pas commencé
+            <div className="thinking-loader-wrapper">
+              <div className="thinking-loader-circle"></div>
+              <div className="thinking-loader-circle"></div>
+              <div className="thinking-loader-circle"></div>
+              <div className="thinking-loader-shadow"></div>
+              <div className="thinking-loader-shadow"></div>
+              <div className="thinking-loader-shadow"></div>
+            </div>
+          )}
+          {/* Le contenu s'affiche progressivement dans le même conteneur */}
+          {hasStarted && <EnhancedMarkdown content={displayedContent} />}
         </div>
       )}
     </div>
