@@ -176,7 +176,7 @@ export function Chat({ session, userRole: propUserRole, authInitialized }: ChatP
   const adjustTextareaHeight = () => {
     if (inputRef.current) {
       inputRef.current.style.height = 'auto';
-      inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 200) + 'px';
+      inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 120) + 'px'; // Reduced max height
     }
   };
 
@@ -362,15 +362,15 @@ export function Chat({ session, userRole: propUserRole, authInitialized }: ChatP
               <div ref={messagesEndRef} />
             </div>
 
-            <div className="flex-shrink-0 p-4 bg-gradient-to-t from-white via-white to-transparent">
+            <div className="flex-shrink-0 p-3 bg-gradient-to-t from-white via-white to-transparent">
               <form onSubmit={handleSubmit} className="relative flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setFileExplorerOpen(true)}
-                  className="chat-neumorphic-button flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center text-gray-600 hover:text-gray-700 focus:outline-none"
+                  className="chat-neumorphic-button flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-gray-600 hover:text-gray-700 focus:outline-none"
                   aria-label="Open file explorer"
                 >
-                  <Database size={20} />
+                  <Database size={18} />
                 </button>
                 <div className="relative flex-grow">
                   <textarea
@@ -387,7 +387,7 @@ export function Chat({ session, userRole: propUserRole, authInitialized }: ChatP
                       }
                     }}
                     placeholder={currentConversation ? "Envoyez un message..." : "Sélectionnez une conversation pour commencer"}
-                    className="chat-input w-full pl-4 pr-12 py-3 max-h-[200px] resize-none focus:outline-none bg-white"
+                    className="chat-input w-full pl-4 pr-12 py-2 max-h-[120px] resize-none focus:outline-none bg-white"
                     rows={1}
                     disabled={!currentConversation}
                   />
@@ -403,21 +403,21 @@ export function Chat({ session, userRole: propUserRole, authInitialized }: ChatP
                     />
                   </button>
                 </div>
+                {currentConversation && conversationDocuments.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setReportManagerOpen(true)}
+                    className="chat-neumorphic-button flex-shrink-0 h-10 px-3 py-2 rounded-lg flex items-center gap-2 text-[#f15922]"
+                  >
+                    <FileText size={18} />
+                    <span className="font-medium">Rapports</span>
+                  </button>
+                )}
               </form>
             </div>
           </div>
         </main>
       </div>
-
-      {currentConversation && conversationDocuments.length > 0 && (
-        <button
-          onClick={() => setReportManagerOpen(true)}
-          className="fixed bottom-8 right-8 z-10 flex items-center gap-2 bg-white p-3 rounded-full shadow-md hover:shadow-lg transition-all"
-        >
-          <FileText size={20} color="#f15922" />
-          <span className="text-[#f15922] font-medium">Rapports</span>
-        </button>
-      )}
 
       <FeedbackButton />
 

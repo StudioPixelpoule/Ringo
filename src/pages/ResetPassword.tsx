@@ -4,34 +4,74 @@ import { supabase } from '../lib/supabase';
 import { Logo } from '../components/Logo';
 import { SmallLogo } from '../components/SmallLogo';
 import { IrsstLogo } from '../components/IrsstLogo';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ArrowLeft } from 'lucide-react';
+import { logError } from '../lib/errorLogger';
 
 export function ResetPassword() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   
+  // Check if we have a token (for password reset form)
+  const token = searchParams.get('token');
+  
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [isResetForm, setIsResetForm] = useState(false);
 
+  // Check if we're in reset mode or request mode
   useEffect(() => {
-    // Check if we have a valid token
-    const token = searchParams.get('token');
-    if (!token) {
-      setError('Token de réinitialisation manquant');
+    if (token) {
+      setIsResetForm(true);
     }
-  }, [searchParams]);
+  }, [token]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleRequestReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() || loading) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Validate email format
+      const emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+      if (!emailRegex.test(email.trim())) {
+        throw new Error('Format d\'email invalide');
+      }
+
+      // Use the Edge Function to send the reset email
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-password-reset`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({ email: email.trim().toLowerCase() })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Erreur lors de l\'envoi du lien de réinitialisation');
+      }
+
+      setSuccess(true);
+    } catch (err) {
+      console.error('Reset password error:', err);
+      logError(err);
+      setError(err instanceof Error ? err.message : 'Une erreur est survenue');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const token = searchParams.get('token');
-    if (!token) {
-      setError('Token de réinitialisation manquant');
-      return;
-    }
+    if (!password || !confirmPassword || loading) return;
 
     if (password !== confirmPassword) {
       setError('Les mots de passe ne correspondent pas');
@@ -86,16 +126,35 @@ export function ResetPassword() {
 
         <div className="bg-white/10 backdrop-blur-sm rounded-lg p-8 shadow-xl">
           <h2 className="text-xl font-medium text-white mb-6">
-            Réinitialisation du mot de passe
+            {isResetForm ? 'Définir un nouveau mot de passe' : 'Réinitialisation du mot de passe'}
           </h2>
 
           {success ? (
-            <div className="bg-green-500/20 border border-green-500/50 text-white px-4 py-3 rounded-md text-center">
-              <p className="mb-2">Mot de passe mis à jour avec succès !</p>
-              <p className="text-sm">Redirection vers la page de connexion...</p>
+            <div className="space-y-6">
+              <div className="bg-green-500/20 border border-green-500/50 text-white px-4 py-3 rounded-md">
+                {isResetForm ? (
+                  <>
+                    <p className="mb-2">Votre mot de passe a été mis à jour avec succès !</p>
+                    <p className="text-sm">Vous allez être redirigé vers la page de connexion...</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="mb-2">Si un compte existe avec cet email, vous recevrez un lien de réinitialisation.</p>
+                    <p className="text-sm">Veuillez vérifier votre boîte de réception et suivre les instructions.</p>
+                  </>
+                )}
+              </div>
+
+              <button
+                onClick={() => navigate('/login')}
+                className="w-full bg-[#2F4F4F] text-white py-3 px-4 rounded-md hover:bg-[#2F4F4F]/90 focus:outline-none focus:ring-2 focus:ring-white/50 transition-colors flex items-center justify-center gap-2"
+              >
+                <ArrowLeft size={20} />
+                Retour à la connexion
+              </button>
             </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="space-y-6">
+          ) : isResetForm ? (
+            <form onSubmit={handleResetPassword} className="space-y-6">
               <div>
                 <label htmlFor="password" className="block text-white text-sm font-medium mb-2">
                   Nouveau mot de passe
@@ -136,20 +195,84 @@ export function ResetPassword() {
                 </div>
               )}
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-[#2F4F4F] text-white py-3 px-4 rounded-md hover:bg-[#2F4F4F]/90 focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="animate-spin" size={20} />
-                    <span>Mise à jour...</span>
-                  </>
-                ) : (
-                  'Mettre à jour le mot de passe'
-                )}
-              </button>
+              <div className="flex flex-col space-y-3">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-[#2F4F4F] text-white py-3 px-4 rounded-md hover:bg-[#2F4F4F]/90 focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="animate-spin" size={20} />
+                      <span>Mise à jour...</span>
+                    </>
+                  ) : (
+                    'Mettre à jour le mot de passe'
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => navigate('/login')}
+                  className="w-full bg-transparent text-white py-3 px-4 rounded-md border border-white/30 hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/50 transition-colors flex items-center justify-center gap-2"
+                >
+                  <ArrowLeft size={20} />
+                  Retour à la connexion
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={handleRequestReset} className="space-y-6">
+              <div>
+                <label htmlFor="email" className="block text-white text-sm font-medium mb-2">
+                  Email
+                </label>
+                <input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-4 py-3 rounded-md bg-white/20 border border-white/30 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/50"
+                  placeholder="votre@email.com"
+                  required
+                  disabled={loading}
+                />
+                <p className="mt-2 text-sm text-white/70">
+                  Entrez l'adresse email associée à votre compte pour recevoir un lien de réinitialisation.
+                </p>
+              </div>
+
+              {error && (
+                <div className="bg-red-500/20 border border-red-500/50 text-white px-4 py-3 rounded-md">
+                  {error}
+                </div>
+              )}
+
+              <div className="flex flex-col space-y-3">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-[#2F4F4F] text-white py-3 px-4 rounded-md hover:bg-[#2F4F4F]/90 focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="animate-spin" size={20} />
+                      <span>Envoi en cours...</span>
+                    </>
+                  ) : (
+                    'Envoyer le lien de réinitialisation'
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => navigate('/login')}
+                  className="w-full bg-transparent text-white py-3 px-4 rounded-md border border-white/30 hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/50 transition-colors flex items-center justify-center gap-2"
+                >
+                  <ArrowLeft size={20} />
+                  Retour à la connexion
+                </button>
+              </div>
             </form>
           )}
         </div>

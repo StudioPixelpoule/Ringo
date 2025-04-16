@@ -55,6 +55,13 @@ function App() {
         if (session) {
           fetchUserRole(session.user.id);
         }
+      } else if (event === 'PASSWORD_RECOVERY') {
+        // Handle password recovery event
+        console.log('Password recovery event detected');
+        if (session) {
+          // User is authenticated, redirect to reset password page
+          navigate('/reset-password');
+        }
       } else {
         setSession(session);
         if (session) {
@@ -70,6 +77,10 @@ function App() {
       subscription.unsubscribe();
     };
   }, []);
+
+  const navigate = (path: string) => {
+    window.location.href = path;
+  };
 
   const handleAuthError = (error: any) => {
     if (error?.message?.includes('refresh_token_not_found') || 

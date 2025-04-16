@@ -61,7 +61,7 @@
 /* Input area */
 .chat-input-container {
   position: relative;
-  padding: 1rem;
+  padding: 0.75rem;
   background: linear-gradient(to bottom, transparent, white 20%);
   border-top: 1px solid #eee;
 }
@@ -79,9 +79,9 @@
 
 .chat-input {
   width: 100%;
-  min-height: 48px;
-  max-height: 200px;
-  padding: 0.75rem 2.5rem 0.75rem 1rem;
+  min-height: 42px; /* Reduced from 48px */
+  max-height: 120px; /* Reduced from 200px */
+  padding: 0.6rem 2.5rem 0.6rem 1rem; /* Reduced vertical padding */
   border: 1px solid #e5e5e5;
   border-radius: 0.75rem;
   background: white;
@@ -134,8 +134,8 @@
 
 /* Database button */
 .database-button {
-  width: 48px;
-  height: 48px;
+  width: 42px; /* Reduced from 48px */
+  height: 42px; /* Reduced from 48px */
   padding: 0;
   border: none;
   border-radius: 50%;
@@ -257,6 +257,39 @@
   color: #333;
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+/* Bottom action bar */
+.bottom-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background-color: #f8f9fa;
+  border-top: 1px solid #eee;
+}
+
+.action-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  background-color: white;
+  color: #f15922;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border: 1px solid #f1592220;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.action-button:hover {
+  background-color: #f1592210;
+}
+
+.action-button:active {
+  transform: translateY(1px);
 }
 
 /* Responsive adjustments */

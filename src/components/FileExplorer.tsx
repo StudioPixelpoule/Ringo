@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronRight, Search, X, Send, Loader2, CheckSquare, Square, Calendar, Filter, FileText } from 'lucide-react';
+import { ChevronRight, Search, X, Send, Loader2, CheckSquare, Square, Calendar, Filter, FileText, List, Grid } from 'lucide-react';
 import { useDocumentStore, Document, Folder } from '../lib/documentStore';
 import { useConversationStore } from '../lib/conversationStore';
 import { FileIcon } from './FileIcon';
@@ -36,6 +36,58 @@ const FileCard: React.FC<FileCardProps> = ({ document, isSelected, onSelect }) =
           <p className={`text-sm truncate ${isSelected ? 'text-white/80' : 'text-gray-500'}`}>
             {new Date(document.created_at).toLocaleDateString()}
           </p>
+        </div>
+        <div className="flex-shrink-0">
+          {isSelected ? <CheckSquare size={20} /> : <Square size={20} />}
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
+interface FileListItemProps {
+  document: Document;
+  isSelected: boolean;
+  onSelect: () => void;
+}
+
+const FileListItem: React.FC<FileListItemProps> = ({ document, isSelected, onSelect }) => {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={onSelect}
+      className={`
+        relative p-3 rounded-lg cursor-pointer transition-colors duration-200
+        ${isSelected ? 'bg-[#f15922] text-white' : 'bg-white hover:bg-gray-50'}
+        shadow-sm hover:shadow-md mb-2
+      `}
+    >
+      <div className="flex items-center gap-3">
+        <div className={`flex-shrink-0 text-[#dba747] ${isSelected ? 'text-white' : ''}`}>
+          <FileIcon type={document.type} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="font-medium">{document.name}</h3>
+          <div className="flex items-center gap-4 mt-1">
+            <p className={`text-xs ${isSelected ? 'text-white/80' : 'text-gray-500'}`}>
+              {document.type.toUpperCase()}
+            </p>
+            <p className={`text-xs ${isSelected ? 'text-white/80' : 'text-gray-500'}`}>
+              {new Date(document.created_at).toLocaleDateString('fr-FR', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+              })}
+            </p>
+            {document.description && (
+              <p className={`text-xs truncate ${isSelected ? 'text-white/80' : 'text-gray-500'}`}>
+                {document.description}
+              </p>
+            )}
+          </div>
         </div>
         <div className="flex-shrink-0">
           {isSelected ? <CheckSquare size={20} /> : <Square size={20} />}
@@ -187,6 +239,8 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | 'pdf' | 'doc' | 'data' | 'audio' | 'web'>('all');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [isSearching, setIsSearching] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   
   const {
@@ -215,20 +269,27 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
     }
   }, [isOpen, fetchFolders, fetchAllDocuments]);
 
+  // Set isSearching when search query changes
+  useEffect(() => {
+    setIsSearching(searchQuery.length > 0);
+  }, [searchQuery]);
+
   const documentCounts = folders.reduce((acc, folder) => {
     acc[folder.id] = documents.filter(doc => doc.folder_id === folder.id).length;
     return acc;
   }, {} as Record<string, number>);
 
   const filteredDocuments = documents.filter(doc => {
-    // Filter by folder
-    const matchesFolder = !selectedFolder || doc.folder_id === selectedFolder.id;
-    if (!matchesFolder) return false;
-    
-    // Filter by search query
-    const matchesSearch = doc.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                         (doc.description && doc.description.toLowerCase().includes(searchQuery.toLowerCase()));
-    if (searchQuery && !matchesSearch) return false;
+    // When searching, ignore folder selection
+    if (searchQuery) {
+      const matchesSearch = doc.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                           (doc.description && doc.description.toLowerCase().includes(searchQuery.toLowerCase()));
+      if (!matchesSearch) return false;
+    } else {
+      // When not searching, filter by folder
+      const matchesFolder = !selectedFolder || doc.folder_id === selectedFolder.id;
+      if (!matchesFolder) return false;
+    }
     
     // Filter by type
     if (typeFilter !== 'all' && doc.type !== typeFilter) return false;
@@ -310,6 +371,7 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
     setSearchQuery('');
     setDateFilter('all');
     setTypeFilter('all');
+    setIsSearching(false);
     // Focus search input after clearing
     searchInputRef.current?.focus();
   };
@@ -318,6 +380,7 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
     // Clear search on Escape key
     if (e.key === 'Escape' && searchQuery) {
       setSearchQuery('');
+      setIsSearching(false);
       e.preventDefault();
     }
   };
@@ -350,7 +413,10 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
               />
               {searchQuery && (
                 <button
-                  onClick={() => setSearchQuery('')}
+                  onClick={() => {
+                    setSearchQuery('');
+                    setIsSearching(false);
+                  }}
                   className="absolute inset-y-0 right-0 flex items-center pr-3"
                 >
                   <X size={16} className="text-gray-400 hover:text-gray-600" />
@@ -368,7 +434,7 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
 
         <div className="flex-1 flex overflow-hidden">
           {/* Folder tree (25%) */}
-          <div className="w-1/4 border-r p-4 overflow-y-auto">
+          <div className={`${isSearching ? 'hidden' : 'w-1/4'} border-r p-4 overflow-y-auto`}>
             <div className="space-y-2">
               {folders
                 .filter(f => !f.parent_id)
@@ -386,12 +452,17 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
           </div>
 
           {/* Document list (50% or 75% depending on selection) */}
-          <div className="flex-1 flex flex-col overflow-hidden">
+          <div className={`flex-1 flex flex-col overflow-hidden ${isSearching ? 'w-3/4' : ''}`}>
             {/* Filters */}
             <div className="p-4 border-b bg-gray-50">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-medium text-gray-900">
-                  {selectedFolder ? selectedFolder.name : 'Tous les documents'}
+                  {isSearching 
+                    ? `Résultats de recherche pour "${searchQuery}"`
+                    : selectedFolder 
+                      ? selectedFolder.name 
+                      : 'Tous les documents'
+                  }
                 </h3>
                 <div className="flex items-center gap-2">
                   <button
@@ -408,7 +479,7 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
                 </div>
               </div>
               
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-4 gap-4">
                 {/* Type filter */}
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
@@ -443,6 +514,26 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
                     <option value="week">Cette semaine</option>
                     <option value="month">Ce mois</option>
                   </select>
+                </div>
+                
+                {/* View mode toggle */}
+                <div className="flex items-center justify-center">
+                  <div className="flex items-center bg-gray-100 rounded-lg p-1">
+                    <button
+                      onClick={() => setViewMode('grid')}
+                      className={`p-2 rounded-lg ${viewMode === 'grid' ? 'bg-white shadow-sm' : 'text-gray-500'}`}
+                      title="Vue grille"
+                    >
+                      <Grid size={18} />
+                    </button>
+                    <button
+                      onClick={() => setViewMode('list')}
+                      className={`p-2 rounded-lg ${viewMode === 'list' ? 'bg-white shadow-sm' : 'text-gray-500'}`}
+                      title="Vue liste"
+                    >
+                      <List size={18} />
+                    </button>
+                  </div>
                 </div>
                 
                 {/* Search count */}
@@ -491,11 +582,24 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
                   <p className="text-lg font-medium">Aucun document trouvé</p>
                   <p className="text-sm">Essayez de modifier vos critères de recherche</p>
                 </div>
-              ) : (
+              ) : viewMode === 'grid' ? (
                 <div className="grid grid-cols-2 gap-4">
                   <AnimatePresence>
                     {filteredDocuments.map(doc => (
                       <FileCard
+                        key={doc.id}
+                        document={doc}
+                        isSelected={selectedDocuments.includes(doc.id)}
+                        onSelect={() => toggleDocumentSelection(doc.id)}
+                      />
+                    ))}
+                  </AnimatePresence>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <AnimatePresence>
+                    {filteredDocuments.map(doc => (
+                      <FileListItem
                         key={doc.id}
                         document={doc}
                         isSelected={selectedDocuments.includes(doc.id)}

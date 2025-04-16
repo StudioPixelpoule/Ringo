@@ -109,6 +109,10 @@ export function Login() {
     }
   };
 
+  const handleForgotPassword = () => {
+    navigate('/reset-password');
+  };
+
   return (
     <div className="min-h-screen bg-[#f15922] flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-md">
@@ -175,6 +179,16 @@ export function Login() {
             >
               {loading ? 'Connexion...' : 'Allons-y !'}
             </button>
+
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                className="text-white/80 hover:text-white text-sm transition-colors"
+              >
+                Mot de passe oublié ?
+              </button>
+            </div>
           </form>
         </div>
 

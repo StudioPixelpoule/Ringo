@@ -208,3 +208,18 @@ export const isSuperAdmin = async (): Promise<boolean> => {
   const role = await getUserRole();
   return role === 'super_admin';
 };
+
+// Helper function to send password reset email
+export const sendPasswordResetEmail = async (email: string): Promise<boolean> => {
+  try {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`
+    });
+    
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.error('Error sending password reset email:', error);
+    throw error;
+  }
+};

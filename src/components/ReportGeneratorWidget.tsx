@@ -114,8 +114,8 @@ export function ReportGeneratorWidget() {
 
   return (
     <>
-      <div className="fixed bottom-24 right-8 z-10">
-        {/* Widget button */}
+      {/* Widget button */}
+      <div className="fixed bottom-8 right-8 z-10">
         <button
           onClick={() => setIsOpen(!isOpen)}
           className="flex items-center gap-2 bg-white p-3 rounded-full shadow-md hover:shadow-lg transition-all"

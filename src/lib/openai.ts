@@ -46,8 +46,28 @@ Guillemets fermants : » Exemple : « Bonjour, comment ça va ? »
 Apostrophes : Utilisez l'apostrophe typographique (') et non l'apostrophe droite ('). L'apostrophe typographique est courbée et s'utilise pour les élisions.
 Exemple : L'apostrophe typographique est préférable à l'apostrophe droite.`;
 
+const COMPARATIVE_ANALYSIS_PROMPT = `Lorsqu'une requête concerne l'analyse comparative de plusieurs documents ou instituts:
+
+1. IMPORTANT: TOUJOURS analyser d'abord chaque document séparément avant de procéder à une comparaison.
+
+2. Pour chaque document/institut:
+   - Extraire UNIQUEMENT les informations explicitement mentionnées
+   - Si une vision/mission n'est pas clairement identifiée, indiquer "Non mentionnée explicitement"
+   - Ne jamais générer ou inférer une vision non explicite
+
+3. Format de réponse pour les comparaisons:
+   - Utiliser un tableau avec des colonnes uniformes
+   - Citer les sources exactes quand elles existent
+   - Utiliser des formulations identiques pour les cas similaires
+
+4. Avant de finaliser la réponse:
+   - Vérifier la cohérence entre les analyses individuelles et la synthèse
+   - S'assurer que toutes les informations proviennent directement des documents
+
+5. Dernière vérification: Ne jamais présenter une interprétation comme un fait explicite du document.`;
+
 // Constants for token limits
-const MAX_TOKENS = 128000; // GPT-4 Turbo context window
+const MAX_TOKENS = 128000; // GPT-4o context window
 const MAX_TOKENS_PER_DOC = Math.floor(MAX_TOKENS * 0.7); // 70% of context for documents
 const MAX_SYSTEM_TOKENS = 2000; // Reserve 2K tokens for system messages
 const MAX_HISTORY_TOKENS = 4000; // Reserve 4K tokens for conversation history
@@ -79,6 +99,34 @@ function truncateToTokenLimit(text: string, maxTokens: number): string {
   }
 
   return result + '\n\n[Texte tronqué pour respecter la limite de tokens]';
+}
+
+// Function to detect if a query is asking for comparative analysis
+function isComparativeAnalysisQuery(query: string): boolean {
+  const comparativeKeywords = [
+    'compare', 'comparaison', 'différence', 'similitude', 'contraste',
+    'versus', 'vs', 'tableau', 'différent', 'semblable', 'distinguer',
+    'comparer', 'distinction', 'différencier', 'ressemblance',
+    'différentes visions', 'différentes missions', 'différentes approches'
+  ];
+  
+  const queryLower = query.toLowerCase();
+  
+  // Check if query contains comparative keywords
+  const hasComparativeKeyword = comparativeKeywords.some(keyword => 
+    queryLower.includes(keyword)
+  );
+  
+  // Check if query mentions multiple entities
+  const mentionsMultipleEntities = (
+    (queryLower.match(/document[s]?/g) || []).length > 1 ||
+    (queryLower.match(/institut[s]?/g) || []).length > 1 ||
+    queryLower.includes('plusieurs') ||
+    queryLower.includes('multiples') ||
+    queryLower.includes('entre les')
+  );
+  
+  return hasComparativeKeyword || mentionsMultipleEntities;
 }
 
 // Function to find relevant content based on query
@@ -180,6 +228,14 @@ function prepareMessages(messages: ChatMessage[], documentContent?: string): Cha
   if (documentContent) {
     // Get the user's latest query
     const latestQuery = messages[messages.length - 1]?.content || '';
+    
+    // Check if this is a comparative analysis query
+    if (isComparativeAnalysisQuery(latestQuery)) {
+      preparedMessages.push({
+        role: 'system',
+        content: COMPARATIVE_ANALYSIS_PROMPT
+      });
+    }
 
     preparedMessages.push({
       role: 'system',
@@ -222,7 +278,7 @@ export async function generateChatResponse(messages: ChatMessage[], documentCont
     const preparedMessages = prepareMessages(messages, documentContent);
     
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4-turbo-preview',
+      model: 'gpt-4o',
       messages: preparedMessages,
       temperature: 0.7,
       max_tokens: 4000,
@@ -246,7 +302,7 @@ export async function generateChatResponse(messages: ChatMessage[], documentCont
       if (!lastMessage) throw new Error('No message to process');
 
       const completion = await openai.chat.completions.create({
-        model: 'gpt-4-turbo-preview',
+        model: 'gpt-4o',
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
           lastMessage
@@ -285,7 +341,7 @@ export async function generateChatResponseStreaming(
     let fullResponse = '';
 
     const stream = await openai.chat.completions.create({
-      model: 'gpt-4-turbo-preview',
+      model: 'gpt-4o',
       messages: preparedMessages,
       temperature: 0.7,
       max_tokens: 4000,
