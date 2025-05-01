@@ -290,6 +290,9 @@ export function DocumentImportModal() {
       'audio/aac': ['.aac'],
       'audio/ogg': ['.ogg'],
       'audio/webm': ['.webm'],
+      'audio/mp4': ['.mp4'],
+      'audio/mpga': ['.mpga'],
+      'audio/m4a': ['.m4a'],
       'text/html': ['.html']
     },
     multiple: false,
@@ -305,7 +308,7 @@ export function DocumentImportModal() {
   // Détecter si le fichier est un fichier audio
   const isAudioFile = selectedFile && 
     (selectedFile.type.startsWith('audio/') || 
-     ['mp3', 'wav', 'wave', 'aac', 'ogg', 'webm'].includes(selectedFile.name.split('.').pop()?.toLowerCase() || ''));
+     ['mp3', 'wav', 'wave', 'aac', 'ogg', 'webm', 'm4a', 'mp4', 'mpga'].includes(selectedFile.name.split('.').pop()?.toLowerCase() || ''));
 
   const handleFolderSelect = (folder: Folder) => {
     setCurrentFolder(folder);
@@ -356,7 +359,7 @@ export function DocumentImportModal() {
       const documentType = extension === 'pdf' ? 'pdf' :
                        ['doc', 'docx'].includes(extension || '') ? 'doc' :
                        ['json', 'csv', 'xlsx', 'xls'].includes(extension || '') ? 'data' :
-                       ['mp3', 'wav', 'wave', 'aac', 'ogg', 'webm'].includes(extension || '') ? 'audio' :
+                       ['mp3', 'wav', 'wave', 'aac', 'ogg', 'webm', 'm4a', 'mp4', 'mpga'].includes(extension || '') ? 'audio' :
                        extension === 'html' ? 'report' : 'unknown';
 
       if (documentType === 'audio') {

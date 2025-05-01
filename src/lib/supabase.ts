@@ -7,6 +7,28 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables');
 }
 
+// Network check utility
+const checkNetworkConnection = async (): Promise<boolean> => {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    
+    const response = await fetch(`${supabaseUrl}/rest/v1/`, {
+      method: 'HEAD',
+      signal: controller.signal,
+      headers: {
+        'apikey': supabaseAnonKey
+      }
+    });
+    
+    clearTimeout(timeoutId);
+    return response.ok;
+  } catch (error) {
+    console.warn('Network connectivity check failed:', error);
+    return false;
+  }
+};
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
@@ -20,11 +42,29 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     headers: {
       'x-application-name': 'ringo'
     }
-  }
+  },
+  // Add retry configuration
+  retryFilter: (result, count, error) => {
+    if (error && count < 3) {
+      // Retry on network errors or 5xx server errors
+      return error instanceof Error || (result && result.status >= 500);
+    }
+    return false;
+  },
+  retryDelay: (retryCount) => Math.min(1000 * Math.pow(2, retryCount), 10000) // Exponential backoff
 });
 
 // Helper function to handle auth errors
-function handleAuthError(error: any) {
+async function handleAuthError(error: any) {
+  if (error?.message?.includes('Failed to fetch')) {
+    const isConnected = await checkNetworkConnection();
+    if (!isConnected) {
+      console.error('Network connectivity issue detected');
+      // You could dispatch an event or update UI state here to show network error
+      return;
+    }
+  }
+
   if (error?.message?.includes('refresh_token_not_found') || 
       error?.message?.includes('JWT expired') || 
       error?.message?.includes('Invalid JWT') ||
@@ -42,11 +82,25 @@ function handleAuthError(error: any) {
   }
 }
 
-// Initialize auth state
-supabase.auth.getSession().catch(error => {
-  console.error('Error getting initial session:', error);
-  handleAuthError(error);
-});
+// Initialize auth state with retry mechanism
+const initializeAuthState = async (retries = 3, delay = 1000) => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const { data, error } = await supabase.auth.getSession();
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error(`Auth initialization attempt ${i + 1} failed:`, error);
+      if (i < retries - 1) {
+        await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, i)));
+      } else {
+        handleAuthError(error);
+      }
+    }
+  }
+};
+
+initializeAuthState().catch(console.error);
 
 // Set up auth state change listener
 supabase.auth.onAuthStateChange((event, session) => {
@@ -63,10 +117,38 @@ supabase.auth.onAuthStateChange((event, session) => {
   }
 });
 
-// Add session refresh on focus with debounce
+// Add session refresh on focus with debounce and retry mechanism
 let refreshTimeout: NodeJS.Timeout;
 let lastRefreshTime = 0;
 const REFRESH_COOLDOWN = 5000; // 5 seconds cooldown between refreshes
+const MAX_RETRIES = 3;
+
+const refreshSessionWithRetry = async () => {
+  for (let i = 0; i < MAX_RETRIES; i++) {
+    try {
+      const isConnected = await checkNetworkConnection();
+      if (!isConnected) {
+        console.warn('Network unavailable, retrying...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        continue;
+      }
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        handleAuthError(new Error('No valid session'));
+      }
+      lastRefreshTime = Date.now();
+      return;
+    } catch (error) {
+      console.error(`Session refresh attempt ${i + 1} failed:`, error);
+      if (i < MAX_RETRIES - 1) {
+        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, i)));
+      } else {
+        handleAuthError(error);
+      }
+    }
+  }
+};
 
 window.addEventListener('focus', () => {
   const now = Date.now();
@@ -75,20 +157,7 @@ window.addEventListener('focus', () => {
   }
   
   clearTimeout(refreshTimeout);
-  refreshTimeout = setTimeout(() => {
-    supabase.auth.getSession()
-      .then(({ data: { session } }) => {
-        if (!session) {
-          // No valid session, redirect to login
-          handleAuthError(new Error('No valid session'));
-        }
-        lastRefreshTime = Date.now();
-      })
-      .catch((error) => {
-        console.error('Session refresh error:', error);
-        handleAuthError(error);
-      });
-  }, 1000);
+  refreshTimeout = setTimeout(refreshSessionWithRetry, 1000);
 });
 
 // Add unhandled rejection listener for auth errors
@@ -121,6 +190,16 @@ export const getUserRole = async (): Promise<string | null> => {
 
   const retryFetch = async (attempt: number = 1): Promise<string | null> => {
     try {
+      const isConnected = await checkNetworkConnection();
+      if (!isConnected) {
+        console.warn('Network unavailable, retrying...');
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, baseDelay * Math.pow(retryBackoff, attempt - 1)));
+          return retryFetch(attempt + 1);
+        }
+        throw new Error('Network unavailable');
+      }
+
       console.log(`getUserRole attempt ${attempt}...`);
       
       // Check and refresh session if needed
