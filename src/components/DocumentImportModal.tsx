@@ -10,8 +10,8 @@ import { uploadFileInChunks } from '../lib/uploadUtils';
 import { processAudioFile } from '../lib/audioProcessor';
 import { processDocument } from '../lib/documentProcessor';
 
-// Maximum file size for direct upload (50MB)
-const MAX_DIRECT_UPLOAD_SIZE = 50 * 1024 * 1024;
+// Maximum file size for direct upload (500MB)
+const MAX_DIRECT_UPLOAD_SIZE = 500 * 1024 * 1024;
 
 interface ProcessingStatus {
   isProcessing: boolean;
@@ -195,7 +195,7 @@ const FolderTreeItem: React.FC<FolderTreeItemProps> = ({
 export function DocumentImportModal() {
   const [selectedPath, setSelectedPath] = useState<Folder[]>([]);
   const [description, setDescription] = useState('');
-  const [audioDescription, setAudioDescription] = useState(''); // Nouvelle state pour la description audio
+  const [audioDescription, setAudioDescription] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [processingStatus, setProcessingStatus] = useState<ProcessingStatus>({
     isProcessing: false,
@@ -247,7 +247,7 @@ export function DocumentImportModal() {
         });
         setSelectedFile(null);
         setDescription('');
-        setAudioDescription(''); // Réinitialisation de la description audio
+        setAudioDescription('');
       }
     }
 
@@ -305,7 +305,7 @@ export function DocumentImportModal() {
     return acc;
   }, {} as Record<string, number>);
 
-  // Détecter si le fichier est un fichier audio
+  // Detect if the file is an audio file
   const isAudioFile = selectedFile && 
     (selectedFile.type.startsWith('audio/') || 
      ['mp3', 'wav', 'wave', 'aac', 'ogg', 'webm', 'm4a', 'mp4', 'mpga'].includes(selectedFile.name.split('.').pop()?.toLowerCase() || ''));
@@ -376,131 +376,70 @@ export function DocumentImportModal() {
             canCancel: true
           });
 
-          // Use chunked upload for large audio files
-          if (selectedFile.size > MAX_DIRECT_UPLOAD_SIZE) {
-            const uploadedPath = await uploadFileInChunks(
-              selectedFile,
-              filePath,
-              (progress) => {
-                setProcessingStatus({
-                  isProcessing: true,
-                  progress: 30 + (progress.progress * 0.3),
-                  stage: 'processing',
-                  message: progress.message,
-                  canCancel: true
-                });
-              },
-              abortControllerRef.current.signal
-            );
-
-            // Create document record with chunking info and both descriptions
-            const { data: doc, error: docError } = await supabase
-              .from('documents')
-              .insert([{
-                folder_id: currentFolder.id,
-                name: selectedFile.name,
-                type: documentType,
-                description: description, // Description générale
-                group_name: audioDescription, // Utiliser group_name pour stocker la description audio
-                url: uploadedPath,
-                size: selectedFile.size,
-                is_chunked: true,
-                manifest_path: `${filePath}_manifest.json`
-              }])
-              .select()
-              .single();
-
-            if (docError) throw docError;
-
-            // Process audio
-            const result = await processAudioFile(
-              selectedFile,
-              import.meta.env.VITE_OPENAI_API_KEY,
-              audioDescription, // Passer la description audio spécifique
-              (progress) => {
-                setProcessingStatus({
-                  isProcessing: true,
-                  progress: 60 + (progress.progress * 0.3),
-                  stage: progress.stage,
-                  message: progress.message,
-                  canCancel: true
-                });
-              },
-              abortControllerRef.current.signal
-            );
-
-            // Store transcription content
-            const { error: contentError } = await supabase
-              .from('document_contents')
-              .insert([{
-                document_id: doc.id,
-                content: JSON.stringify(result),
-                is_chunked: false,
-                chunk_index: null,
-                total_chunks: null
-              }]);
-
-            if (contentError) throw contentError;
-          } else {
-            // Direct upload for small audio files
-            const { error: uploadError } = await supabase.storage
-              .from('documents')
-              .upload(filePath, selectedFile, {
-                cacheControl: '3600',
-                upsert: false
+          // Always use chunked upload for audio files
+          const uploadedPath = await uploadFileInChunks(
+            selectedFile,
+            filePath,
+            (progress) => {
+              setProcessingStatus({
+                isProcessing: true,
+                progress: 30 + (progress.progress * 0.3),
+                stage: 'processing',
+                message: progress.message,
+                canCancel: true
               });
+            },
+            abortControllerRef.current.signal
+          );
 
-            if (uploadError) throw uploadError;
+          // Create document record with chunking info and both descriptions
+          const { data: doc, error: docError } = await supabase
+            .from('documents')
+            .insert([{
+              folder_id: currentFolder.id,
+              name: selectedFile.name,
+              type: documentType,
+              description: description,
+              group_name: audioDescription,
+              url: uploadedPath,
+              size: selectedFile.size,
+              is_chunked: true,
+              manifest_path: `${filePath}_manifest.json`
+            }])
+            .select()
+            .single();
 
-            // Create document record with both descriptions
-            const { data: doc, error: docError } = await supabase
-              .from('documents')
-              .insert([{
-                folder_id: currentFolder.id,
-                name: selectedFile.name,
-                type: documentType,
-                description: description, // Description générale
-                group_name: audioDescription, // Utiliser group_name pour stocker la description audio
-                url: filePath,
-                size: selectedFile.size,
-                is_chunked: false,
-                manifest_path: null
-              }])
-              .select()
-              .single();
+          if (docError) throw docError;
 
-            if (docError) throw docError;
+          // Process audio
+          const result = await processAudioFile(
+            selectedFile,
+            import.meta.env.VITE_OPENAI_API_KEY,
+            audioDescription,
+            (progress) => {
+              setProcessingStatus({
+                isProcessing: true,
+                progress: 60 + (progress.progress * 0.3),
+                stage: progress.stage,
+                message: progress.message,
+                canCancel: true
+              });
+            },
+            abortControllerRef.current.signal
+          );
 
-            // Process audio
-            const result = await processAudioFile(
-              selectedFile,
-              import.meta.env.VITE_OPENAI_API_KEY,
-              audioDescription, // Passer la description audio spécifique
-              (progress) => {
-                setProcessingStatus({
-                  isProcessing: true,
-                  progress: 60 + (progress.progress * 0.3),
-                  stage: progress.stage,
-                  message: progress.message,
-                  canCancel: true
-                });
-              },
-              abortControllerRef.current.signal
-            );
+          // Store transcription content
+          const { error: contentError } = await supabase
+            .from('document_contents')
+            .insert([{
+              document_id: doc.id,
+              content: JSON.stringify(result),
+              is_chunked: false,
+              chunk_index: null,
+              total_chunks: null
+            }]);
 
-            // Store transcription content
-            const { error: contentError } = await supabase
-              .from('document_contents')
-              .insert([{
-                document_id: doc.id,
-                content: JSON.stringify(result),
-                is_chunked: false,
-                chunk_index: null,
-                total_chunks: null
-              }]);
-
-            if (contentError) throw contentError;
-          }
+          if (contentError) throw contentError;
 
           setProcessingStatus({
             isProcessing: false,
@@ -512,7 +451,7 @@ export function DocumentImportModal() {
           setTimeout(() => {
             setSelectedFile(null);
             setDescription('');
-            setAudioDescription(''); // Réinitialiser la description audio
+            setAudioDescription('');
             setModalOpen(false);
           }, 2000);
 
@@ -523,7 +462,7 @@ export function DocumentImportModal() {
         }
       }
 
-      // Pour les autres types de fichiers, utiliser chunked upload si nécessaire
+      // For other file types, use chunked upload if necessary
       if (selectedFile.size > MAX_DIRECT_UPLOAD_SIZE) {
         const fileExt = selectedFile.name.split('.').pop()?.toLowerCase() || '';
         const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
@@ -659,7 +598,7 @@ export function DocumentImportModal() {
       setTimeout(() => {
         setSelectedFile(null);
         setDescription('');
-        setAudioDescription(''); // Réinitialiser la description audio
+        setAudioDescription('');
         setModalOpen(false);
       }, 2000);
 
@@ -806,7 +745,6 @@ export function DocumentImportModal() {
                 />
               </div>
 
-              {/* Nouvelle description spécifique aux fichiers audio */}
               {isAudioFile && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">

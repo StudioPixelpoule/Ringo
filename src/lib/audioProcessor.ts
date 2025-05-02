@@ -110,7 +110,7 @@ function writeString(view: DataView, offset: number, string: string) {
   }
 }
 
-// Maximum size for OpenAI API (25MB - 1MB buffer for safety)
+// Maximum size for OpenAI API (24MB)
 const MAX_CHUNK_SIZE = 24 * 1024 * 1024;
 const MAX_RETRIES = 5;
 const RETRY_DELAY_BASE = 2000; // 2 seconds base delay
@@ -166,16 +166,13 @@ async function processAudioChunk(chunk: Blob, apiKey: string, signal?: AbortSign
 
     while (attempt < MAX_RETRIES) {
       try {
-        // Check for network connectivity before making the request
-        // Use a more reliable method that doesn't trigger CORS issues
         const isConnected = await checkNetworkConnectivity();
         if (!isConnected) {
           console.warn(`Network connectivity issue detected (attempt ${attempt + 1})`);
-          // Wait longer for network issues
           const networkRetryDelay = RETRY_DELAY_BASE * Math.pow(2, attempt) * 1.5;
           await new Promise(resolve => setTimeout(resolve, networkRetryDelay));
           attempt++;
-          continue; // Skip to next attempt without incrementing attempt counter
+          continue;
         }
 
         const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
@@ -185,7 +182,6 @@ async function processAudioChunk(chunk: Blob, apiKey: string, signal?: AbortSign
           },
           body: formData,
           signal: controller.signal,
-          // Add timeout to prevent hanging requests
           timeout: 60000 * 2 // 2 minute timeout
         });
 
@@ -224,7 +220,6 @@ async function processAudioChunk(chunk: Blob, apiKey: string, signal?: AbortSign
           throw new Error('Processing cancelled');
         }
 
-        // Don't retry if the chunk is too large
         if (error instanceof Error && error.message === 'Audio chunk too large for OpenAI API') {
           throw error;
         }
@@ -253,10 +248,8 @@ async function processAudioChunk(chunk: Blob, apiKey: string, signal?: AbortSign
   }
 }
 
-// Check network connectivity without triggering CORS issues
 async function checkNetworkConnectivity(): Promise<boolean> {
   try {
-    // Use Supabase as a proxy to check connectivity since we already have a connection to it
     const { data, error } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).limit(1);
     return !error;
   } catch (error) {
@@ -313,7 +306,6 @@ export async function processAudioFile(
       throw new Error('OpenAI API key is not configured');
     }
 
-    // Validate file type
     const validTypes = [
       'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/wave', 
       'audio/x-wav', 'audio/aac', 'audio/ogg', 'audio/webm',
@@ -327,7 +319,6 @@ export async function processAudioFile(
       throw new Error(`Type de fichier audio non supporté: ${file.type || fileExtension}. Formats supportés: MP3, WAV, AAC, OGG, WEBM, M4A, FLAC.`);
     }
 
-    // Check file size early
     const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB max file size
     if (file.size > MAX_FILE_SIZE) {
       throw new Error(`La taille du fichier (${(file.size / (1024 * 1024)).toFixed(2)}MB) dépasse la limite maximale autorisée (500MB)`);
@@ -342,7 +333,6 @@ export async function processAudioFile(
       });
     }
 
-    // Split audio into chunks if needed
     let audioChunks: Blob[];
     if (file.size > MAX_CHUNK_SIZE) {
       if (typeof onProgress === 'function') {
@@ -381,14 +371,13 @@ export async function processAudioFile(
         });
       }
 
-      // Add exponential backoff with network check
       let retryCount = 0;
       let chunkResult;
       
       while (retryCount < 3) {
         try {
           chunkResult = await processAudioChunk(audioChunks[i], apiKey, signal);
-          break; // Success, exit retry loop
+          break;
         } catch (error) {
           if (error instanceof Error && 
              (error.message.includes('network') || 
@@ -398,7 +387,6 @@ export async function processAudioFile(
             retryCount++;
             if (retryCount >= 3) throw error;
             
-            // Exponential backoff for network errors
             const delay = 5000 * Math.pow(2, retryCount);
             if (typeof onProgress === 'function') {
               onProgress({
@@ -411,7 +399,6 @@ export async function processAudioFile(
             
             await new Promise(resolve => setTimeout(resolve, delay));
           } else {
-            // Not a network error, rethrow
             throw error;
           }
         }
