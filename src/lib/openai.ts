@@ -1,25 +1,25 @@
 import OpenAI from 'openai';
+import { 
+  MAX_TOKENS, 
+  MAX_TOKENS_PER_DOC, 
+  MAX_SYSTEM_TOKENS, 
+  MAX_HISTORY_TOKENS,
+  MAX_RESPONSE_TOKENS 
+} from './constants';
 
-const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
-
-if (!apiKey) {
-  throw new Error(
-    'VITE_OPENAI_API_KEY is not set in environment variables. ' +
-    'Please add it to your .env file: VITE_OPENAI_API_KEY=your_api_key_here'
-  );
-}
-
-const openai = new OpenAI({
-  apiKey,
-  dangerouslyAllowBrowser: true
-});
+// Client OpenAI désactivé pour des raisons de sécurité
+// Toutes les fonctionnalités IA passent maintenant par les Edge Functions
+// const openai = new OpenAI({
+//   apiKey: import.meta.env.VITE_OPENAI_API_KEY,
+//   dangerouslyAllowBrowser: true
+// });
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
 }
 
-const SYSTEM_PROMPT = `Tu es un expert en analyse de documents spécialisé dans la génération de rapports pour un public québécois.
+const SYSTEM_PROMPT = `Tu es Ringo, un expert en analyse de documents spécialisé dans la génération de rapports pour un public québécois.
 
 Adapte ton langage et ton style pour un public québécois:
 - Utilise un vocabulaire et des expressions courantes au Québec quand c'est pertinent
@@ -46,31 +46,48 @@ Guillemets fermants : » Exemple : « Bonjour, comment ça va ? »
 Apostrophes : Utilisez l'apostrophe typographique (') et non l'apostrophe droite ('). L'apostrophe typographique est courbée et s'utilise pour les élisions.
 Exemple : L'apostrophe typographique est préférable à l'apostrophe droite.`;
 
-const COMPARATIVE_ANALYSIS_PROMPT = `Lorsqu'une requête concerne l'analyse comparative de plusieurs documents ou instituts:
+export const COMPARATIVE_ANALYSIS_PROMPT = `
+ANALYSE COMPARATIVE ET CROISEMENT DE DOCUMENTS
+==============================================
 
-1. IMPORTANT: TOUJOURS analyser d'abord chaque document séparément avant de procéder à une comparaison.
+Lorsque plusieurs documents sont fournis dans une conversation, tu dois :
 
-2. Pour chaque document/institut:
-   - Extraire UNIQUEMENT les informations explicitement mentionnées
-   - Si une vision/mission n'est pas clairement identifiée, indiquer "Non mentionnée explicitement"
-   - Ne jamais générer ou inférer une vision non explicite
+1. IDENTIFIER LES RELATIONS
+   - Repérer les points communs entre les documents
+   - Identifier les différences et contradictions
+   - Mettre en évidence les complémentarités
 
-3. Format de réponse pour les comparaisons:
-   - Utiliser un tableau avec des colonnes uniformes
-   - Citer les sources exactes quand elles existent
-   - Utiliser des formulations identiques pour les cas similaires
+2. SYNTHÉTISER L'INFORMATION
+   - Créer une vue d'ensemble cohérente
+   - Éviter les répétitions inutiles
+   - Prioriser les informations les plus pertinentes
 
-4. Avant de finaliser la réponse:
-   - Vérifier la cohérence entre les analyses individuelles et la synthèse
-   - S'assurer que toutes les informations proviennent directement des documents
+3. CROISER LES DONNÉES
+   - Comparer les chiffres et statistiques
+   - Rapprocher les concepts similaires
+   - Identifier les tendances communes
 
-5. Dernière vérification: Ne jamais présenter une interprétation comme un fait explicite du document.`;
+4. RÉPONDRE DE MANIÈRE INTÉGRÉE
+   - Utiliser TOUS les documents pertinents
+   - Citer les sources (nom du document)
+   - Indiquer quand une info vient d'un document spécifique
 
-// Constants for token limits
-const MAX_TOKENS = 128000; // GPT-4o context window
-const MAX_TOKENS_PER_DOC = Math.floor(MAX_TOKENS * 0.7); // 70% of context for documents
-const MAX_SYSTEM_TOKENS = 2000; // Reserve 2K tokens for system messages
-const MAX_HISTORY_TOKENS = 4000; // Reserve 4K tokens for conversation history
+5. CAPACITÉS SPÉCIALES MULTI-DOCUMENTS
+   - Comparaisons détaillées
+   - Synthèses thématiques
+   - Analyses croisées
+   - Tableaux comparatifs
+   - Résumés consolidés
+
+EXEMPLES DE TÂCHES MULTI-DOCUMENTS :
+- "Compare les données de ces 3 rapports"
+- "Synthétise les points clés de tous les documents"
+- "Trouve les contradictions entre ces textes"
+- "Crée un tableau comparatif des différentes approches"
+- "Quels sont les points communs entre tous ces documents ?"
+
+IMPORTANT : Toujours préciser de quel(s) document(s) provient chaque information importante.
+`;
 
 // Function to estimate tokens (4 chars ≈ 1 token)
 function estimateTokens(text: string): number {
@@ -220,111 +237,50 @@ INSTRUCTIONS: Le texte ci-dessus contient le contenu pertinent du document ${ind
   }).join('\n\n---\n\n');
 }
 
-function prepareMessages(messages: ChatMessage[], documentContent?: string): ChatMessage[] {
-  const preparedMessages: ChatMessage[] = [
-    { role: 'system', content: SYSTEM_PROMPT }
-  ];
+export async function prepareMessages(
+  messages: ChatMessage[],
+  documentContext?: string
+): Promise<ChatMessage[]> {
+  const systemMessages: ChatMessage[] = [{
+    role: 'system',
+    content: SYSTEM_PROMPT
+  }];
 
-  if (documentContent) {
-    // Get the user's latest query
-    const latestQuery = messages[messages.length - 1]?.content || '';
+  // Ajouter le prompt d'analyse comparative si plusieurs documents
+  if (documentContext) {
+    const documentCount = (documentContext.match(/====== DOCUMENT ACTIF/g) || []).length;
     
-    // Check if this is a comparative analysis query
-    if (isComparativeAnalysisQuery(latestQuery)) {
-      preparedMessages.push({
+    if (documentCount > 1) {
+      systemMessages.push({
         role: 'system',
         content: COMPARATIVE_ANALYSIS_PROMPT
       });
     }
-
-    preparedMessages.push({
+    
+    // Toujours ajouter l'isolation du contexte
+    systemMessages.push({
       role: 'system',
-      content: `Tu as reçu plusieurs documents à analyser. Tu dois :
-1. Analyser en profondeur le contenu de chaque document
-2. Identifier les points clés et les mettre en évidence
-3. Comparer et contraster les informations entre les documents
-4. Fournir une réponse détaillée et structurée
-5. Citer des passages pertinents pour appuyer ton analyse
+      content: `RÈGLE CRITIQUE D'ISOLATION DU CONTEXTE
+Tu as accès UNIQUEMENT aux ${documentCount} document(s) fournis dans cette conversation.
+INTERDICTION ABSOLUE de faire référence à :
+- Des documents d'autres conversations
+- Des connaissances externes non présentes dans les documents fournis
+- Des informations de ta base de connaissances générale sauf si explicitement demandé
 
-Si tu ne trouves pas l'information dans les documents, indique-le clairement.`
+Si une information n'est pas dans les documents fournis, tu dois clairement dire que tu ne peux pas répondre avec les documents disponibles.`
     });
-
-    preparedMessages.push({
+    
+    systemMessages.push({
       role: 'system',
-      content: prepareDocumentContent(documentContent.split('---\n\n'), latestQuery)
+      content: documentContext
     });
   }
 
-  // Add recent conversation history for context
-  const historyMessages = messages.slice(-5); // Keep last 5 messages
-  let historyTokens = 0;
-
-  for (const message of historyMessages) {
-    const tokens = estimateTokens(message.content);
-    if (historyTokens + tokens > MAX_HISTORY_TOKENS) break;
-    preparedMessages.push(message);
-    historyTokens += tokens;
-  }
-
-  return preparedMessages;
+  return [...systemMessages, ...messages];
 }
 
 export async function generateChatResponse(messages: ChatMessage[], documentContent?: string): Promise<string> {
-  try {
-    if (!documentContent?.trim()) {
-      throw new Error('Aucun contenu disponible pour analyse.');
-    }
-
-    const preparedMessages = prepareMessages(messages, documentContent);
-    
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: preparedMessages,
-      temperature: 0.7,
-      max_tokens: 4000,
-      presence_penalty: 0.1,
-      frequency_penalty: 0.2,
-      response_format: { type: 'text' },
-      top_p: 0.95
-    });
-
-    const response = completion.choices[0]?.message?.content;
-    if (!response) {
-      throw new Error('No response content received from OpenAI');
-    }
-
-    return response;
-  } catch (error: any) {
-    if (error?.error?.code === 'context_length_exceeded') {
-      console.warn("Limite de tokens dépassée, nouvel essai avec contexte minimal");
-      
-      const lastMessage = messages[messages.length - 1];
-      if (!lastMessage) throw new Error('No message to process');
-
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          lastMessage
-        ],
-        temperature: 0.7,
-        max_tokens: 4000,
-        presence_penalty: 0.1,
-        frequency_penalty: 0.2,
-        response_format: { type: 'text' },
-        top_p: 0.95
-      });
-
-      const response = completion.choices[0]?.message?.content;
-      if (!response) {
-        throw new Error('No response content received from OpenAI');
-      }
-      
-      return response;
-    }
-    
-    throw new Error(`Failed to generate response: ${error.message}`);
-  }
+  throw new Error('Cette fonction est désactivée pour des raisons de sécurité. Utilisez generateChatResponseSecure depuis secureChat.ts à la place.');
 }
 
 export async function generateChatResponseStreaming(
@@ -332,48 +288,5 @@ export async function generateChatResponseStreaming(
   documentContent?: string,
   onChunk: (chunk: string) => void
 ): Promise<string> {
-  try {
-    if (!documentContent?.trim()) {
-      throw new Error('Aucun contenu disponible pour analyse.');
-    }
-
-    const preparedMessages = prepareMessages(messages, documentContent);
-    let fullResponse = '';
-
-    const stream = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: preparedMessages,
-      temperature: 0.7,
-      max_tokens: 4000,
-      presence_penalty: 0.1,
-      frequency_penalty: 0.2,
-      stream: true,
-      top_p: 0.95
-    });
-
-    for await (const chunk of stream) {
-      const content = chunk.choices[0]?.delta?.content || '';
-      if (!content) continue;
-
-      fullResponse += content;
-      onChunk(content);
-    }
-
-    return fullResponse;
-  } catch (error: any) {
-    if (error?.error?.code === 'context_length_exceeded') {
-      console.warn("Limite de tokens dépassée, nouvel essai avec contexte minimal");
-      
-      const lastMessage = messages[messages.length - 1];
-      if (!lastMessage) throw new Error('No message to process');
-
-      return generateChatResponseStreaming(
-        [{ role: 'system', content: SYSTEM_PROMPT }, lastMessage],
-        documentContent,
-        onChunk
-      );
-    }
-    
-    throw new Error(`Failed to generate streaming response: ${error.message}`);
-  }
+  throw new Error('Cette fonction est désactivée pour des raisons de sécurité. Utilisez generateChatResponseStreamingSecure depuis secureChat.ts à la place.');
 }

@@ -5,6 +5,7 @@ import { logError } from './errorLogger';
 // Reduce chunk size to 2MB to stay well within Supabase limits
 const CHUNK_SIZE = 2 * 1024 * 1024; // 2MB chunks
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB max file size
+export const MAX_DIRECT_UPLOAD_SIZE = 500 * 1024 * 1024; // 500MB max for direct upload
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // Base delay in ms
 

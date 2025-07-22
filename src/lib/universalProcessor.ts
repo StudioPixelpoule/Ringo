@@ -4,11 +4,13 @@ import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 import { processAudioFile } from './audioProcessor';
+import { parsePPTX, isOldPPTFormat } from './pptxParser';
+// Retirer l'import statique qui cause l'erreur
+// import { PPTXInHTMLOut } from 'pptx-in-html-out';
 
 // Initialize PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
-// Types communs
 export interface ProcessingResult {
   content: string;
   metadata: {
@@ -39,17 +41,33 @@ export interface ProcessingResult {
   processingDate: string;
 }
 
-interface ProcessingProgress {
-  stage: 'upload' | 'processing' | 'extraction' | 'complete';
-  progress: number;
-  message: string;
-  canCancel?: boolean;
+interface AudioProcessingResult {
+  content: string;
+  metadata: {
+    title: string;
+    duration: number;
+    language: string;
+    fileType: string;
+    fileName: string;
+    audioDescription?: string;
+    segments: Array<{ start: number; end: number; text: string }>;
+  };
+  confidence: number;
+  processingDate: string;
 }
 
-interface ProcessingOptions {
+export interface ProcessingProgress {
+  stage: 'processing' | 'complete';
+  progress: number;
+  message: string;
+  canCancel: boolean;
+}
+
+export interface ProcessingOptions {
+  openaiApiKey?: string;
+  audioDescription?: string;
   onProgress?: (progress: ProcessingProgress) => void;
   signal?: AbortSignal;
-  openaiApiKey?: string;
 }
 
 // Utilitaires
@@ -290,6 +308,127 @@ async function processTextDocument(file: File, options?: ProcessingOptions): Pro
   }
 }
 
+async function processPowerPointDocument(file: File, options?: ProcessingOptions): Promise<ProcessingResult> {
+  try {
+    console.log('[PowerPoint Processing] Starting processing:', {
+      name: file.name,
+      type: file.type,
+      size: file.size
+    });
+
+    if (options?.onProgress) {
+      options.onProgress({
+        stage: 'processing',
+        progress: 10,
+        message: 'Préparation du fichier PowerPoint...',
+        canCancel: true
+      });
+    }
+
+    // Vérifier si c'est un ancien format PPT
+    if (isOldPPTFormat(file)) {
+      console.warn('[PowerPoint Processing] Old PPT format detected, limited support');
+      
+      const placeholderContent = `
+# Fichier PowerPoint (Format ancien) : ${file.name}
+
+**Type :** ${file.type || 'application/vnd.ms-powerpoint'}
+**Taille :** ${(file.size / 1024 / 1024).toFixed(2)} MB
+
+**Note :** Ce fichier utilise l'ancien format PowerPoint (.ppt). 
+Pour une meilleure extraction du contenu, veuillez convertir ce fichier au format moderne (.pptx).
+
+Vous pouvez convertir votre fichier :
+1. En l'ouvrant dans PowerPoint et en le sauvegardant comme .pptx
+2. En utilisant un service de conversion en ligne
+
+Le fichier a été enregistré et vous pouvez poser des questions générales à son sujet.
+`;
+      
+      return {
+        content: placeholderContent,
+        metadata: {
+          fileName: file.name,
+          fileType: file.type || 'application/vnd.ms-powerpoint',
+          language: 'fr',
+          pageCount: 0
+        },
+        confidence: 0.5,
+        processingDate: new Date().toISOString()
+      };
+    }
+
+    if (options?.onProgress) {
+      options.onProgress({
+        stage: 'processing',
+        progress: 30,
+        message: 'Extraction du contenu PowerPoint...',
+        canCancel: true
+      });
+    }
+
+    // Utiliser le nouveau parser PPTX
+    const content = await parsePPTX(file);
+
+    if (options?.onProgress) {
+      options.onProgress({
+        stage: 'complete',
+        progress: 100,
+        message: 'Traitement terminé',
+        canCancel: false
+      });
+    }
+
+    console.log('✅ PowerPoint file processed successfully');
+
+    // Compter le nombre de slides dans le contenu
+    const slideCount = (content.match(/## Slide \d+/g) || []).length;
+
+    return {
+      content,
+      metadata: {
+        fileName: file.name,
+        fileType: file.type || 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        language: detectLanguage(content),
+        pageCount: slideCount
+      },
+      confidence: 0.95,
+      processingDate: new Date().toISOString()
+    };
+
+  } catch (error) {
+    console.error('[PowerPoint Processing] Error:', error);
+    
+    // En cas d'erreur, retourner un contenu minimal
+    const fallbackContent = `
+# Présentation PowerPoint : ${file.name}
+
+**Type :** ${file.type}
+**Taille :** ${(file.size / 1024 / 1024).toFixed(2)} MB
+
+**Erreur lors de l'extraction du contenu**
+
+Une erreur s'est produite lors de l'extraction du contenu de cette présentation.
+Erreur : ${error instanceof Error ? error.message : 'Erreur inconnue'}
+
+Le fichier a été enregistré et vous pouvez poser des questions générales à son sujet.
+`;
+
+    return {
+      content: fallbackContent,
+      metadata: {
+        fileName: file.name,
+        fileType: file.type,
+        language: 'fr',
+        pageCount: 0,
+        error: error instanceof Error ? error.message : 'Erreur inconnue'
+      },
+      confidence: 0.3,
+      processingDate: new Date().toISOString()
+    };
+  }
+}
+
 async function processPDFDocument(file: File, options?: ProcessingOptions): Promise<ProcessingResult> {
   try {
     if (options?.onProgress) {
@@ -308,6 +447,9 @@ async function processPDFDocument(file: File, options?: ProcessingOptions): Prom
       isEvalSupported: true,
       useSystemFonts: true
     }).promise;
+
+    // Extraire les métadonnées du PDF
+    const metadata = await pdf.getMetadata();
 
     const numPages = pdf.numPages;
     let extractedText = '';
@@ -517,6 +659,11 @@ export async function processDocument(
           result = await processTextDocument(file, options);
           break;
 
+        case 'application/vnd.ms-powerpoint':
+        case 'application/vnd.openxmlformats-officedocument.presentationml.presentation':
+          result = await processPowerPointDocument(file, options);
+          break;
+
         case 'text/html':
           // For HTML reports, just return the content as is
           const text = await file.text();
@@ -544,13 +691,24 @@ export async function processDocument(
             if (!options.openaiApiKey) {
               throw new Error('Clé API OpenAI requise pour le traitement audio');
             }
-            const audioResult = await processAudioFile(file, options.openaiApiKey, options.onProgress, options.signal);
+            const audioResult = await processAudioFile(
+              file, 
+              options.openaiApiKey, 
+              undefined, // audioDescription
+              options.onProgress, 
+              options.signal
+            );
             result = {
               content: audioResult.content,
               metadata: audioResult.metadata,
               confidence: audioResult.confidence,
               processingDate: audioResult.processingDate
             };
+            break;
+          }
+          // Fallback basé sur l'extension pour PowerPoint
+          if (['ppt', 'pptx'].includes(extension || '')) {
+            result = await processPowerPointDocument(file, options);
             break;
           }
           throw new Error(`Type de fichier non supporté: ${file.type}`);

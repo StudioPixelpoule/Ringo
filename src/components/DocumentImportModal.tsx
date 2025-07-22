@@ -6,12 +6,8 @@ import { useDocumentStore, Document, Folder } from '../lib/documentStore';
 import { supabase } from '../lib/supabase';
 import { FileIcon } from './FileIcon';
 import { logError } from '../lib/errorLogger';
-import { uploadFileInChunks } from '../lib/uploadUtils';
-import { processAudioFile } from '../lib/audioProcessor';
-import { processDocument } from '../lib/documentProcessor';
-
-// Maximum file size for direct upload (500MB)
-const MAX_DIRECT_UPLOAD_SIZE = 500 * 1024 * 1024;
+import { uploadFileInChunks, MAX_DIRECT_UPLOAD_SIZE } from '../lib/uploadUtils';
+import { processDocument, ProcessingProgress } from '../lib/secureProcessor'; // Utiliser la version sécurisée
 
 interface ProcessingStatus {
   isProcessing: boolean;
@@ -279,6 +275,8 @@ export function DocumentImportModal() {
       'application/pdf': ['.pdf'],
       'application/msword': ['.doc'],
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+      'application/vnd.ms-powerpoint': ['.ppt'],
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'],
       'application/json': ['.json'],
       'text/csv': ['.csv'],
       'application/vnd.ms-excel': ['.xls'],
@@ -358,6 +356,7 @@ export function DocumentImportModal() {
       const extension = selectedFile.name.split('.').pop()?.toLowerCase();
       const documentType = extension === 'pdf' ? 'pdf' :
                        ['doc', 'docx'].includes(extension || '') ? 'doc' :
+                       ['ppt', 'pptx'].includes(extension || '') ? 'presentation' :
                        ['json', 'csv', 'xlsx', 'xls'].includes(extension || '') ? 'data' :
                        ['mp3', 'wav', 'wave', 'aac', 'ogg', 'webm', 'm4a', 'mp4', 'mpga'].includes(extension || '') ? 'audio' :
                        extension === 'html' ? 'report' : 'unknown';
@@ -412,20 +411,21 @@ export function DocumentImportModal() {
           if (docError) throw docError;
 
           // Process audio
-          const result = await processAudioFile(
+          const result = await processDocument(
             selectedFile,
-            import.meta.env.VITE_OPENAI_API_KEY,
-            audioDescription,
-            (progress) => {
-              setProcessingStatus({
-                isProcessing: true,
-                progress: 60 + (progress.progress * 0.3),
-                stage: progress.stage,
-                message: progress.message,
-                canCancel: true
-              });
-            },
-            abortControllerRef.current.signal
+            {
+              audioDescription: audioDescription, // Passer la description audio
+              signal: abortControllerRef.current.signal,
+              onProgress: (progress: ProcessingProgress) => {
+                setProcessingStatus({
+                  isProcessing: true,
+                  progress: 60 + (progress.progress * 0.3),
+                  stage: progress.stage,
+                  message: progress.message,
+                  canCancel: true
+                });
+              }
+            }
           );
 
           // Store transcription content
@@ -504,7 +504,7 @@ export function DocumentImportModal() {
         // Process and store content
         const result = await processDocument(selectedFile, {
           signal: abortControllerRef.current.signal,
-          onProgress: (progress) => {
+          onProgress: (progress: ProcessingProgress) => {
             setProcessingStatus({
               isProcessing: true,
               progress: 50 + (progress.progress * 0.5),
@@ -563,7 +563,7 @@ export function DocumentImportModal() {
         // Process and store content
         const result = await processDocument(selectedFile, {
           signal: abortControllerRef.current.signal,
-          onProgress: (progress) => {
+          onProgress: (progress: ProcessingProgress) => {
             setProcessingStatus({
               isProcessing: true,
               progress: progress.progress,

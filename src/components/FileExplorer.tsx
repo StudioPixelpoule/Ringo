@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronRight, Search, X, Send, Loader2, CheckSquare, Square, Calendar, Filter, FileText, List, Grid } from 'lucide-react';
+import { ChevronRight, Search, X, Send, Loader2, CheckSquare, Square, Filter, FileText, List, Grid } from 'lucide-react';
 import { useDocumentStore, Document, Folder } from '../lib/documentStore';
 import { useConversationStore } from '../lib/conversationStore';
 import { FileIcon } from './FileIcon';
+import { MAX_DOCUMENTS_PER_CONVERSATION } from '../lib/constants';
 
 interface FileCardProps {
   document: Document;
@@ -254,8 +255,10 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
 
   const {
     currentConversation,
+    documents: conversationDocuments,
     createConversationWithDocument,
-    linkDocument
+    linkDocument,
+    linkMultipleDocuments
   } = useConversationStore();
 
   useEffect(() => {
@@ -322,18 +325,39 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
   });
 
   const toggleDocumentSelection = (documentId: string) => {
-    setSelectedDocuments(prev =>
-      prev.includes(documentId)
-        ? prev.filter(id => id !== documentId)
-        : [...prev, documentId]
-    );
+    setSelectedDocuments(prev => {
+      if (prev.includes(documentId)) {
+        // Retirer le document de la sélection
+        return prev.filter(id => id !== documentId);
+      } else {
+        // Vérifier la limite avant d'ajouter
+        const currentDocsInConversation = currentConversation ? conversationDocuments.length : 0;
+        const maxSelectableDocuments = MAX_DOCUMENTS_PER_CONVERSATION - currentDocsInConversation;
+        
+        if (prev.length >= maxSelectableDocuments) {
+          alert(`Vous ne pouvez sélectionner que ${maxSelectableDocuments} document(s) supplémentaire(s). La limite est de ${MAX_DOCUMENTS_PER_CONVERSATION} documents par conversation.`);
+          return prev;
+        }
+        
+        return [...prev, documentId];
+      }
+    });
   };
 
   const handleSelectAll = () => {
     if (selectedDocuments.length === filteredDocuments.length) {
       setSelectedDocuments([]);
     } else {
+      // Limiter la sélection selon la limite
+      const currentDocsInConversation = currentConversation ? conversationDocuments.length : 0;
+      const maxSelectableDocuments = MAX_DOCUMENTS_PER_CONVERSATION - currentDocsInConversation;
+      
+      if (filteredDocuments.length > maxSelectableDocuments) {
+        alert(`Sélection limitée à ${maxSelectableDocuments} document(s). La limite est de ${MAX_DOCUMENTS_PER_CONVERSATION} documents par conversation.`);
+        setSelectedDocuments(filteredDocuments.slice(0, maxSelectableDocuments).map(doc => doc.id));
+    } else {
       setSelectedDocuments(filteredDocuments.map(doc => doc.id));
+      }
     }
   };
 
@@ -344,23 +368,53 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
       setIsProcessing(true);
       const selectedDocs = documents.filter(doc => selectedDocuments.includes(doc.id));
       
+      // Message personnalisé selon le nombre de documents
+      const processingMessage = selectedDocs.length === 1 
+        ? `Import de "${selectedDocs[0].name}"...`
+        : `Import de ${selectedDocs.length} documents...`;
+      
       if (!currentConversation) {
-        await createConversationWithDocument(selectedDocs[0]);
+        // Créer une nouvelle conversation avec le premier document
+        // Si on a plusieurs documents, on skip le message pour créer un message récapitulatif
+        const skipMessage = selectedDocs.length > 1;
+        await createConversationWithDocument(selectedDocs[0], skipMessage);
         
-        for (let i = 1; i < selectedDocs.length; i++) {
-          await new Promise(resolve => setTimeout(resolve, 500));
-          await linkDocument(selectedDocs[i].id);
+        // Ajouter les autres documents s'il y en a plus d'un
+        if (selectedDocs.length > 1) {
+          // Ne pas inclure le premier document qui a déjà été ajouté
+          const remainingDocIds = selectedDocs.slice(1).map(doc => doc.id);
+          const result = await linkMultipleDocuments(remainingDocIds);
+          
+          if (result.errors.length > 0) {
+            console.warn('Certains documents n\'ont pas pu être ajoutés:', result.errors);
+            // Afficher un message d'erreur à l'utilisateur
+            if (result.errors.some(err => err.includes('Limite de'))) {
+              alert(result.errors[0]);
+            }
+          }
         }
       } else {
-        for (const doc of selectedDocs) {
-          await new Promise(resolve => setTimeout(resolve, 500));
-          await linkDocument(doc.id);
+        // Ajouter tous les documents à la conversation existante
+        const docIds = selectedDocs.map(doc => doc.id);
+        const result = await linkMultipleDocuments(docIds);
+        
+        if (result.errors.length > 0 && result.addedCount === 0) {
+          alert(result.errors[0] || 'Aucun document n\'a pu être ajouté.');
+        } else if (result.errors.length > 0) {
+          console.warn('Certains documents n\'ont pas pu être ajoutés:', result.errors);
+          if (result.errors.some(err => err.includes('Limite de'))) {
+            alert(`${result.addedCount} document(s) ajouté(s). ${result.errors[0]}`);
         }
       }
+      }
       
+      // Réinitialiser et fermer
+      setSelectedDocuments([]);
       onClose();
+      
     } catch (error) {
       console.error('Failed to import documents:', error);
+      alert('Erreur lors de l\'import des documents. Veuillez réessayer.');
     } finally {
       setIsProcessing(false);
       setSelectedDocuments([]);
@@ -479,97 +533,94 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
                 </div>
               </div>
               
-              <div className="grid grid-cols-4 gap-4">
-                {/* Type filter */}
+                <div className="space-y-3">
+                  {/* Barre de recherche */}
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                    <FileText size={16} className="text-gray-400" />
+                    <Search 
+                      size={18} 
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+                    />
+                    <input
+                      ref={searchInputRef}
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onFocus={() => setIsSearchFocused(true)}
+                      onBlur={() => setIsSearchFocused(false)}
+                      onKeyDown={handleSearchKeyDown}
+                      placeholder="Rechercher des documents..."
+                      className={`w-full pl-10 pr-4 py-2 border rounded-lg transition-all ${
+                        isSearchFocused 
+                          ? 'bg-white border-[#f15922] shadow-sm' 
+                          : 'bg-gray-50 hover:bg-white border-gray-200'
+                      }`}
+                    />
                   </div>
+                  
+                  {/* Filtres et actions */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={dateFilter}
+                        onChange={(e) => setDateFilter(e.target.value as any)}
+                        className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:border-[#f15922]"
+                      >
+                        <option value="all">Toutes les dates</option>
+                        <option value="today">Aujourd'hui</option>
+                        <option value="week">Cette semaine</option>
+                        <option value="month">Ce mois</option>
+                      </select>
+                      
                   <select
                     value={typeFilter}
-                    onChange={(e) => setTypeFilter(e.target.value as typeof typeFilter)}
-                    className="block w-full pl-10 pr-10 py-2 text-sm text-gray-900 border border-gray-300 rounded-lg bg-white focus:ring-[#f15922] focus:border-[#f15922]"
+                        onChange={(e) => setTypeFilter(e.target.value as any)}
+                        className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:border-[#f15922]"
                   >
                     <option value="all">Tous les types</option>
                     <option value="pdf">PDF</option>
-                    <option value="doc">Documents</option>
+                        <option value="doc">Word</option>
+                        <option value="presentation">PowerPoint</option>
                     <option value="data">Données</option>
                     <option value="audio">Audio</option>
                     <option value="web">Web</option>
                   </select>
                 </div>
                 
-                {/* Date filter */}
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                    <Calendar size={16} className="text-gray-400" />
-                  </div>
-                  <select
-                    value={dateFilter}
-                    onChange={(e) => setDateFilter(e.target.value as typeof dateFilter)}
-                    className="block w-full pl-10 pr-10 py-2 text-sm text-gray-900 border border-gray-300 rounded-lg bg-white focus:ring-[#f15922] focus:border-[#f15922]"
-                  >
-                    <option value="all">Toutes les dates</option>
-                    <option value="today">Aujourd'hui</option>
-                    <option value="week">Cette semaine</option>
-                    <option value="month">Ce mois</option>
-                  </select>
-                </div>
-                
-                {/* View mode toggle */}
-                <div className="flex items-center justify-center">
-                  <div className="flex items-center bg-gray-100 rounded-lg p-1">
+                    <div className="flex items-center gap-2">
+                      {filteredDocuments.length > 0 && (
+                        <button
+                          onClick={handleSelectAll}
+                          className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                          title={selectedDocuments.length === filteredDocuments.length ? "Tout désélectionner" : "Tout sélectionner"}
+                        >
+                          {selectedDocuments.length === filteredDocuments.length
+                            ? 'Tout désélectionner'
+                            : `Tout sélectionner (${filteredDocuments.length})`}
+                        </button>
+                      )}
+                      
+                      <div className="flex items-center bg-white border border-gray-300 rounded-lg">
                     <button
                       onClick={() => setViewMode('grid')}
-                      className={`p-2 rounded-lg ${viewMode === 'grid' ? 'bg-white shadow-sm' : 'text-gray-500'}`}
+                          className={`p-1.5 ${viewMode === 'grid' ? 'text-[#f15922] bg-gray-50' : 'text-gray-400'}`}
                       title="Vue grille"
                     >
                       <Grid size={18} />
                     </button>
+                        <div className="w-px h-6 bg-gray-300" />
                     <button
                       onClick={() => setViewMode('list')}
-                      className={`p-2 rounded-lg ${viewMode === 'list' ? 'bg-white shadow-sm' : 'text-gray-500'}`}
+                          className={`p-1.5 ${viewMode === 'list' ? 'text-[#f15922] bg-gray-50' : 'text-gray-400'}`}
                       title="Vue liste"
                     >
                       <List size={18} />
                     </button>
                   </div>
                 </div>
-                
-                {/* Search count */}
-                <div className="flex items-center justify-end">
-                  <span className="text-sm text-gray-500">
-                    {filteredDocuments.length} document{filteredDocuments.length !== 1 ? 's' : ''}
-                  </span>
                 </div>
               </div>
             </div>
             
-            {/* Document list */}
-            <div className="p-4 border-b flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleSelectAll}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-gray-100"
-                >
-                  {selectedDocuments.length === filteredDocuments.length && filteredDocuments.length > 0 ? (
-                    <CheckSquare size={18} className="text-[#f15922]" />
-                  ) : (
-                    <Square size={18} className="text-gray-600" />
-                  )}
-                  <span className="text-sm font-medium">
-                    {selectedDocuments.length === filteredDocuments.length && filteredDocuments.length > 0
-                      ? 'Tout désélectionner'
-                      : 'Tout sélectionner'}
-                  </span>
-                </button>
-                {selectedDocuments.length > 0 && (
-                  <span className="text-sm text-gray-500">
-                    {selectedDocuments.length} document{selectedDocuments.length > 1 ? 's' : ''} sélectionné{selectedDocuments.length > 1 ? 's' : ''}
-                  </span>
-                )}
-              </div>
-            </div>
             
             <div className="flex-1 p-4 overflow-y-auto">
               {loading ? (
@@ -658,6 +709,15 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
                       })}
                     </div>
                   </div>
+
+                  {/* Indicateur de limite */}
+                  {currentConversation && conversationDocuments.length > 0 && (
+                    <div className="mb-3 p-2 bg-orange-50 border border-orange-200 rounded-lg">
+                      <p className="text-xs text-orange-700">
+                        <strong>Documents dans la conversation :</strong> {conversationDocuments.length}/{MAX_DOCUMENTS_PER_CONVERSATION}
+                      </p>
+                    </div>
+                  )}
 
                   <button
                     onClick={importDocumentsToChat}

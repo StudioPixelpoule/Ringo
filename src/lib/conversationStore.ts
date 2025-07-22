@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { supabase } from './supabase';
-import { generateChatResponse, generateChatResponseStreaming } from './openai';
+import { generateChatResponseSecure as generateChatResponse, generateChatResponseStreamingSecure as generateChatResponseStreaming } from './secureChat';
 import { Document } from './documentStore';
+import { MAX_DOCUMENTS_PER_CONVERSATION, ERROR_MESSAGES } from './constants';
 
 export interface Conversation {
   id: string;
@@ -38,13 +39,15 @@ interface ConversationStore {
 
   fetchConversations: () => Promise<void>;
   createConversation: (title: string) => Promise<Conversation>;
-  createConversationWithDocument: (document: Document) => Promise<void>;
+  createConversationWithDocument: (document: Document, skipMessage?: boolean) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
   setCurrentConversation: (conversation: Conversation | null) => void;
   updateConversationTitle: (id: string, title: string) => Promise<void>;
   fetchMessages: (conversationId: string) => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
   linkDocument: (documentId: string) => Promise<void>;
+  linkDocumentSilently: (documentId: string) => Promise<void>;
+  linkMultipleDocuments: (documentIds: string[]) => Promise<{ success: boolean; addedCount: number; errors: string[] }>;
   unlinkDocument: (documentId: string) => Promise<void>;
   fetchConversationDocuments: (conversationId: string) => Promise<void>;
   markMessageAsStreamed: (messageId: string) => void;
@@ -112,7 +115,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     }
   },
 
-  createConversationWithDocument: async (document) => {
+  createConversationWithDocument: async (document, skipMessage = false) => {
     set({ loading: true, error: null });
     try {
       const conversation = await get().createConversation(document.name);
@@ -129,18 +132,22 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       set({ currentConversation: conversation });
       await get().fetchConversationDocuments(conversation.id);
       
-      const { data: welcomeMessage, error: messageError } = await supabase
-        .from('messages')
-        .insert([{
-          conversation_id: conversation.id,
-          sender: 'assistant',
-          content: `Je vois que vous avez ajouté le document "${document.name}". Je suis prêt à analyser son contenu. Que souhaitez-vous savoir ?`
-        }])
-        .select()
-        .single();
+      if (!skipMessage) {
+        const { data: welcomeMessage, error: messageError } = await supabase
+          .from('messages')
+          .insert([{
+            conversation_id: conversation.id,
+            sender: 'assistant',
+            content: `Bonjour, je suis Ringo ! Je vois que vous avez ajouté le document "${document.name}". Je suis prêt à analyser son contenu. Que souhaitez-vous savoir ?`
+          }])
+          .select()
+          .single();
 
-      if (messageError) throw messageError;
-      set({ messages: [welcomeMessage] });
+        if (messageError) throw messageError;
+        set({ messages: [welcomeMessage] });
+      } else {
+        set({ messages: [] });
+      }
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Error creating conversation with document' });
     } finally {
@@ -280,9 +287,9 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
       const formattedDocuments = await Promise.all(
         conversationDocs
-          .map(doc => doc.documents)
+          .map(docWrapper => docWrapper.documents)
           .filter(Boolean)
-          .map(async doc => {
+          .map(async (doc: any) => {
             // Fetch document content safely with error handling
             let documentContent = '';
             try {
@@ -295,13 +302,17 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
               if (contentError) {
                 console.error('Error fetching document content:', contentError);
                 return `
-====== DÉBUT DU DOCUMENT: ${doc.name} (${doc.type}) ======
-${doc.description ? `DESCRIPTION: ${doc.description}\n\n` : ''}
+====== DOCUMENT ACTIF "${doc.name}" ======
+TITRE: ${doc.name}
+TYPE: ${doc.type}
+${doc.description ? `DESCRIPTION: ${doc.description}` : ''}
+
+CONTENU:
 [Erreur lors de la récupération du contenu]
 
-====== FIN DU DOCUMENT: ${doc.name} ======
+====== FIN DU DOCUMENT "${doc.name}" ======
 
-INSTRUCTIONS: Le contenu de ce document n'a pas pu être récupéré. Veuillez vous référer aux autres documents disponibles.
+INSTRUCTION IMPORTANTE: Le contenu de ce document n'a pas pu être récupéré. Utilise uniquement les autres documents disponibles dans cette conversation.
 `;
               }
               
@@ -309,13 +320,17 @@ INSTRUCTIONS: Le contenu de ce document n'a pas pu être récupéré. Veuillez v
             } catch (error) {
               console.error('Error processing document content:', error);
               return `
-====== DÉBUT DU DOCUMENT: ${doc.name} (${doc.type}) ======
-${doc.description ? `DESCRIPTION: ${doc.description}\n\n` : ''}
+====== DOCUMENT ACTIF "${doc.name}" ======
+TITRE: ${doc.name}
+TYPE: ${doc.type}
+${doc.description ? `DESCRIPTION: ${doc.description}` : ''}
+
+CONTENU:
 [Erreur lors du traitement du contenu]
 
-====== FIN DU DOCUMENT: ${doc.name} ======
+====== FIN DU DOCUMENT "${doc.name}" ======
 
-INSTRUCTIONS: Le contenu de ce document n'a pas pu être traité. Veuillez vous référer aux autres documents disponibles.
+INSTRUCTION IMPORTANTE: Le contenu de ce document n'a pas pu être traité. Utilise uniquement les autres documents disponibles dans cette conversation.
 `;
             }
 
@@ -363,21 +378,47 @@ INSTRUCTIONS: Le contenu de ce document n'a pas pu être traité. Veuillez vous 
             }
 
             return `
-====== DÉBUT DU DOCUMENT: ${doc.name} (${doc.type}) ======
-${doc.description ? `DESCRIPTION: ${doc.description}\n\n` : ''}
+====== DOCUMENT ACTIF "${doc.name}" ======
+TITRE: ${doc.name}
+TYPE: ${doc.type}
+${doc.description ? `DESCRIPTION: ${doc.description}` : ''}
+${doc.type === 'audio' && doc.group_name ? `CONTEXTE AUDIO: ${doc.group_name}` : ''}
+
+CONTENU:
 ${documentContent}
 
-====== FIN DU DOCUMENT: ${doc.name} ======
+====== FIN DU DOCUMENT "${doc.name}" ======
 
-INSTRUCTIONS: Le texte ci-dessus contient le contenu complet du document "${doc.name}". 
-${doc.description ? `La description générale fournie indique: "${doc.description}". ` : ''}
-${doc.type === 'audio' && doc.group_name ? `Le contexte de cet enregistrement audio est: "${doc.group_name}". ` : ''}
-Utilise ce contenu pour répondre aux questions de l'utilisateur.
+INSTRUCTION IMPORTANTE: Tu dois UNIQUEMENT utiliser les informations contenues dans ce document et les autres documents de cette conversation.
+NE PAS faire référence à des documents externes ou d'autres conversations.
 `;
           })
       );
 
       const documentContext = formattedDocuments.join('\n\n---\n\n');
+      
+      // Ajouter une instruction claire au début du contexte
+      const enhancedDocumentContext = `
+CONTEXTE ISOLÉ - CONVERSATION ${conversation.id}
+=====================================
+Tu as accès UNIQUEMENT aux ${formattedDocuments.length} document(s) suivants pour cette conversation.
+INTERDICTION de faire référence à tout autre document non listé ci-dessous.
+
+${formattedDocuments.length > 1 ? `
+INSTRUCTIONS POUR ANALYSE MULTI-DOCUMENTS :
+- Compare et croise les informations entre TOUS les documents
+- Identifie les points communs et les différences
+- Synthétise les informations complémentaires
+- Cite toujours la source (nom du document) pour chaque information importante
+- Si demandé, crée des tableaux comparatifs ou des synthèses consolidées
+` : ''}
+
+${documentContext}
+
+=====================================
+FIN DU CONTEXTE ISOLÉ
+
+RAPPEL: Utilise UNIQUEMENT les documents ci-dessus. Si une information n'est pas présente dans ces documents, indique clairement que tu ne peux pas répondre avec les documents fournis.`;
 
       // Create empty assistant message first
       const { data: aiMessage, error: aiError } = await supabase
@@ -397,28 +438,61 @@ Utilise ce contenu pour répondre aux questions de l'utilisateur.
 
       // Stream the response
       let streamedContent = '';
-      await generateChatResponseStreaming(
-        [...chatHistory, { role: 'user', content }],
-        documentContext,
-        async (chunk) => {
-          streamedContent += chunk;
-          
-          // Update message in database
-          const { error: updateError } = await supabase
-            .from('messages')
-            .update({ content: streamedContent })
-            .eq('id', aiMessage.id);
-            
-          if (updateError) throw updateError;
-          
-          // Update message in state
-          set({ 
-            messages: get().messages.map(m => 
-              m.id === aiMessage.id ? { ...m, content: streamedContent } : m
-            )
-          });
+      
+      try {
+        streamedContent = await generateChatResponseStreaming(
+          [...chatHistory, { role: 'user', content }],
+          enhancedDocumentContext,
+          (chunk) => {
+            streamedContent += chunk;
+            set(state => ({
+              messages: state.messages.map(msg => 
+                msg.id === aiMessage.id 
+                  ? { ...msg, content: streamedContent }
+                  : msg
+              )
+            }));
+          }
+        );
+
+        // Update final message with complete content
+        await supabase
+          .from('messages')
+          .update({ content: streamedContent })
+          .eq('id', aiMessage.id);
+
+      } catch (streamError: any) {
+        console.error('Error streaming response:', streamError);
+        
+        // Mettre à jour le message avec l'erreur
+        let errorMessage = ERROR_MESSAGES.GENERIC_ERROR;
+        
+        // Vérifier si c'est une erreur de limite de taux
+        if (streamError?.status === 429 || streamError?.message?.includes('rate limit')) {
+          errorMessage = ERROR_MESSAGES.RATE_LIMIT;
         }
-      );
+        // Vérifier si c'est une erreur de limite de tokens
+        else if (streamError?.message?.includes('tokens') || streamError?.message?.includes('context')) {
+          errorMessage = ERROR_MESSAGES.TOKEN_LIMIT;
+        }
+        
+        const errorContent = `${errorMessage}\n\n*Erreur technique: ${streamError.message}*`;
+        
+        set(state => ({
+          messages: state.messages.map(msg => 
+            msg.id === aiMessage.id 
+              ? { ...msg, content: errorContent }
+              : msg
+          )
+        }));
+        
+        await supabase
+          .from('messages')
+          .update({ content: errorContent })
+          .eq('id', aiMessage.id);
+        
+        throw streamError;
+      }
 
       // Mark message as streamed
       get().markMessageAsStreamed(aiMessage.id);
@@ -438,6 +512,13 @@ Utilise ce contenu pour répondre aux questions de l'utilisateur.
 
     set({ loading: true, error: null });
     try {
+      // Vérifier la limite de documents
+      const currentDocCount = get().documents.length;
+      
+      if (currentDocCount >= MAX_DOCUMENTS_PER_CONVERSATION) {
+        throw new Error(ERROR_MESSAGES.DOCUMENT_LIMIT);
+      }
+      
       // Check if document is already linked
       const { data: existingLink } = await supabase
         .from('conversation_documents')
@@ -463,12 +544,28 @@ Utilise ce contenu pour répondre aux questions de l'utilisateur.
 
       const doc = get().documents.find(d => d.document_id === documentId);
       if (doc) {
+        // Créer un message personnalisé selon le nombre de documents
+        const totalDocs = get().documents.length + 1; // +1 car le nouveau doc n'est pas encore dans la liste
+        let messageContent = `C'est Ringo ! J'ai bien reçu le document "${doc.documents.name}".`;
+        
+        if (totalDocs > 1) {
+          messageContent += ` Je dispose maintenant de ${totalDocs} documents dans cette conversation.`;
+          messageContent += `\n\n**Suggestions d'analyse multi-documents :**`;
+          messageContent += `\n- Comparer les informations entre les documents`;
+          messageContent += `\n- Créer une synthèse consolidée`;
+          messageContent += `\n- Identifier les points communs et différences`;
+          messageContent += `\n- Générer un tableau comparatif`;
+          messageContent += `\n\nQue souhaitez-vous que j'analyse ?`;
+        } else {
+          messageContent += ` Je suis prêt à l'analyser. Que souhaitez-vous savoir ?`;
+        }
+        
         const { data: acknowledgmentMessage, error: messageError } = await supabase
           .from('messages')
           .insert([{
             conversation_id: conversation.id,
             sender: 'assistant',
-            content: `J'ai bien reçu le document "${doc.documents.name}". Je suis prêt à l'analyser avec les autres documents.`
+            content: messageContent
           }])
           .select()
           .single();
@@ -478,6 +575,209 @@ Utilise ce contenu pour répondre aux questions de l'utilisateur.
       }
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Error linking document' });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  linkDocumentSilently: async (documentId) => {
+    const conversation = get().currentConversation;
+    if (!conversation) {
+      set({ error: 'No conversation selected' });
+      return;
+    }
+
+    try {
+      // Vérifier la limite de documents
+      const currentDocCount = get().documents.length;
+      
+      if (currentDocCount >= MAX_DOCUMENTS_PER_CONVERSATION) {
+        throw new Error(ERROR_MESSAGES.DOCUMENT_LIMIT);
+      }
+      
+      // Check if document is already linked
+      const { data: existingLink } = await supabase
+        .from('conversation_documents')
+        .select('id')
+        .eq('conversation_id', conversation.id)
+        .eq('document_id', documentId)
+        .maybeSingle();
+
+      if (existingLink) {
+        throw new Error('Ce document est déjà lié à la conversation');
+      }
+
+      const { error } = await supabase
+        .from('conversation_documents')
+        .insert([{
+          conversation_id: conversation.id,
+          document_id: documentId
+        }]);
+
+      if (error) throw error;
+      
+      await get().fetchConversationDocuments(conversation.id);
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  linkMultipleDocuments: async (documentIds: string[]) => {
+    const conversation = get().currentConversation;
+    if (!conversation) {
+      set({ error: 'No conversation selected' });
+      return { success: false, addedCount: 0, errors: [] };
+    }
+
+    // Limiter le nombre de documents pour éviter les problèmes de tokens
+    const currentDocCount = get().documents.length;
+    
+    if (currentDocCount + documentIds.length > MAX_DOCUMENTS_PER_CONVERSATION) {
+      const availableSlots = Math.max(0, MAX_DOCUMENTS_PER_CONVERSATION - currentDocCount);
+      if (availableSlots === 0) {
+        set({ error: ERROR_MESSAGES.DOCUMENT_LIMIT });
+        return { 
+          success: false, 
+          addedCount: 0, 
+          errors: [ERROR_MESSAGES.DOCUMENT_LIMIT] 
+        };
+      } else {
+        // Limiter les documents à ajouter
+        documentIds = documentIds.slice(0, availableSlots);
+        console.warn(`Limitation à ${availableSlots} document(s) pour respecter la limite de ${MAX_DOCUMENTS_PER_CONVERSATION} par conversation.`);
+      }
+    }
+
+    set({ loading: true, error: null });
+    
+    const addedDocuments: string[] = [];
+    const alreadyLinkedDocuments: string[] = [];
+    const errors: string[] = [];
+    
+    try {
+      // Vérifier d'abord quels documents sont déjà liés
+      const { data: existingLinks } = await supabase
+        .from('conversation_documents')
+        .select('document_id')
+        .eq('conversation_id', conversation.id)
+        .in('document_id', documentIds);
+      
+      const existingDocumentIds = new Set(existingLinks?.map(link => link.document_id) || []);
+      
+      // Lier seulement les documents qui ne sont pas déjà liés
+      for (const documentId of documentIds) {
+        if (existingDocumentIds.has(documentId)) {
+          alreadyLinkedDocuments.push(documentId);
+          continue;
+        }
+        
+        try {
+          await get().linkDocumentSilently(documentId);
+          addedDocuments.push(documentId);
+        } catch (error: any) {
+          errors.push(`Erreur lors de l'ajout d'un document`);
+          console.error('Error linking document:', error);
+        }
+      }
+      
+      // Rafraîchir la liste des documents
+      await get().fetchConversationDocuments(conversation.id);
+      const totalDocs = get().documents.length;
+      
+      // Créer un message récapitulatif si on a des documents (ajoutés ou déjà présents)
+      const messages = get().messages;
+      const isNewConversation = messages.length === 0 || (messages.length === 1 && messages[0].content === '');
+      
+      if (documentIds.length > 0 && isNewConversation) {
+        // Pour une nouvelle conversation, créer un message récapitulatif avec TOUS les documents
+        const allDocNames = get().documents
+          .map(docWrapper => docWrapper.documents.name)
+          .filter(Boolean);
+        
+        let messageContent = `Bonjour, je suis Ringo ! J'ai bien reçu `;
+        
+        if (allDocNames.length === 1) {
+          messageContent += `le document "${allDocNames[0]}".`;
+        } else {
+          messageContent += `${allDocNames.length} documents :`;
+          allDocNames.forEach(name => {
+            messageContent += `\n- ${name}`;
+          });
+        }
+        
+        if (totalDocs > 1) {
+          messageContent += `\n\n**Suggestions d'analyse multi-documents :**`;
+          messageContent += `\n- Comparer les informations entre les documents`;
+          messageContent += `\n- Créer une synthèse consolidée`;
+          messageContent += `\n- Identifier les points communs et différences`;
+          messageContent += `\n- Générer un tableau comparatif`;
+          messageContent += `\n\nQue souhaitez-vous que j'analyse ?`;
+        } else {
+          messageContent += ` Je suis prêt à l'analyser. Que souhaitez-vous savoir ?`;
+        }
+        
+        const { data: acknowledgmentMessage, error: messageError } = await supabase
+          .from('messages')
+          .insert([{
+            conversation_id: conversation.id,
+            sender: 'assistant',
+            content: messageContent
+          }])
+          .select()
+          .single();
+
+        if (messageError) throw messageError;
+        set({ messages: [...get().messages, acknowledgmentMessage] });
+      }
+      // Si des documents ont été ajoutés ET qu'il y a déjà des messages, créer un message pour les nouveaux
+      else if (addedDocuments.length > 0 && !isNewConversation) {
+        // Récupérer les noms des documents ajoutés
+        const addedDocNames = addedDocuments
+          .map(id => get().documents.find(d => d.document_id === id))
+          .filter(Boolean)
+          .map(doc => doc!.documents.name);
+        
+        let messageContent = `C'est Ringo ! J'ai bien reçu `;
+        
+        if (addedDocuments.length === 1) {
+          messageContent += `le document "${addedDocNames[0]}".`;
+        } else {
+          messageContent += `${addedDocuments.length} nouveaux documents :`;
+          addedDocNames.forEach(name => {
+            messageContent += `\n- ${name}`;
+          });
+        }
+        
+        messageContent += `\n\nJe dispose maintenant de ${totalDocs} documents dans cette conversation.`;
+        messageContent += `\n\n**Suggestions d'analyse multi-documents :**`;
+        messageContent += `\n- Comparer les informations entre tous les documents`;
+        messageContent += `\n- Créer une synthèse consolidée`;
+        messageContent += `\n- Identifier les points communs et différences`;
+        messageContent += `\n- Générer un tableau comparatif`;
+        messageContent += `\n\nQue souhaitez-vous que j'analyse ?`;
+        
+        const { data: acknowledgmentMessage, error: messageError } = await supabase
+          .from('messages')
+          .insert([{
+            conversation_id: conversation.id,
+            sender: 'assistant',
+            content: messageContent
+          }])
+          .select()
+          .single();
+
+        if (messageError) throw messageError;
+        set({ messages: [...get().messages, acknowledgmentMessage] });
+      }
+      
+      return { 
+        success: true, 
+        addedCount: addedDocuments.length, 
+        errors 
+      };
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Error linking documents' });
+      return { success: false, addedCount: 0, errors: [error instanceof Error ? error.message : 'Erreur inconnue'] };
     } finally {
       set({ loading: false });
     }

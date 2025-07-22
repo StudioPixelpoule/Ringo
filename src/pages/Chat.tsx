@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, ArrowRight, LogOut, Database, FileText, Globe, AlertTriangle, Settings, Clock } from 'lucide-react';
+import { Users, ArrowRight, LogOut, Database, FileText, Globe, AlertTriangle, Settings, Clock, Lightbulb, BarChart3, Search, Target, Table } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 import { Logo } from '../components/Logo';
 import { SmallLogo } from '../components/SmallLogo';
@@ -344,12 +344,79 @@ export function Chat({ session, userRole: propUserRole, authInitialized }: ChatP
                   <h2 className="text-2xl font-bold text-[#f15922] mb-2">
                     Prêt.e à mettre du rythme dans vos données ?!
                   </h2>
-                  <p className="text-gray-600 text-center">
+                  <p className="text-gray-600 text-center mb-6">
                     Alors cliquez sur la base de données en bas à gauche et choisissez un premier document...
                   </p>
+                  <div className="max-w-2xl text-sm text-gray-500 space-y-2">
+                    <p className="flex items-center gap-2">
+                      <Lightbulb size={16} className="text-[#f15922]" />
+                      <span>Vous pouvez sélectionner plusieurs documents pour une analyse croisée</span>
+                    </p>
+                    <p className="flex items-center gap-2">
+                      <BarChart3 size={16} className="text-[#f15922]" />
+                      <span>Demandez-moi de comparer, synthétiser ou croiser vos documents</span>
+                    </p>
+                    <p className="flex items-center gap-2">
+                      <Search size={16} className="text-[#f15922]" />
+                      <span>Je peux créer des tableaux comparatifs et des synthèses consolidées</span>
+                    </p>
+                  </div>
                 </div>
               ) : (
                 <>
+                  {messages.length === 0 && conversationDocuments.length > 1 && (
+                    <div className="max-w-3xl mx-auto mt-8 p-6 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200">
+                      <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                        <Target size={20} className="text-[#f15922]" />
+                        Analyse multi-documents activée
+                      </h3>
+                      <p className="text-gray-700 mb-4">
+                        J'ai accès à {conversationDocuments.length} documents. Voici ce que je peux faire pour vous :
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <button
+                          onClick={() => setInput("Compare les informations clés de tous les documents")}
+                          className="text-left p-3 bg-white rounded-lg hover:shadow-md transition-shadow border border-gray-200"
+                        >
+                          <div className="flex items-center gap-2 mb-1">
+                            <BarChart3 size={18} className="text-[#f15922]" />
+                            <span className="font-medium text-gray-800">Comparaison</span>
+                          </div>
+                          <p className="text-sm text-gray-600">Identifier les similitudes et différences</p>
+                        </button>
+                        <button
+                          onClick={() => setInput("Fais une synthèse consolidée de tous les documents")}
+                          className="text-left p-3 bg-white rounded-lg hover:shadow-md transition-shadow border border-gray-200"
+                        >
+                          <div className="flex items-center gap-2 mb-1">
+                            <FileText size={18} className="text-[#f15922]" />
+                            <span className="font-medium text-gray-800">Synthèse</span>
+                          </div>
+                          <p className="text-sm text-gray-600">Résumer les points essentiels</p>
+                        </button>
+                        <button
+                          onClick={() => setInput("Crée un tableau comparatif des données principales")}
+                          className="text-left p-3 bg-white rounded-lg hover:shadow-md transition-shadow border border-gray-200"
+                        >
+                          <div className="flex items-center gap-2 mb-1">
+                            <Table size={18} className="text-[#f15922]" />
+                            <span className="font-medium text-gray-800">Tableau</span>
+                          </div>
+                          <p className="text-sm text-gray-600">Visualiser les données côte à côte</p>
+                        </button>
+                        <button
+                          onClick={() => setInput("Identifie les contradictions ou incohérences entre les documents")}
+                          className="text-left p-3 bg-white rounded-lg hover:shadow-md transition-shadow border border-gray-200"
+                        >
+                          <div className="flex items-center gap-2 mb-1">
+                            <Search size={18} className="text-[#f15922]" />
+                            <span className="font-medium text-gray-800">Analyse critique</span>
+                          </div>
+                          <p className="text-sm text-gray-600">Détecter les contradictions</p>
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   {messages.map((message, index) => (
                     <MessageItem
                       key={message.id}

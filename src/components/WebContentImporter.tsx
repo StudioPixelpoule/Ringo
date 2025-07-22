@@ -324,46 +324,35 @@ export function WebContentImporter({
         message: 'Extraction du contenu...'
       });
 
-      // Now send the content to OpenAI for processing
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      // Use Supabase Edge Function for secure processing
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('Non authentifié');
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-web-content`,
+        {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`
+            'Authorization': `Bearer ${session.access_token}`
         },
         body: JSON.stringify({
-          model: 'gpt-4-turbo-preview',
-          messages: [
-            {
-              role: 'system',
-              content: `You are a web content extraction specialist. Extract and structure the main content from HTML, removing navigation, ads, and other non-essential elements. Format the content using Markdown.
-
-Instructions:
-1. Focus on the main content
-2. Remove navigation menus, ads, footers
-3. Preserve important headings and structure
-4. Format using Markdown
-5. Include metadata like title and main topics
-6. Keep all relevant text content
-7. Preserve lists and tables
-8. Remove any script or style content`
-            },
-            {
-              role: 'user',
-              content: `Extract and structure the content from this HTML. URL: ${url}\n\nHTML Content:\n${htmlContent}`
-            }
-          ],
-          temperature: 0.3,
-          max_tokens: 4000
+            url: targetUrl.href,
+            htmlContent: htmlContent.substring(0, 50000), // Limite à 50k caractères
+            description: description
         })
-      });
+        }
+      );
 
       if (!response.ok) {
-        throw new Error('Failed to process web content');
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to process web content');
       }
 
       const data = await response.json();
-      const extractedContent = data.choices[0]?.message?.content;
+      const extractedContent = data.content;
 
       if (!extractedContent) {
         throw new Error('No content extracted');

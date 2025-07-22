@@ -8,6 +8,10 @@ import { ChangePassword } from './pages/ChangePassword';
 import { AcceptInvitation } from './pages/AcceptInvitation';
 import { supabase } from './lib/supabase';
 import { logError } from './lib/errorLogger';
+import { createLogger } from './lib/logger';
+
+// Logger pour ce module
+const logger = createLogger('App');
 
 function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -27,7 +31,7 @@ function App() {
         setAuthInitialized(true);
       }
     }).catch(error => {
-      console.error('Error getting session:', error);
+      logger.error('Error getting session:', error);
       handleAuthError(error);
       setLoading(false);
       setAuthInitialized(true);
@@ -37,7 +41,7 @@ function App() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state change event:', event);
+      logger.info('Auth state change event:', event);
       
       if (event === 'TOKEN_REFRESHED') {
         setSession(session);
@@ -57,7 +61,7 @@ function App() {
         }
       } else if (event === 'PASSWORD_RECOVERY') {
         // Handle password recovery event
-        console.log('Password recovery event detected');
+        logger.info('Password recovery event detected');
         if (session) {
           // User is authenticated, redirect to reset password page
           navigate('/reset-password');
@@ -73,8 +77,40 @@ function App() {
       }
     });
 
+    // Déconnexion automatique lors de la fermeture de l'application
+    const handleBeforeUnload = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        // Marquer la session comme devant être nettoyée
+        sessionStorage.setItem('ringo_auto_logout', 'true');
+      }
+    };
+
+    // Gérer la visibilité de la page
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'hidden') {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session && sessionStorage.getItem('ringo_auto_logout') === 'true') {
+          // L'utilisateur a fermé l'onglet/fenêtre
+          await supabase.auth.signOut();
+        }
+      } else if (document.visibilityState === 'visible') {
+        // L'utilisateur est revenu, retirer le marqueur
+        sessionStorage.removeItem('ringo_auto_logout');
+      }
+    };
+
+    // Ajouter les écouteurs d'événements
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Nettoyer le marqueur au chargement
+    sessionStorage.removeItem('ringo_auto_logout');
+
     return () => {
       subscription.unsubscribe();
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
 
@@ -88,7 +124,7 @@ function App() {
         error?.message?.includes('Invalid JWT') ||
         error?.message?.includes('Invalid Refresh Token') ||
         error?.message?.includes('Invalid API key')) {
-      console.log('Authentication error detected, clearing storage and redirecting to login');
+      logger.info('Authentication error detected, clearing storage and redirecting to login');
       localStorage.clear();
       sessionStorage.clear();
       window.location.href = '/login';
@@ -101,7 +137,7 @@ function App() {
 
     const retryFetch = async (attempt: number = 1): Promise<void> => {
       try {
-        console.log(`Fetching user role (attempt ${attempt})...`);
+        logger.info(`Fetching user role (attempt ${attempt})...`);
         
         const { data, error } = await supabase
           .from('profiles')
@@ -111,7 +147,7 @@ function App() {
 
         if (error) {
           if (error.code === 'PGRST301' || error.code === '401') {
-            console.error('Authentication error:', error);
+            logger.error('Authentication error:', error);
             handleAuthError(error);
             return;
           }
@@ -133,13 +169,13 @@ function App() {
           return;
         }
 
-        console.log('User role fetched:', data.role);
+        logger.info('User role fetched:', data.role);
         setUserRole(data.role);
         setPasswordChanged(data.password_changed);
         setLoading(false);
         setAuthInitialized(true);
       } catch (error) {
-        console.error(`Attempt ${attempt} failed:`, error);
+        logger.error(`Attempt ${attempt} failed:`, error);
 
         if (attempt < maxRetries) {
           const delay = baseDelay * Math.pow(2, attempt - 1); // Exponential backoff
@@ -154,7 +190,7 @@ function App() {
           error.message.includes('Invalid Refresh Token') ||
           error.message.includes('Failed to fetch') ||
           error.message.includes('Invalid API key'))) {
-          console.error('Authentication error:', error);
+          logger.error('Authentication error:', error);
           handleAuthError(error);
           return;
         }
@@ -165,7 +201,7 @@ function App() {
     try {
       await retryFetch();
     } catch (error) {
-      console.error('All retries failed:', error);
+      logger.error('All retries failed:', error);
       logError(error);
       setLoading(false);
       setAuthInitialized(true);

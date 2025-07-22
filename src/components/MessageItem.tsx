@@ -33,7 +33,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
       <div className="message-item">
         <div className="message-metadata">
           <span className="message-time">{formattedTime}</span>
-          <span>Assistant</span>
+          <span>Ringo</span>
         </div>
         <div className="assistant-message">
           <div className="assistant-message-content">
