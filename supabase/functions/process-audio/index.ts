@@ -64,6 +64,12 @@ serve(async (req) => {
       throw new Error('OpenAI API key not configured');
     }
 
+    // Vérifier la taille du fichier (limite OpenAI: 25MB)
+    const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
+    if (fileData.size > MAX_FILE_SIZE) {
+      throw new Error(`Le fichier audio est trop volumineux (${Math.round(fileData.size / 1024 / 1024)}MB). La limite est de 25MB.`);
+    }
+
     // Convert Blob to File for OpenAI
     const audioFile = new File([fileData], fileName || 'audio.mp3', { type: fileData.type });
 

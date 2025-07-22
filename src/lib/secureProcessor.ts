@@ -44,10 +44,10 @@ export async function processDocumentSecure(
         throw new Error('Non authentifié');
       }
 
-      // Limiter la taille des fichiers audio à 100MB
-      const MAX_AUDIO_SIZE = 100 * 1024 * 1024; // 100MB
+      // Limiter la taille des fichiers audio à 25MB (limite OpenAI Whisper)
+      const MAX_AUDIO_SIZE = 25 * 1024 * 1024; // 25MB
       if (file.size > MAX_AUDIO_SIZE) {
-        throw new Error(`Le fichier audio est trop volumineux (${Math.round(file.size / 1024 / 1024)}MB). La limite est de 100MB.`);
+        throw new Error(`Le fichier audio est trop volumineux (${Math.round(file.size / 1024 / 1024)}MB). La limite est de 25MB pour la transcription.`);
       }
 
       options.onProgress?.({
