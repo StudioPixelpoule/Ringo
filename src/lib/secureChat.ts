@@ -1,8 +1,8 @@
 import { supabase } from './supabase';
 import { ChatMessage, generateChatResponse as generateLocal, generateChatResponseStreaming as generateStreamingLocal } from './openai';
 
-// Drapeau pour activer progressivement le chat sécurisé
-const USE_SECURE_CHAT = false; // Désactivé pour l'instant
+// Chat sécurisé activé pour protéger la clé API
+const USE_SECURE_CHAT = true; // Activé pour la sécurité
 
 export async function generateChatResponseSecure(
   messages: ChatMessage[],

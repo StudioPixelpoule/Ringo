@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from './supabase';
-import { generateChatResponse, generateChatResponseStreaming } from './openai';
+import { generateChatResponseSecure as generateChatResponse, generateChatResponseStreamingSecure as generateChatResponseStreaming } from './secureChat';
 import { Document } from './documentStore';
 import { MAX_DOCUMENTS_PER_CONVERSATION, ERROR_MESSAGES } from './constants';
 

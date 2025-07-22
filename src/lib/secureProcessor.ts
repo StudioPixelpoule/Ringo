@@ -89,14 +89,9 @@ export async function processDocumentSecure(
 
       return result;
     } catch (error) {
-      console.error('Erreur avec l\'Edge Function, fallback sur traitement local:', error);
-      // En cas d'erreur, fallback sur le traitement local
-      // Passer la clé API pour le traitement local
-      const localOptions = {
-        ...options,
-        openaiApiKey: import.meta.env.VITE_OPENAI_API_KEY
-      };
-      return processDocumentLocal(file, localOptions);
+      console.error('Erreur avec l\'Edge Function pour l\'audio:', error);
+      // En cas d'erreur, propager l'erreur au lieu d'exposer la clé API
+      throw new Error('Erreur lors du traitement audio. Veuillez réessayer.');
     }
   }
 
@@ -253,12 +248,8 @@ export async function processDocumentSecure(
   }
 
   // Pour tous les autres types (HTML, etc.), utiliser le traitement local
-  // S'assurer que la clé API est passée pour le traitement local
-  const localOptions = {
-    ...options,
-    openaiApiKey: import.meta.env.VITE_OPENAI_API_KEY
-  };
-  return processDocumentLocal(file, localOptions);
+  // Ne pas passer la clé API pour des raisons de sécurité
+  return processDocumentLocal(file, options);
 }
 
 // Export de la fonction pour remplacer progressivement processDocument

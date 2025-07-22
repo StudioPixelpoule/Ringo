@@ -7,10 +7,12 @@ import {
   MAX_RESPONSE_TOKENS 
 } from './constants';
 
-const openai = new OpenAI({
-  apiKey: import.meta.env.VITE_OPENAI_API_KEY,
-  dangerouslyAllowBrowser: true
-});
+// Client OpenAI désactivé pour des raisons de sécurité
+// Toutes les fonctionnalités IA passent maintenant par les Edge Functions
+// const openai = new OpenAI({
+//   apiKey: import.meta.env.VITE_OPENAI_API_KEY,
+//   dangerouslyAllowBrowser: true
+// });
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
@@ -278,10 +280,14 @@ Si une information n'est pas dans les documents fournis, tu dois clairement dire
 }
 
 export async function generateChatResponse(messages: ChatMessage[], documentContent?: string): Promise<string> {
+  throw new Error('Cette fonction est désactivée pour des raisons de sécurité. Utilisez generateChatResponseSecure depuis secureChat.ts à la place.');
+  
+  // Code original commenté pour référence
+  /*
   try {
     if (!documentContent?.trim()) {
       throw new Error('Aucun contenu disponible pour analyse.');
-    }
+    }*/
 
     // Estimer les tokens du contexte des documents
     const documentTokens = estimateTokens(documentContent);
@@ -385,10 +391,14 @@ export async function generateChatResponseStreaming(
   documentContent?: string,
   onChunk: (chunk: string) => void
 ): Promise<string> {
+  throw new Error('Cette fonction est désactivée pour des raisons de sécurité. Utilisez generateChatResponseStreamingSecure depuis secureChat.ts à la place.');
+  
+  // Code original commenté pour référence
+  /*
   try {
     if (!documentContent?.trim()) {
       throw new Error('Aucun contenu disponible pour analyse.');
-    }
+    }*/
 
     // Estimer les tokens du contexte des documents
     const documentTokens = estimateTokens(documentContent);

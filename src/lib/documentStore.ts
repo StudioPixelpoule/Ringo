@@ -140,7 +140,6 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
       // Process document content
       const result = await processDocument(file, {
-        openaiApiKey: import.meta.env.VITE_OPENAI_API_KEY,
         onProgress: (progress) => {
           options?.onProgress?.(progress);
           set({ processingStatus: {
