@@ -12,10 +12,11 @@ export interface SecureProcessingOptions extends ProcessingOptions {
 
 // Drapeau pour activer/désactiver le mode sécurisé progressivement
 const USE_SECURE_PROCESSING = {
-  audio: true,      // Activer immédiatement pour l'audio
-  presentation: true, // ✅ Maintenant activé avec l'Edge Function complète
-  chat: false,      // Activer plus tard
-  other: false      // Garder local pour les autres types
+  audio: true,        // ✅ Activé - Edge Function en production
+  presentation: true, // ✅ Activé - Edge Function en production
+  pdf: true,          // ✅ Activé - Nouvelle Edge Function
+  document: true,     // ✅ Activé - Nouvelle Edge Function (Word, Excel, CSV)
+  chat: false,        // Désactivé pour l'instant
 };
 
 export async function processDocumentSecure(
@@ -99,7 +100,7 @@ export async function processDocumentSecure(
     }
   }
 
-  // Pour les présentations, continuer avec le traitement local pour l'instant
+  // Pour les présentations, utiliser l'Edge Function
   if (documentType === 'presentation' && USE_SECURE_PROCESSING.presentation) {
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -135,7 +136,123 @@ export async function processDocumentSecure(
     }
   }
 
-  // Pour tous les autres types, utiliser le traitement local
+  // Pour les PDF, utiliser la nouvelle Edge Function
+  if (documentType === 'pdf' && USE_SECURE_PROCESSING.pdf) {
+    try {
+      options.onProgress?.({
+        stage: 'processing',
+        progress: 10,
+        message: 'Envoi du PDF pour traitement sécurisé...',
+        canCancel: false
+      });
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('Non authentifié');
+      }
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      options.onProgress?.({
+        stage: 'processing',
+        progress: 30,
+        message: 'Extraction du contenu PDF sur le serveur...',
+        canCancel: false
+      });
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-pdf`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: formData
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Erreur lors du traitement du PDF');
+      }
+
+      const { result } = await response.json();
+
+      options.onProgress?.({
+        stage: 'complete',
+        progress: 100,
+        message: 'Extraction terminée',
+        canCancel: false
+      });
+
+      return result;
+    } catch (error) {
+      console.error('Erreur avec l\'Edge Function PDF, fallback sur traitement local:', error);
+      // Fallback sur le traitement local
+      return processDocumentLocal(file, options);
+    }
+  }
+
+  // Pour Word, Excel, CSV, JSON, utiliser la nouvelle Edge Function process-document
+  if ((documentType === 'doc' || documentType === 'data') && USE_SECURE_PROCESSING.document) {
+    try {
+      options.onProgress?.({
+        stage: 'processing',
+        progress: 10,
+        message: 'Envoi du document pour traitement sécurisé...',
+        canCancel: false
+      });
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('Non authentifié');
+      }
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      options.onProgress?.({
+        stage: 'processing',
+        progress: 30,
+        message: 'Traitement du document sur le serveur...',
+        canCancel: false
+      });
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-document`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: formData
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Erreur lors du traitement du document');
+      }
+
+      const { result } = await response.json();
+
+      options.onProgress?.({
+        stage: 'complete',
+        progress: 100,
+        message: 'Traitement terminé',
+        canCancel: false
+      });
+
+      return result;
+    } catch (error) {
+      console.error('Erreur avec l\'Edge Function Document, fallback sur traitement local:', error);
+      // Fallback sur le traitement local
+      return processDocumentLocal(file, options);
+    }
+  }
+
+  // Pour tous les autres types (HTML, etc.), utiliser le traitement local
   // S'assurer que la clé API est passée pour le traitement local
   const localOptions = {
     ...options,
