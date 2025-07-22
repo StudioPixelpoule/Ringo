@@ -134,7 +134,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
         .insert([{
           conversation_id: conversation.id,
           sender: 'assistant',
-          content: `Je vois que vous avez ajouté le document "${document.name}". Je suis prêt à analyser son contenu. Que souhaitez-vous savoir ?`
+          content: `Bonjour, je suis Ringo ! Je vois que vous avez ajouté le document "${document.name}". Je suis prêt à analyser son contenu. Que souhaitez-vous savoir ?`
         }])
         .select()
         .single();
@@ -506,7 +506,7 @@ RAPPEL: Utilise UNIQUEMENT les documents ci-dessus. Si une information n'est pas
       if (doc) {
         // Créer un message personnalisé selon le nombre de documents
         const totalDocs = get().documents.length + 1; // +1 car le nouveau doc n'est pas encore dans la liste
-        let messageContent = `J'ai bien reçu le document "${doc.documents.name}".`;
+        let messageContent = `C'est Ringo ! J'ai bien reçu le document "${doc.documents.name}".`;
         
         if (totalDocs > 1) {
           messageContent += ` Je dispose maintenant de ${totalDocs} documents dans cette conversation.`;

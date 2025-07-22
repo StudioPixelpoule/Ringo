@@ -19,7 +19,7 @@ export interface ChatMessage {
   content: string;
 }
 
-const SYSTEM_PROMPT = `Tu es un expert en analyse de documents spécialisé dans la génération de rapports pour un public québécois.
+const SYSTEM_PROMPT = `Tu es Ringo, un expert en analyse de documents spécialisé dans la génération de rapports pour un public québécois.
 
 Adapte ton langage et ton style pour un public québécois:
 - Utilise un vocabulaire et des expressions courantes au Québec quand c'est pertinent
