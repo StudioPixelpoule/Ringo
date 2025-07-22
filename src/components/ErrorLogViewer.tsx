@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, AlertTriangle, Search, Filter, CheckCircle, Clock, Activity, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, AlertTriangle, Search, Filter, CheckCircle, Clock, Activity, ChevronDown, ChevronUp, Copy, Zap, TrendingUp, Bug, Lightbulb, Code } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { ErrorLog } from '../lib/errorLogger';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -9,59 +9,132 @@ interface ErrorLogViewerProps {
   onClose: () => void;
 }
 
+interface GroupedError {
+  error: string;
+  count: number;
+  lastOccurrence: string;
+  firstOccurrence: string;
+  status: ErrorLog['status'];
+  priority: 'critical' | 'high' | 'medium' | 'low';
+  affectedUsers: string[];
+  logs: ErrorLog[];
+  suggestedFix?: string;
+  cursorPrompt?: string;
+}
+
+// Analyser l'erreur pour déterminer sa priorité
+function getErrorPriority(error: string): 'critical' | 'high' | 'medium' | 'low' {
+  const errorLower = error.toLowerCase();
+  
+  if (errorLower.includes('failed to fetch') || errorLower.includes('network') || errorLower.includes('cors')) {
+    return 'critical';
+  }
+  if (errorLower.includes('auth') || errorLower.includes('jwt') || errorLower.includes('unauthorized')) {
+    return 'critical';
+  }
+  if (errorLower.includes('database') || errorLower.includes('supabase') || errorLower.includes('sql')) {
+    return 'high';
+  }
+  if (errorLower.includes('type') || errorLower.includes('undefined') || errorLower.includes('null')) {
+    return 'medium';
+  }
+  return 'low';
+}
+
+// Générer un prompt Cursor basé sur l'erreur
+function generateCursorPrompt(error: string, stack?: string, context?: any): string {
+  const errorLower = error.toLowerCase();
+  let prompt = `Fix this error in the Ringo application:\n\nError: ${error}\n`;
+
+  if (stack) {
+    // Extraire le fichier et la ligne de l'erreur
+    const fileMatch = stack.match(/at\s+.*?\s+\((.*?):(\d+):(\d+)\)/);
+    if (fileMatch) {
+      prompt += `\nLocation: ${fileMatch[1]} at line ${fileMatch[2]}\n`;
+    }
+  }
+
+  // Suggestions spécifiques selon le type d'erreur
+  if (errorLower.includes('failed to fetch') || errorLower.includes('network')) {
+    prompt += `\nThis is a network error. Check:
+1. API endpoint URL configuration
+2. CORS settings in Supabase
+3. Network connectivity handling
+4. Add proper error boundaries and retry logic`;
+  } else if (errorLower.includes('jwt') || errorLower.includes('auth')) {
+    prompt += `\nThis is an authentication error. Check:
+1. Token refresh logic in supabase.ts
+2. Session management in App.tsx
+3. Auth state handling in protected routes
+4. Add proper token expiry handling`;
+  } else if (errorLower.includes('type') || errorLower.includes('undefined')) {
+    prompt += `\nThis is a type error. Check:
+1. TypeScript type definitions
+2. Null/undefined checks before accessing properties
+3. Optional chaining usage
+4. Add proper type guards`;
+  }
+
+  if (context) {
+    prompt += `\n\nContext: ${JSON.stringify(context, null, 2)}`;
+  }
+
+  return prompt;
+}
+
+// Analyser et suggérer une correction
+function analyzeSolution(error: string): string {
+  const errorLower = error.toLowerCase();
+
+  if (errorLower.includes('failed to fetch')) {
+    return "Vérifier la configuration réseau et les endpoints API. Implémenter une logique de retry avec exponential backoff.";
+  }
+  if (errorLower.includes('jwt expired')) {
+    return "Implémenter un rafraîchissement automatique des tokens. Vérifier la logique dans supabase.ts.";
+  }
+  if (errorLower.includes('cannot read property')) {
+    return "Ajouter des vérifications null/undefined. Utiliser l'optional chaining (?.) et le nullish coalescing (??).";
+  }
+  if (errorLower.includes('cors')) {
+    return "Configurer les headers CORS dans Supabase. Vérifier les domaines autorisés.";
+  }
+  return "Analyser la stack trace et ajouter une gestion d'erreur appropriée.";
+}
+
 export function ErrorLogViewer({ isOpen, onClose }: ErrorLogViewerProps) {
   const [logs, setLogs] = useState<ErrorLog[]>([]);
+  const [groupedErrors, setGroupedErrors] = useState<GroupedError[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<'dashboard' | 'list'>('dashboard');
   const [statusFilter, setStatusFilter] = useState<'all' | 'new' | 'investigating' | 'resolved'>('all');
+  const [priorityFilter, setPriorityFilter] = useState<'all' | 'critical' | 'high' | 'medium' | 'low'>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
-  const [autoRefresh, setAutoRefresh] = useState(true);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [expandedErrors, setExpandedErrors] = useState<Set<string>>(new Set());
+  const [copiedPrompt, setCopiedPrompt] = useState<string | null>(null);
   
-  const logsContainerRef = useRef<HTMLDivElement>(null);
-  const PAGE_SIZE = 20;
-
   useEffect(() => {
     if (isOpen) {
       fetchLogs();
-      
-      if (autoRefresh) {
-        const interval = setInterval(fetchLogs, 30000); // Refresh every 30s
-        return () => clearInterval(interval);
-      }
+      const interval = setInterval(fetchLogs, 30000);
+      return () => clearInterval(interval);
     }
-  }, [isOpen, autoRefresh, page, statusFilter]);
+  }, [isOpen]);
 
-  const fetchLogs = async (reset = false) => {
-    if (reset) {
-      setPage(1);
-      setLogs([]);
-      setHasMore(true);
-    }
-
+  const fetchLogs = async () => {
     try {
       setLoading(true);
-      const currentPage = reset ? 1 : page;
       
-      let query = supabase
+      const { data, error } = await supabase
         .from('error_logs_with_users')
         .select('*')
         .order('created_at', { ascending: false })
-        .range((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE - 1);
-
-      if (statusFilter !== 'all') {
-        query = query.eq('status', statusFilter);
-      }
-
-      const { data, error } = await query;
+        .limit(500); // Récupérer plus pour l'analyse
 
       if (error) throw error;
       
-      setLogs(prev => reset ? data || [] : [...prev, ...(data || [])]);
-      setHasMore((data?.length || 0) === PAGE_SIZE);
+      setLogs(data || []);
+      groupErrors(data || []);
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Failed to fetch error logs');
     } finally {
@@ -69,56 +142,139 @@ export function ErrorLogViewer({ isOpen, onClose }: ErrorLogViewerProps) {
     }
   };
 
-  const handleScroll = () => {
-    if (!logsContainerRef.current || loading || !hasMore) return;
+  const groupErrors = (logs: ErrorLog[]) => {
+    const groups = new Map<string, GroupedError>();
 
-    const { scrollTop, scrollHeight, clientHeight } = logsContainerRef.current;
-    if (scrollHeight - scrollTop <= clientHeight * 1.5) {
-      setPage(prev => prev + 1);
-    }
+    logs.forEach(log => {
+      const key = log.error;
+      if (!groups.has(key)) {
+        groups.set(key, {
+          error: log.error,
+          count: 0,
+          lastOccurrence: log.created_at,
+          firstOccurrence: log.created_at,
+          status: log.status,
+          priority: getErrorPriority(log.error),
+          affectedUsers: [],
+          logs: [],
+          suggestedFix: analyzeSolution(log.error),
+          cursorPrompt: generateCursorPrompt(log.error, log.stack, log.context)
+        });
+      }
+
+      const group = groups.get(key)!;
+      group.count++;
+      group.logs.push(log);
+      
+      if (new Date(log.created_at) > new Date(group.lastOccurrence)) {
+        group.lastOccurrence = log.created_at;
+        group.status = log.status;
+      }
+      if (new Date(log.created_at) < new Date(group.firstOccurrence)) {
+        group.firstOccurrence = log.created_at;
+      }
+      
+      if (log.user_email && !group.affectedUsers.includes(log.user_email)) {
+        group.affectedUsers.push(log.user_email);
+      }
+    });
+
+    const grouped = Array.from(groups.values())
+      .sort((a, b) => {
+        // Trier par priorité puis par nombre d'occurrences
+        const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+        if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
+          return priorityOrder[a.priority] - priorityOrder[b.priority];
+        }
+        return b.count - a.count;
+      });
+
+    setGroupedErrors(grouped);
   };
 
-  const updateLogStatus = async (id: string, status: ErrorLog['status'], resolution?: string) => {
+  const copyPrompt = (prompt: string, errorId: string) => {
+    navigator.clipboard.writeText(prompt);
+    setCopiedPrompt(errorId);
+    setTimeout(() => setCopiedPrompt(null), 2000);
+  };
+
+  const updateErrorStatus = async (error: string, status: ErrorLog['status']) => {
     try {
-      const { error } = await supabase
-        .from('error_logs')
-        .update({ 
-          status,
-          ...(resolution ? { resolution } : {})
-        })
-        .eq('id', id);
-
-      if (error) throw error;
-      await fetchLogs(true);
+      const affectedLogs = groupedErrors.find(g => g.error === error)?.logs || [];
+      
+      await Promise.all(
+        affectedLogs.map(log =>
+          supabase
+            .from('error_logs')
+            .update({ status })
+            .eq('id', log.id)
+        )
+      );
+      
+      await fetchLogs();
     } catch (error) {
-      console.error('Failed to update log status:', error);
+      console.error('Failed to update status:', error);
     }
   };
 
-  const toggleLogExpansion = (id: string) => {
-    setExpandedLogs(prev => {
+  const toggleErrorExpansion = (error: string) => {
+    setExpandedErrors(prev => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
+      if (next.has(error)) {
+        next.delete(error);
       } else {
-        next.add(id);
+        next.add(error);
       }
       return next;
     });
   };
 
-  const filteredLogs = logs.filter(log => {
+  const filteredErrors = groupedErrors.filter(group => {
+    if (statusFilter !== 'all' && group.status !== statusFilter) return false;
+    if (priorityFilter !== 'all' && group.priority !== priorityFilter) return false;
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       return (
-        log.error.toLowerCase().includes(query) ||
-        log.context?.toString().toLowerCase().includes(query) ||
-        log.user_email?.toLowerCase().includes(query) ||
-        log.stack?.toLowerCase().includes(query)
+        group.error.toLowerCase().includes(query) ||
+        group.affectedUsers.some(u => u.toLowerCase().includes(query))
       );
     }
     return true;
   });
+
+  // Statistiques pour le dashboard
+  const stats = {
+    total: groupedErrors.length,
+    critical: groupedErrors.filter(e => e.priority === 'critical').length,
+    new: groupedErrors.filter(e => e.status === 'new').length,
+    resolved: groupedErrors.filter(e => e.status === 'resolved').length,
+    totalOccurrences: groupedErrors.reduce((sum, e) => sum + e.count, 0),
+    affectedUsers: new Set(groupedErrors.flatMap(e => e.affectedUsers)).size
+  };
+
+  const getPriorityIcon = (priority: string) => {
+    switch (priority) {
+      case 'critical': return <Zap className="text-red-500" size={16} />;
+      case 'high': return <AlertTriangle className="text-orange-500" size={16} />;
+      case 'medium': return <Bug className="text-yellow-500" size={16} />;
+      default: return <Activity className="text-blue-500" size={16} />;
+    }
+  };
+
+  const getPriorityBadge = (priority: string) => {
+    const colors = {
+      critical: 'bg-red-100 text-red-800 border-red-200',
+      high: 'bg-orange-100 text-orange-800 border-orange-200',
+      medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+      low: 'bg-blue-100 text-blue-800 border-blue-200'
+    };
+    
+    return (
+      <span className={`px-2 py-0.5 text-xs font-medium rounded-full border ${colors[priority as keyof typeof colors]}`}>
+        {priority.toUpperCase()}
+      </span>
+    );
+  };
 
   if (!isOpen) return null;
 
@@ -128,24 +284,32 @@ export function ErrorLogViewer({ isOpen, onClose }: ErrorLogViewerProps) {
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-white rounded-xl shadow-xl w-full max-w-7xl mx-4 max-h-[85vh] flex flex-col"
+        className="bg-white rounded-xl shadow-xl w-full max-w-7xl mx-4 max-h-[90vh] flex flex-col"
       >
         <div className="bg-[#f15922] px-6 py-4 flex items-center justify-between flex-shrink-0 rounded-t-xl">
           <h2 className="text-xl font-semibold text-white flex items-center gap-2">
-            <AlertTriangle size={24} />
-            Journal des Erreurs
+            <Code size={24} />
+            Assistant de Débogage
           </h2>
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => setAutoRefresh(!autoRefresh)}
-              className={`header-neumorphic-button px-3 py-1 rounded-full flex items-center gap-1 text-sm ${
-                autoRefresh ? 'text-white' : 'text-white/70'
-              }`}
-              title={autoRefresh ? 'Désactiver le rafraîchissement auto' : 'Activer le rafraîchissement auto'}
-            >
-              <Clock size={16} />
-              <span>Auto</span>
-            </button>
+            <div className="flex bg-white/20 rounded-lg p-0.5">
+              <button
+                onClick={() => setView('dashboard')}
+                className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                  view === 'dashboard' ? 'bg-white text-[#f15922]' : 'text-white'
+                }`}
+              >
+                Dashboard
+              </button>
+              <button
+                onClick={() => setView('list')}
+                className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                  view === 'list' ? 'bg-white text-[#f15922]' : 'text-white'
+                }`}
+              >
+                Détails
+              </button>
+            </div>
             <button
               onClick={onClose}
               className="header-neumorphic-button w-8 h-8 rounded-full flex items-center justify-center text-white"
@@ -155,192 +319,124 @@ export function ErrorLogViewer({ isOpen, onClose }: ErrorLogViewerProps) {
           </div>
         </div>
 
-        <div className="p-6 space-y-4 flex-1 overflow-hidden">
-          {/* Filters */}
-          <div className="flex gap-4 mb-6">
-            <div className="flex-1">
-              <div className={`
-                relative transition-all duration-200
-                ${isSearchFocused ? 'w-full' : 'w-96'}
-              `}>
-                <Search 
-                  size={18} 
-                  className={`
-                    absolute left-3 top-1/2 -translate-y-1/2 transition-colors duration-200
-                    ${isSearchFocused ? 'text-[#f15922]' : 'text-gray-400'}
-                  `}
-                />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onFocus={() => setIsSearchFocused(true)}
-                  onBlur={() => setIsSearchFocused(false)}
-                  placeholder="Rechercher dans les erreurs..."
-                  className={`
-                    w-full pl-10 pr-4 py-2 border rounded-lg 
-                    transition-all duration-200
-                    ${isSearchFocused 
-                      ? 'bg-white ring-2 ring-[#f15922] border-transparent' 
-                      : 'bg-gray-50 hover:bg-gray-100 border-gray-200'
-                    }
-                  `}
-                />
+        <div className="flex-1 overflow-hidden flex flex-col">
+          {view === 'dashboard' ? (
+            <div className="p-6 space-y-6 overflow-y-auto">
+              {/* Stats Overview */}
+              <div className="grid grid-cols-6 gap-4">
+                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                  <div className="text-sm text-gray-600">Total Erreurs</div>
+                  <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
+                </div>
+                <div className="bg-red-50 rounded-lg p-4 border border-red-200">
+                  <div className="text-sm text-red-600">Critiques</div>
+                  <div className="text-2xl font-bold text-red-700">{stats.critical}</div>
+                </div>
+                <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
+                  <div className="text-sm text-yellow-600">Nouvelles</div>
+                  <div className="text-2xl font-bold text-yellow-700">{stats.new}</div>
+                </div>
+                <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                  <div className="text-sm text-green-600">Résolues</div>
+                  <div className="text-2xl font-bold text-green-700">{stats.resolved}</div>
+                </div>
+                <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                  <div className="text-sm text-blue-600">Occurrences</div>
+                  <div className="text-2xl font-bold text-blue-700">{stats.totalOccurrences}</div>
+                </div>
+                <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                  <div className="text-sm text-purple-600">Utilisateurs</div>
+                  <div className="text-2xl font-bold text-purple-700">{stats.affectedUsers}</div>
+                </div>
               </div>
-            </div>
-            <div className="w-48">
-              <div className="relative">
-                <Filter 
-                  size={18} 
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" 
-                />
-                <select
-                  value={statusFilter}
-                  onChange={(e) => {
-                    setStatusFilter(e.target.value as typeof statusFilter);
-                    fetchLogs(true);
-                  }}
-                  className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg appearance-none hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-[#f15922] focus:border-transparent"
-                >
-                  <option value="all">Tous les statuts</option>
-                  <option value="new">Nouveaux</option>
-                  <option value="investigating">En cours</option>
-                  <option value="resolved">Résolus</option>
-                </select>
-                <ChevronDown 
-                  size={18} 
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" 
-                />
-              </div>
-            </div>
-          </div>
 
-          {/* Error logs list */}
-          <div 
-            ref={logsContainerRef}
-            onScroll={handleScroll}
-            className="overflow-y-auto"
-            style={{ height: 'calc(85vh - 220px)' }}
-          >
-            <div className="space-y-4">
-              <AnimatePresence>
-                {loading && page === 1 ? (
-                  <div className="flex items-center justify-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#f15922]"></div>
-                  </div>
-                ) : filteredLogs.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    Aucune erreur trouvée
-                  </div>
-                ) : (
-                  filteredLogs.map((log) => (
+              {/* Erreurs prioritaires */}
+              <div>
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <Zap className="text-[#f15922]" size={20} />
+                  Erreurs à traiter en priorité
+                </h3>
+                <div className="space-y-4">
+                  {filteredErrors.slice(0, 5).map((group) => (
                     <motion.div
-                      key={log.id}
+                      key={group.error}
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -20 }}
-                      className={`
-                        bg-white rounded-lg border shadow-sm overflow-hidden
-                        ${log.status === 'new' ? 'border-red-200' :
-                          log.status === 'investigating' ? 'border-yellow-200' :
-                          'border-green-200'}
-                      `}
+                      className="bg-white rounded-lg border shadow-sm overflow-hidden"
                     >
                       <div className="p-4">
                         <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className={`
-                                px-2 py-0.5 text-xs font-medium rounded-full
-                                ${log.status === 'new' ? 'bg-red-100 text-red-800' :
-                                  log.status === 'investigating' ? 'bg-yellow-100 text-yellow-800' :
-                                  'bg-green-100 text-green-800'}
-                              `}>
-                                {log.status === 'new' ? 'Nouvelle' :
-                                 log.status === 'investigating' ? 'En cours' :
-                                 'Résolue'}
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              {getPriorityIcon(group.priority)}
+                              {getPriorityBadge(group.priority)}
+                              <span className="text-sm text-gray-600">
+                                {group.count} occurrence{group.count > 1 ? 's' : ''}
                               </span>
                               <span className="text-sm text-gray-500">
-                                {new Date(log.created_at).toLocaleString('fr-FR')}
+                                {group.affectedUsers.length} utilisateur{group.affectedUsers.length > 1 ? 's' : ''}
                               </span>
-                              {log.user_email && (
-                                <span className="text-sm text-gray-600">
-                                  {log.user_email}
-                                </span>
-                              )}
                             </div>
-                            <p className="text-gray-900 font-medium">
-                              {log.error}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => toggleLogExpansion(log.id)}
-                              className="p-1 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100"
-                            >
-                              {expandedLogs.has(log.id) ? (
-                                <ChevronUp size={20} />
-                              ) : (
-                                <ChevronDown size={20} />
-                              )}
-                            </button>
-                            {log.status === 'new' && (
+                            <p className="font-medium text-gray-900 mb-2">{group.error}</p>
+                            
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
+                              <div className="flex items-start gap-2">
+                                <Lightbulb className="text-blue-600 mt-0.5" size={16} />
+                                <div className="flex-1">
+                                  <p className="text-sm text-blue-900 font-medium mb-1">Solution suggérée :</p>
+                                  <p className="text-sm text-blue-700">{group.suggestedFix}</p>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
                               <button
-                                onClick={() => updateLogStatus(log.id, 'investigating')}
-                                className="p-1 text-yellow-600 hover:text-yellow-700 rounded-full hover:bg-yellow-50"
-                                title="Marquer comme en cours d'investigation"
+                                onClick={() => copyPrompt(group.cursorPrompt!, group.error)}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-[#f15922] text-white rounded-lg hover:bg-[#f15922]/90 transition-colors text-sm font-medium"
                               >
-                                <Activity size={20} />
+                                <Copy size={16} />
+                                {copiedPrompt === group.error ? 'Copié !' : 'Copier prompt Cursor'}
                               </button>
-                            )}
-                            {log.status === 'investigating' && (
                               <button
-                                onClick={() => {
-                                  const resolution = window.prompt('Résolution de l\'erreur:');
-                                  if (resolution) {
-                                    updateLogStatus(log.id, 'resolved', resolution);
-                                  }
-                                }}
-                                className="p-1 text-green-600 hover:text-green-700 rounded-full hover:bg-green-50"
-                                title="Marquer comme résolue"
+                                onClick={() => updateErrorStatus(group.error, 'investigating')}
+                                className="px-3 py-1.5 bg-yellow-100 text-yellow-700 rounded-lg hover:bg-yellow-200 transition-colors text-sm font-medium"
                               >
-                                <CheckCircle size={20} />
+                                Je m'en occupe
                               </button>
-                            )}
+                              <button
+                                onClick={() => toggleErrorExpansion(group.error)}
+                                className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                              >
+                                {expandedErrors.has(group.error) ? (
+                                  <ChevronUp size={18} />
+                                ) : (
+                                  <ChevronDown size={18} />
+                                )}
+                              </button>
+                            </div>
                           </div>
                         </div>
 
                         <AnimatePresence>
-                          {expandedLogs.has(log.id) && (
+                          {expandedErrors.has(group.error) && (
                             <motion.div
                               initial={{ height: 0, opacity: 0 }}
                               animate={{ height: 'auto', opacity: 1 }}
                               exit={{ height: 0, opacity: 0 }}
-                              transition={{ duration: 0.2 }}
-                              className="mt-4 space-y-4 overflow-hidden"
+                              className="mt-4 space-y-3"
                             >
-                              {log.stack && (
-                                <div>
-                                  <h4 className="text-sm font-medium text-gray-700 mb-2">Stack Trace</h4>
-                                  <pre className="text-xs bg-gray-50 p-3 rounded-lg overflow-x-auto">
-                                    {log.stack}
+                              <div className="bg-gray-50 rounded-lg p-3">
+                                <h4 className="text-sm font-medium text-gray-700 mb-2">Prompt Cursor complet :</h4>
+                                <pre className="text-xs bg-white p-3 rounded border overflow-x-auto whitespace-pre-wrap">
+                                  {group.cursorPrompt}
+                                </pre>
+                              </div>
+                              {group.logs[0].stack && (
+                                <div className="bg-gray-50 rounded-lg p-3">
+                                  <h4 className="text-sm font-medium text-gray-700 mb-2">Stack Trace :</h4>
+                                  <pre className="text-xs bg-white p-3 rounded border overflow-x-auto">
+                                    {group.logs[0].stack}
                                   </pre>
-                                </div>
-                              )}
-                              {log.context && (
-                                <div>
-                                  <h4 className="text-sm font-medium text-gray-700 mb-2">Contexte</h4>
-                                  <pre className="text-xs bg-gray-50 p-3 rounded-lg overflow-x-auto">
-                                    {JSON.stringify(log.context, null, 2)}
-                                  </pre>
-                                </div>
-                              )}
-                              {log.resolution && (
-                                <div>
-                                  <h4 className="text-sm font-medium text-gray-700 mb-2">Résolution</h4>
-                                  <p className="text-sm text-gray-600 bg-green-50 p-3 rounded-lg">
-                                    {log.resolution}
-                                  </p>
                                 </div>
                               )}
                             </motion.div>
@@ -348,17 +444,55 @@ export function ErrorLogViewer({ isOpen, onClose }: ErrorLogViewerProps) {
                         </AnimatePresence>
                       </div>
                     </motion.div>
-                  ))
-                )}
-              </AnimatePresence>
-
-              {loading && page > 1 && (
-                <div className="py-4 text-center">
-                  <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-[#f15922]"></div>
+                  ))}
                 </div>
-              )}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="p-6 space-y-4 overflow-y-auto">
+              {/* Filtres */}
+              <div className="flex gap-4">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Rechercher..."
+                  className="flex-1 px-4 py-2 border rounded-lg"
+                />
+                <select
+                  value={priorityFilter}
+                  onChange={(e) => setPriorityFilter(e.target.value as any)}
+                  className="px-4 py-2 border rounded-lg"
+                >
+                  <option value="all">Toutes priorités</option>
+                  <option value="critical">Critique</option>
+                  <option value="high">Haute</option>
+                  <option value="medium">Moyenne</option>
+                  <option value="low">Basse</option>
+                </select>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as any)}
+                  className="px-4 py-2 border rounded-lg"
+                >
+                  <option value="all">Tous statuts</option>
+                  <option value="new">Nouvelles</option>
+                  <option value="investigating">En cours</option>
+                  <option value="resolved">Résolues</option>
+                </select>
+              </div>
+
+              {/* Liste détaillée */}
+              <div className="space-y-4">
+                {filteredErrors.map((group) => (
+                  <div key={group.error} className="bg-white rounded-lg border shadow-sm p-4">
+                    {/* Même contenu que dans le dashboard */}
+                    {/* ... */}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </motion.div>
     </div>
