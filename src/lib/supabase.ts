@@ -1,4 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
+import { createLogger } from './logger';
+
+// Logger pour ce module
+const logger = createLogger('Supabase');
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -50,7 +54,7 @@ async function handleAuthError(error: any) {
   if (error?.message?.includes('Failed to fetch')) {
     const isConnected = await checkNetworkConnection();
     if (!isConnected) {
-      console.error('Network connectivity issue detected');
+      logger.error('Network connectivity issue detected');
       // You could dispatch an event or update UI state here to show network error
       return;
     }
@@ -61,7 +65,7 @@ async function handleAuthError(error: any) {
       error?.message?.includes('Invalid JWT') ||
       error?.message?.includes('Invalid Refresh Token') ||
       error?.message?.includes('Invalid API key')) {
-    console.log('Authentication error detected, clearing storage and redirecting to login');
+    logger.info('Authentication error detected, clearing storage and redirecting to login');
     // Clear all local storage to remove any invalid tokens
     localStorage.clear();
     sessionStorage.clear();
@@ -81,7 +85,7 @@ const initializeAuthState = async (retries = 3, delay = 1000) => {
       if (error) throw error;
       return data;
     } catch (error) {
-      console.error(`Auth initialization attempt ${i + 1} failed:`, error);
+      logger.error(`Auth initialization attempt ${i + 1} failed:`, error);
       if (i < retries - 1) {
         await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, i)));
       } else {
@@ -91,11 +95,11 @@ const initializeAuthState = async (retries = 3, delay = 1000) => {
   }
 };
 
-initializeAuthState().catch(console.error);
+initializeAuthState().catch(error => logger.error("Error:", error));
 
 // Set up auth state change listener
 supabase.auth.onAuthStateChange((event, session) => {
-  console.log('Auth state change event:', event);
+  logger.info('Auth state change event:', event);
   
   if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
     // Clear any cached data and redirect to login
@@ -104,7 +108,7 @@ supabase.auth.onAuthStateChange((event, session) => {
     // Redirect to login
     window.location.href = '/login';
   } else if (event === 'TOKEN_REFRESHED') {
-    console.log('Session token refreshed');
+    logger.info('Session token refreshed');
   }
 });
 
@@ -131,7 +135,7 @@ const refreshSessionWithRetry = async () => {
       lastRefreshTime = Date.now();
       return;
     } catch (error) {
-      console.error(`Session refresh attempt ${i + 1} failed:`, error);
+      logger.error(`Session refresh attempt ${i + 1} failed:`, error);
       if (i < MAX_RETRIES - 1) {
         await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, i)));
       } else {
@@ -156,7 +160,7 @@ window.addEventListener('unhandledrejection', (event) => {
   if (event.reason?.name === 'AuthApiError' || 
       event.reason?.message?.includes('JWT expired') ||
       event.reason?.message?.includes('Invalid JWT')) {
-    console.error('Auth API Error:', event.reason);
+    logger.error('Auth API Error:', event.reason);
     handleAuthError(event.reason);
   }
 });
@@ -167,7 +171,7 @@ export const isAuthenticated = async (): Promise<boolean> => {
     const { data: { session } } = await supabase.auth.getSession();
     return !!session;
   } catch (error) {
-    console.error('Auth check error:', error);
+    logger.error('Auth check error:', error);
     handleAuthError(error);
     return false;
   }
@@ -191,7 +195,7 @@ export const getUserRole = async (): Promise<string | null> => {
         throw new Error('Network unavailable');
       }
 
-      console.log(`getUserRole attempt ${attempt}...`);
+      logger.info(`getUserRole attempt ${attempt}...`);
       
       // Check and refresh session if needed
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
@@ -232,10 +236,10 @@ export const getUserRole = async (): Promise<string | null> => {
         return null;
       }
 
-      console.log('User role retrieved:', profile.role);
+      logger.info('User role retrieved:', profile.role);
       return profile.role;
     } catch (error) {
-      console.error(`Attempt ${attempt} failed:`, error);
+      logger.error(`Attempt ${attempt} failed:`, error);
 
       if (attempt < maxRetries) {
         const delay = baseDelay * Math.pow(retryBackoff, attempt - 1);
@@ -250,7 +254,7 @@ export const getUserRole = async (): Promise<string | null> => {
         error.message.includes('Invalid Refresh Token') ||
         error.message.includes('Invalid API key')
       )) {
-        console.error('Authentication error:', error);
+        logger.error('Authentication error:', error);
         handleAuthError(error);
         return null;
       }
@@ -262,7 +266,7 @@ export const getUserRole = async (): Promise<string | null> => {
   try {
     return await retryFetch();
   } catch (error) {
-    console.error('All retries failed:', error);
+    logger.error('All retries failed:', error);
     return null;
   }
 };
@@ -289,7 +293,7 @@ export const sendPasswordResetEmail = async (email: string): Promise<boolean> =>
     if (error) throw error;
     return true;
   } catch (error) {
-    console.error('Error sending password reset email:', error);
+    logger.error('Error sending password reset email:', error);
     throw error;
   }
 };
