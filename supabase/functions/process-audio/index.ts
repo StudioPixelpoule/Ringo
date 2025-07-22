@@ -41,30 +41,35 @@ serve(async (req) => {
       throw new Error('Unauthorized');
     }
 
-    const formData = await req.formData();
-    const file = formData.get('file') as File;
-    const audioDescription = formData.get('audioDescription') as string || undefined;
+    const { filePath, fileName, audioDescription } = await req.json();
 
-    if (!file) {
-      throw new Error('No file provided');
+    if (!filePath) {
+      throw new Error('No file path provided');
     }
 
-    console.log('Processing audio file:', {
-      name: file.name,
-      type: file.type,
-      size: file.size,
-      description: audioDescription
-    });
+    // Download the file from Supabase Storage
+    const { data: fileData, error: downloadError } = await supabaseClient.storage
+      .from('documents')
+      .download(filePath);
 
-    // Vérifier la clé API OpenAI
+    if (downloadError || !fileData) {
+      throw new Error(`Failed to download file: ${downloadError?.message || 'Unknown error'}`);
+    }
+
+    console.log(`Processing audio file: ${fileName || filePath}`);
+
+    // Initialize OpenAI
     const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
     if (!openaiApiKey) {
       throw new Error('OpenAI API key not configured');
     }
 
+    // Convert Blob to File for OpenAI
+    const audioFile = new File([fileData], fileName || 'audio.mp3', { type: fileData.type });
+
     // Préparer le FormData pour Whisper
     const whisperFormData = new FormData();
-    whisperFormData.append('file', file);
+    whisperFormData.append('file', audioFile);
     whisperFormData.append('model', 'whisper-1');
     whisperFormData.append('response_format', 'verbose_json');
     whisperFormData.append('language', 'fr');
@@ -97,11 +102,11 @@ serve(async (req) => {
     const result = {
       content,
       metadata: {
-        title: file.name.replace(/\.[^/.]+$/, ''),
+        title: fileName || filePath.split('/').pop()?.replace(/\.[^/.]+$/, ''),
         duration: transcriptionData.duration || 0,
         language: 'fr',
-        fileType: file.type,
-        fileName: file.name,
+        fileType: fileData.type,
+        fileName: fileName || filePath.split('/').pop(),
         audioDescription,
         segments: transcriptionData.segments || []
       },
