@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, AlertTriangle, Search, Filter, CheckCircle, Clock, Activity, ChevronDown, ChevronUp, Copy, Zap, TrendingUp, Bug, Lightbulb, Code } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import type { ErrorLog } from '../lib/errorLogger';
+import type { ErrorLog, ErrorLogWithUser } from '../lib/errorLogger';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface ErrorLogViewerProps {
@@ -16,8 +16,8 @@ interface GroupedError {
   firstOccurrence: string;
   status: ErrorLog['status'];
   priority: 'critical' | 'high' | 'medium' | 'low';
-  affectedUsers: string[];
-  logs: ErrorLog[];
+  affectedUsers: Array<{ email: string; name?: string }>;
+  logs: ErrorLogWithUser[];
   suggestedFix?: string;
   cursorPrompt?: string;
 }
@@ -102,7 +102,7 @@ function analyzeSolution(error: string): string {
 }
 
 export function ErrorLogViewer({ isOpen, onClose }: ErrorLogViewerProps) {
-  const [logs, setLogs] = useState<ErrorLog[]>([]);
+  const [logs, setLogs] = useState<ErrorLogWithUser[]>([]);
   const [groupedErrors, setGroupedErrors] = useState<GroupedError[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -142,7 +142,7 @@ export function ErrorLogViewer({ isOpen, onClose }: ErrorLogViewerProps) {
     }
   };
 
-  const groupErrors = (logs: ErrorLog[]) => {
+  const groupErrors = (logs: ErrorLogWithUser[]) => {
     const groups = new Map<string, GroupedError>();
 
     logs.forEach(log => {
@@ -174,8 +174,11 @@ export function ErrorLogViewer({ isOpen, onClose }: ErrorLogViewerProps) {
         group.firstOccurrence = log.created_at;
       }
       
-      if (log.user_email && !group.affectedUsers.includes(log.user_email)) {
-        group.affectedUsers.push(log.user_email);
+      if (log.user_email && !group.affectedUsers.some(u => u.email === log.user_email)) {
+        group.affectedUsers.push({ 
+          email: log.user_email, 
+          name: log.user_name 
+        });
       }
     });
 
@@ -236,7 +239,10 @@ export function ErrorLogViewer({ isOpen, onClose }: ErrorLogViewerProps) {
       const query = searchQuery.toLowerCase();
       return (
         group.error.toLowerCase().includes(query) ||
-        group.affectedUsers.some(u => u.toLowerCase().includes(query))
+        group.affectedUsers.some(u => 
+          u.email.toLowerCase().includes(query) ||
+          (u.name && u.name.toLowerCase().includes(query))
+        )
       );
     }
     return true;
@@ -249,7 +255,7 @@ export function ErrorLogViewer({ isOpen, onClose }: ErrorLogViewerProps) {
     new: groupedErrors.filter(e => e.status === 'new').length,
     resolved: groupedErrors.filter(e => e.status === 'resolved').length,
     totalOccurrences: groupedErrors.reduce((sum, e) => sum + e.count, 0),
-    affectedUsers: new Set(groupedErrors.flatMap(e => e.affectedUsers)).size
+    affectedUsers: new Set(groupedErrors.flatMap(e => e.affectedUsers.map(u => u.email))).size
   };
 
   const getPriorityIcon = (priority: string) => {
@@ -627,9 +633,16 @@ export function ErrorLogViewer({ isOpen, onClose }: ErrorLogViewerProps) {
                               <div className="bg-gray-50 rounded-lg p-3">
                                 <h4 className="text-sm font-medium text-gray-700 mb-2">Utilisateurs affectés :</h4>
                                 <div className="flex flex-wrap gap-2">
-                                  {group.affectedUsers.map((email, index) => (
+                                  {group.affectedUsers.map((user, index) => (
                                     <span key={index} className="px-2 py-1 bg-white rounded border text-xs">
-                                      {email}
+                                      {user.name ? (
+                                        <span>
+                                          <span className="font-medium">{user.name}</span>
+                                          <span className="text-gray-500 ml-1">({user.email})</span>
+                                        </span>
+                                      ) : (
+                                        user.email
+                                      )}
                                     </span>
                                   ))}
                                 </div>

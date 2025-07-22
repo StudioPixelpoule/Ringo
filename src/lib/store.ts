@@ -8,6 +8,7 @@ export interface Profile {
   status: boolean;
   created_at: string;
   updated_at: string;
+  name?: string;
 }
 
 interface UserStore {

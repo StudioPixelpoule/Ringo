@@ -11,6 +11,12 @@ export interface ErrorLog {
   resolution?: string;
 }
 
+export interface ErrorLogWithUser extends ErrorLog {
+  user_email?: string;
+  user_name?: string;
+  user_role?: string;
+}
+
 export async function logError(
   error: Error | string | unknown,
   context?: Record<string, any>

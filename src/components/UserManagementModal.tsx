@@ -40,6 +40,8 @@ export function UserManagementModal() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [editingNameId, setEditingNameId] = useState<string | null>(null);
+  const [editingNameValue, setEditingNameValue] = useState('');
 
   useEffect(() => {
     if (isModalOpen) {
@@ -123,14 +125,36 @@ export function UserManagementModal() {
     }
   };
 
+  const startEditingName = (user: Profile) => {
+    setEditingNameId(user.id);
+    setEditingNameValue(user.name || '');
+  };
+
+  const cancelEditingName = () => {
+    setEditingNameId(null);
+    setEditingNameValue('');
+  };
+
+  const saveName = async (userId: string) => {
+    try {
+      await updateUser(userId, { name: editingNameValue });
+      setEditingNameId(null);
+      setEditingNameValue('');
+    } catch (error) {
+      console.error('Failed to update name:', error);
+    }
+  };
+
   // Filter users based on current filters
   const filteredUsers = users.filter(user => {
+    // Search filter - include name in search
+    if (searchQuery && 
+        !user.email.toLowerCase().includes(searchQuery.toLowerCase()) &&
+        (!user.name || !user.name.toLowerCase().includes(searchQuery.toLowerCase()))) {
+      return false;
+    }
     if (roleFilter !== 'all' && user.role !== roleFilter) return false;
     if (statusFilter !== 'all' && user.status !== (statusFilter === 'active')) return false;
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      return user.email.toLowerCase().includes(query);
-    }
     return true;
   });
 
@@ -275,7 +299,7 @@ export function UserManagementModal() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Rechercher par email..."
+                placeholder="Rechercher par email ou nom..."
                 className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#f15922]"
               />
             </div>
@@ -319,6 +343,9 @@ export function UserManagementModal() {
                     Email
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Nom
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Rôle
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -335,7 +362,7 @@ export function UserManagementModal() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {loading ? (
                   <tr>
-                    <td colSpan={5} className="text-center py-8 text-gray-500">
+                    <td colSpan={6} className="text-center py-8 text-gray-500">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#f15922] mx-auto mb-4"></div>
                       <p>Chargement...</p>
                     </td>
@@ -351,6 +378,43 @@ export function UserManagementModal() {
                     <tr key={user.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">{user.email}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {editingNameId === user.id ? (
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={editingNameValue}
+                              onChange={(e) => setEditingNameValue(e.target.value)}
+                              className="w-full px-2 py-1 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#f15922]"
+                            />
+                            <button
+                              onClick={() => saveName(user.id)}
+                              className="text-green-500 hover:text-green-700 p-1 rounded-md"
+                              title="Enregistrer le nom"
+                            >
+                              <Check size={16} />
+                            </button>
+                            <button
+                              onClick={cancelEditingName}
+                              className="text-red-500 hover:text-red-700 p-1 rounded-md"
+                              title="Annuler la modification"
+                            >
+                              <X size={16} />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <span>{user.name || 'N/A'}</span>
+                            <button
+                              onClick={() => startEditingName(user)}
+                              className="text-blue-500 hover:text-blue-700 p-1 rounded-md"
+                              title="Modifier le nom"
+                            >
+                              <UserCog size={16} />
+                            </button>
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <select
