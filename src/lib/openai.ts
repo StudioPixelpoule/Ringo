@@ -266,7 +266,7 @@ export async function prepareMessages(
     // Toujours ajouter l'isolation du contexte
     systemMessages.push({
       role: 'system',
-      content: `🔒 RÈGLE CRITIQUE D'ISOLATION DU CONTEXTE 🔒
+      content: `RÈGLE CRITIQUE D'ISOLATION DU CONTEXTE
 Tu as accès UNIQUEMENT aux ${documentCount} document(s) fournis dans cette conversation.
 INTERDICTION ABSOLUE de faire référence à :
 - Des documents d'autres conversations

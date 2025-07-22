@@ -68,8 +68,8 @@ export function DocumentList({ documents, onRemove }: DocumentListProps) {
         {isExpanded && (
           <div className="mt-3 space-y-2">
             {documents.length > 1 && (
-              <div className="text-xs text-gray-600 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 mb-3">
-                💡 <strong>Astuce :</strong> Demandez-moi de comparer, synthétiser ou croiser les informations entre ces documents !
+              <div className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 mb-3">
+                <strong>Astuce :</strong> Demandez-moi de comparer, synthétiser ou croiser les informations entre ces documents.
               </div>
             )}
             

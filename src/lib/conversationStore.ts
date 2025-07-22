@@ -307,7 +307,7 @@ CONTENU:
 
 ====== FIN DU DOCUMENT #${doc.id} ======
 
-⚠️ INSTRUCTION IMPORTANTE: Le contenu de ce document n'a pas pu être récupéré. Utilise uniquement les autres documents disponibles dans cette conversation.
+INSTRUCTION IMPORTANTE: Le contenu de ce document n'a pas pu être récupéré. Utilise uniquement les autres documents disponibles dans cette conversation.
 `;
               }
               
@@ -327,7 +327,7 @@ CONTENU:
 
 ====== FIN DU DOCUMENT #${doc.id} ======
 
-⚠️ INSTRUCTION IMPORTANTE: Le contenu de ce document n'a pas pu être traité. Utilise uniquement les autres documents disponibles dans cette conversation.
+INSTRUCTION IMPORTANTE: Le contenu de ce document n'a pas pu être traité. Utilise uniquement les autres documents disponibles dans cette conversation.
 `;
             }
 
@@ -388,7 +388,7 @@ ${documentContent}
 
 ====== FIN DU DOCUMENT #${doc.id} ======
 
-⚠️ INSTRUCTION IMPORTANTE: Ce document fait partie de la conversation actuelle (ID: ${conversation.id}). 
+INSTRUCTION IMPORTANTE: Ce document fait partie de la conversation actuelle (ID: ${conversation.id}). 
 Tu dois UNIQUEMENT utiliser les informations contenues dans ce document et les autres documents de cette conversation.
 NE PAS faire référence à des documents externes ou d'autres conversations.
 `;
@@ -399,13 +399,13 @@ NE PAS faire référence à des documents externes ou d'autres conversations.
       
       // Ajouter une instruction claire au début du contexte
       const enhancedDocumentContext = `
-🔒 CONTEXTE ISOLÉ - CONVERSATION ${conversation.id}
+CONTEXTE ISOLÉ - CONVERSATION ${conversation.id}
 =====================================
 Tu as accès UNIQUEMENT aux ${formattedDocuments.length} document(s) suivants pour cette conversation.
 INTERDICTION de faire référence à tout autre document non listé ci-dessous.
 
 ${formattedDocuments.length > 1 ? `
-📊 INSTRUCTIONS POUR ANALYSE MULTI-DOCUMENTS :
+INSTRUCTIONS POUR ANALYSE MULTI-DOCUMENTS :
 - Compare et croise les informations entre TOUS les documents
 - Identifie les points communs et les différences
 - Synthétise les informations complémentaires
@@ -416,7 +416,7 @@ ${formattedDocuments.length > 1 ? `
 ${documentContext}
 
 =====================================
-🔒 FIN DU CONTEXTE ISOLÉ
+FIN DU CONTEXTE ISOLÉ
 
 RAPPEL: Utilise UNIQUEMENT les documents ci-dessus. Si une information n'est pas présente dans ces documents, indique clairement que tu ne peux pas répondre avec les documents fournis.`;
 
@@ -510,7 +510,7 @@ RAPPEL: Utilise UNIQUEMENT les documents ci-dessus. Si une information n'est pas
         
         if (totalDocs > 1) {
           messageContent += ` Je dispose maintenant de ${totalDocs} documents dans cette conversation.`;
-          messageContent += `\n\n💡 **Suggestions d'analyse multi-documents :**`;
+          messageContent += `\n\n**Suggestions d'analyse multi-documents :**`;
           messageContent += `\n- Comparer les informations entre les documents`;
           messageContent += `\n- Créer une synthèse consolidée`;
           messageContent += `\n- Identifier les points communs et différences`;

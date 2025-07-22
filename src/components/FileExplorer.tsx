@@ -518,163 +518,94 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
                   </div>
                 </div>
                 
-                <div className="flex items-center gap-2 mb-3">
-                <div className="relative flex-1">
-                  <Search 
-                    size={18} 
-                    className={`absolute left-3 top-1/2 -translate-y-1/2 ${
-                      isSearchFocused ? 'text-[#f15922]' : 'text-gray-400'
-                    }`}
-                  />
-                  <input
-                    ref={searchInputRef}
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onFocus={() => setIsSearchFocused(true)}
-                    onBlur={() => setIsSearchFocused(false)}
-                    onKeyDown={handleSearchKeyDown}
-                    placeholder="Rechercher des documents..."
-                    className={`w-full pl-10 pr-4 py-2 border rounded-lg ${
-                      isSearchFocused 
-                        ? 'bg-white ring-2 ring-[#f15922] border-transparent' 
-                        : 'bg-gray-50 hover:bg-gray-100 border-gray-200'
-                    }`}
-                  />
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  {filteredDocuments.length > 0 && (
-                    <button
-                      onClick={handleSelectAll}
-                      className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
-                      title={selectedDocuments.length === filteredDocuments.length ? "Tout désélectionner" : "Tout sélectionner"}
-                    >
-                      {selectedDocuments.length === filteredDocuments.length ? (
-                        <>
-                          <Square size={16} />
-                          <span>Aucun</span>
-                        </>
-                      ) : (
-                        <>
-                          <CheckSquare size={16} />
-                          <span>Tous ({filteredDocuments.length})</span>
-                        </>
-                      )}
-                    </button>
-                  )}
+                <div className="space-y-3">
+                  {/* Barre de recherche */}
+                  <div className="relative">
+                    <Search 
+                      size={18} 
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+                    />
+                    <input
+                      ref={searchInputRef}
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onFocus={() => setIsSearchFocused(true)}
+                      onBlur={() => setIsSearchFocused(false)}
+                      onKeyDown={handleSearchKeyDown}
+                      placeholder="Rechercher des documents..."
+                      className={`w-full pl-10 pr-4 py-2 border rounded-lg transition-all ${
+                        isSearchFocused 
+                          ? 'bg-white border-[#f15922] shadow-sm' 
+                          : 'bg-gray-50 hover:bg-white border-gray-200'
+                      }`}
+                    />
+                  </div>
                   
-                  <div className="flex items-center bg-white border border-gray-300 rounded-lg">
-                    <button
-                      onClick={() => setViewMode('grid')}
-                      className={`p-2 ${viewMode === 'grid' ? 'text-[#f15922]' : 'text-gray-400'}`}
-                      title="Vue grille"
-                    >
-                      <Grid size={18} />
-                    </button>
-                    <div className="w-px h-6 bg-gray-300" />
-                    <button
-                      onClick={() => setViewMode('list')}
-                      className={`p-2 ${viewMode === 'list' ? 'text-[#f15922]' : 'text-gray-400'}`}
-                      title="Vue liste"
-                    >
-                      <List size={18} />
-                    </button>
+                  {/* Filtres et actions */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={dateFilter}
+                        onChange={(e) => setDateFilter(e.target.value as any)}
+                        className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:border-[#f15922]"
+                      >
+                        <option value="all">Toutes les dates</option>
+                        <option value="today">Aujourd'hui</option>
+                        <option value="week">Cette semaine</option>
+                        <option value="month">Ce mois</option>
+                      </select>
+                      
+                      <select
+                        value={typeFilter}
+                        onChange={(e) => setTypeFilter(e.target.value as any)}
+                        className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:border-[#f15922]"
+                      >
+                        <option value="all">Tous les types</option>
+                        <option value="pdf">PDF</option>
+                        <option value="doc">Word</option>
+                        <option value="presentation">PowerPoint</option>
+                        <option value="data">Données</option>
+                        <option value="audio">Audio</option>
+                        <option value="web">Web</option>
+                      </select>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                      {filteredDocuments.length > 0 && (
+                        <button
+                          onClick={handleSelectAll}
+                          className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                          title={selectedDocuments.length === filteredDocuments.length ? "Tout désélectionner" : "Tout sélectionner"}
+                        >
+                          {selectedDocuments.length === filteredDocuments.length
+                            ? 'Tout désélectionner'
+                            : `Tout sélectionner (${filteredDocuments.length})`}
+                        </button>
+                      )}
+                      
+                      <div className="flex items-center bg-white border border-gray-300 rounded-lg">
+                        <button
+                          onClick={() => setViewMode('grid')}
+                          className={`p-1.5 ${viewMode === 'grid' ? 'text-[#f15922] bg-gray-50' : 'text-gray-400'}`}
+                          title="Vue grille"
+                        >
+                          <Grid size={18} />
+                        </button>
+                        <div className="w-px h-6 bg-gray-300" />
+                        <button
+                          onClick={() => setViewMode('list')}
+                          className={`p-1.5 ${viewMode === 'list' ? 'text-[#f15922] bg-gray-50' : 'text-gray-400'}`}
+                          title="Vue liste"
+                        >
+                          <List size={18} />
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-              
-              <div className="grid grid-cols-4 gap-4">
-                {/* Type filter */}
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                    <FileText size={16} className="text-gray-400" />
-                  </div>
-                  <select
-                    value={typeFilter}
-                    onChange={(e) => setTypeFilter(e.target.value as typeof typeFilter)}
-                    className="block w-full pl-10 pr-10 py-2 text-sm text-gray-900 border border-gray-300 rounded-lg bg-white focus:ring-[#f15922] focus:border-[#f15922]"
-                  >
-                    <option value="all">Tous les types</option>
-                    <option value="pdf">PDF</option>
-                    <option value="doc">Documents</option>
-                    <option value="data">Données</option>
-                    <option value="audio">Audio</option>
-                    <option value="web">Web</option>
-                  </select>
-                </div>
-                
-                {/* Date filter */}
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                    <Calendar size={16} className="text-gray-400" />
-                  </div>
-                  <select
-                    value={dateFilter}
-                    onChange={(e) => setDateFilter(e.target.value as typeof dateFilter)}
-                    className="block w-full pl-10 pr-10 py-2 text-sm text-gray-900 border border-gray-300 rounded-lg bg-white focus:ring-[#f15922] focus:border-[#f15922]"
-                  >
-                    <option value="all">Toutes les dates</option>
-                    <option value="today">Aujourd'hui</option>
-                    <option value="week">Cette semaine</option>
-                    <option value="month">Ce mois</option>
-                  </select>
-                </div>
-                
-                {/* View mode toggle */}
-                <div className="flex items-center justify-center">
-                  <div className="flex items-center bg-gray-100 rounded-lg p-1">
-                    <button
-                      onClick={() => setViewMode('grid')}
-                      className={`p-2 rounded-lg ${viewMode === 'grid' ? 'bg-white shadow-sm' : 'text-gray-500'}`}
-                      title="Vue grille"
-                    >
-                      <Grid size={18} />
-                    </button>
-                    <button
-                      onClick={() => setViewMode('list')}
-                      className={`p-2 rounded-lg ${viewMode === 'list' ? 'bg-white shadow-sm' : 'text-gray-500'}`}
-                      title="Vue liste"
-                    >
-                      <List size={18} />
-                    </button>
-                  </div>
-                </div>
-                
-                {/* Search count */}
-                <div className="flex items-center justify-end">
-                  <span className="text-sm text-gray-500">
-                    {filteredDocuments.length} document{filteredDocuments.length !== 1 ? 's' : ''}
-                  </span>
-                </div>
-              </div>
-            </div>
-            
-            {/* Document list */}
-            <div className="p-4 border-b flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleSelectAll}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-gray-100"
-                >
-                  {selectedDocuments.length === filteredDocuments.length && filteredDocuments.length > 0 ? (
-                    <CheckSquare size={18} className="text-[#f15922]" />
-                  ) : (
-                    <Square size={18} className="text-gray-600" />
-                  )}
-                  <span className="text-sm font-medium">
-                    {selectedDocuments.length === filteredDocuments.length && filteredDocuments.length > 0
-                      ? 'Tout désélectionner'
-                      : 'Tout sélectionner'}
-                  </span>
-                </button>
-                {selectedDocuments.length > 0 && (
-                  <span className="text-sm text-gray-500">
-                    {selectedDocuments.length} document{selectedDocuments.length > 1 ? 's' : ''} sélectionné{selectedDocuments.length > 1 ? 's' : ''}
-                  </span>
-                )}
-              </div>
-            </div>
+
             
             <div className="flex-1 p-4 overflow-y-auto">
               {loading ? (

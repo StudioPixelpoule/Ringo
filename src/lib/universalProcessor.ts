@@ -335,7 +335,7 @@ async function processPowerPointDocument(file: File, options?: ProcessingOptions
 **Type :** ${file.type || 'application/vnd.ms-powerpoint'}
 **Taille :** ${(file.size / 1024 / 1024).toFixed(2)} MB
 
-⚠️ **Note :** Ce fichier utilise l'ancien format PowerPoint (.ppt). 
+**Note :** Ce fichier utilise l'ancien format PowerPoint (.ppt). 
 Pour une meilleure extraction du contenu, veuillez convertir ce fichier au format moderne (.pptx).
 
 Vous pouvez convertir votre fichier :
@@ -406,7 +406,7 @@ Le fichier a été enregistré et vous pouvez poser des questions générales à
 **Type :** ${file.type}
 **Taille :** ${(file.size / 1024 / 1024).toFixed(2)} MB
 
-⚠️ **Erreur lors de l'extraction du contenu**
+**Erreur lors de l'extraction du contenu**
 
 Une erreur s'est produite lors de l'extraction du contenu de cette présentation.
 Erreur : ${error instanceof Error ? error.message : 'Erreur inconnue'}
