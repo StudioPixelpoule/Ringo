@@ -302,17 +302,15 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
               if (contentError) {
                 console.error('Error fetching document content:', contentError);
                 return `
-====== DOCUMENT ACTIF #${doc.id} ======
+====== DOCUMENT ACTIF "${doc.name}" ======
 TITRE: ${doc.name}
 TYPE: ${doc.type}
-ID UNIQUE: ${doc.id}
-CONVERSATION: ${conversation.id}
 ${doc.description ? `DESCRIPTION: ${doc.description}` : ''}
 
 CONTENU:
 [Erreur lors de la récupération du contenu]
 
-====== FIN DU DOCUMENT #${doc.id} ======
+====== FIN DU DOCUMENT "${doc.name}" ======
 
 INSTRUCTION IMPORTANTE: Le contenu de ce document n'a pas pu être récupéré. Utilise uniquement les autres documents disponibles dans cette conversation.
 `;
@@ -322,17 +320,15 @@ INSTRUCTION IMPORTANTE: Le contenu de ce document n'a pas pu être récupéré. 
             } catch (error) {
               console.error('Error processing document content:', error);
               return `
-====== DOCUMENT ACTIF #${doc.id} ======
+====== DOCUMENT ACTIF "${doc.name}" ======
 TITRE: ${doc.name}
 TYPE: ${doc.type}
-ID UNIQUE: ${doc.id}
-CONVERSATION: ${conversation.id}
 ${doc.description ? `DESCRIPTION: ${doc.description}` : ''}
 
 CONTENU:
 [Erreur lors du traitement du contenu]
 
-====== FIN DU DOCUMENT #${doc.id} ======
+====== FIN DU DOCUMENT "${doc.name}" ======
 
 INSTRUCTION IMPORTANTE: Le contenu de ce document n'a pas pu être traité. Utilise uniquement les autres documents disponibles dans cette conversation.
 `;
@@ -382,21 +378,18 @@ INSTRUCTION IMPORTANTE: Le contenu de ce document n'a pas pu être traité. Util
             }
 
             return `
-====== DOCUMENT ACTIF #${doc.id} ======
+====== DOCUMENT ACTIF "${doc.name}" ======
 TITRE: ${doc.name}
 TYPE: ${doc.type}
-ID UNIQUE: ${doc.id}
-CONVERSATION: ${conversation.id}
 ${doc.description ? `DESCRIPTION: ${doc.description}` : ''}
 ${doc.type === 'audio' && doc.group_name ? `CONTEXTE AUDIO: ${doc.group_name}` : ''}
 
 CONTENU:
 ${documentContent}
 
-====== FIN DU DOCUMENT #${doc.id} ======
+====== FIN DU DOCUMENT "${doc.name}" ======
 
-INSTRUCTION IMPORTANTE: Ce document fait partie de la conversation actuelle (ID: ${conversation.id}). 
-Tu dois UNIQUEMENT utiliser les informations contenues dans ce document et les autres documents de cette conversation.
+INSTRUCTION IMPORTANTE: Tu dois UNIQUEMENT utiliser les informations contenues dans ce document et les autres documents de cette conversation.
 NE PAS faire référence à des documents externes ou d'autres conversations.
 `;
           })

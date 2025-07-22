@@ -136,7 +136,7 @@ Tu es dans une conversation isolée avec des documents spécifiques. Tu dois ABS
 3. NE JAMAIS mentionner des informations non présentes dans les documents fournis
 4. Si une information demandée n'est pas dans les documents fournis, répondre clairement : "Cette information n'est pas disponible dans les documents fournis."
 
-Chaque document a un ID UNIQUE. Cite toujours l'ID du document quand tu références une information.`
+Chaque document a un NOM. Cite toujours le nom du document (tel qu'il apparaît dans le TITRE) quand tu références une information, en utilisant le format : "Document : [nom du fichier]".`
       });
 
       preparedMessages.push({
