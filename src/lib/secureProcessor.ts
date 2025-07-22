@@ -58,7 +58,13 @@ export async function processDocumentSecure(
       });
 
       // Générer un nom unique pour le fichier
-      const fileName = `audio_${Date.now()}_${Math.random().toString(36).substring(7)}_${file.name}`;
+      // Nettoyer le nom du fichier original (garder seulement alphanumérique, tirets et points)
+      const cleanFileName = file.name
+        .replace(/[^a-zA-Z0-9.-]/g, '_')  // Remplacer les caractères spéciaux par _
+        .replace(/_+/g, '_')               // Remplacer plusieurs _ consécutifs par un seul
+        .replace(/^_|_$/g, '');            // Supprimer _ au début et à la fin
+      
+      const fileName = `audio_${Date.now()}_${Math.random().toString(36).substring(7)}_${cleanFileName}`;
       const filePath = `temp/${fileName}`;
 
       // Uploader le fichier sur Storage
