@@ -1,0 +1,140 @@
+/* Message container with minimal spacing */
+.message-item {
+  margin: 6px 0;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  animation: messageAppear 0.2s ease forwards;
+}
+
+@keyframes messageAppear {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Message metadata with minimal spacing */
+.message-metadata {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-bottom: 0.15rem;
+  padding: 0 0.75rem;
+  font-size: 0.7rem;
+  color: #666;
+}
+
+.message-time {
+  color: #999;
+}
+
+/* User message with compact design */
+.user-message {
+  align-self: flex-end;
+  margin-left: 3rem;
+  margin-right: 0.75rem;
+}
+
+.user-message-content {
+  background-color: #f15922;
+  color: white;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.375rem;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+/* Assistant message with minimal styling */
+.assistant-message {
+  align-self: flex-start;
+  margin-right: 3rem;
+  margin-left: 0.75rem;
+}
+
+.assistant-message-content {
+  background-color: #f8f9fa;
+  border: 1px solid #e9ecef;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.375rem;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
+  min-width: 280px; /* Largeur minimale pour contenir le loader confortablement */
+}
+
+/* Responsive adjustments with tighter spacing */
+@media (max-width: 640px) {
+  .user-message,
+  .assistant-message {
+    margin-left: 0.5rem;
+    margin-right: 0.5rem;
+  }
+
+  .message-metadata {
+    padding: 0 0.5rem;
+  }
+}
+
+/* Message animations with shorter duration */
+.message-item.user-message {
+  animation: slideFromRight 0.2s ease forwards;
+}
+
+.message-item.assistant-message {
+  animation: slideFromLeft 0.2s ease forwards;
+}
+
+@keyframes slideFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideFromLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Enhanced Markdown content spacing */
+.assistant-message-content .enhanced-markdown {
+  margin: -0.125rem 0;
+}
+
+.assistant-message-content .enhanced-markdown > *:first-child {
+  margin-top: 0;
+}
+
+.assistant-message-content .enhanced-markdown > *:last-child {
+  margin-bottom: 0;
+}
+
+/* Direct streaming text spacing */
+.assistant-message-content .direct-streaming-text {
+  margin: -0.125rem 0;
+}
+
+.assistant-message-content .direct-streaming-text > *:first-child {
+  margin-top: 0;
+}
+
+.assistant-message-content .direct-streaming-text > *:last-child {
+  margin-bottom: 0;
+}
+
+/* Ajustements pour le loader */
+.assistant-message-content .streaming-text {
+  min-height: 40px; /* Réduit de 60px à 40px pour s'adapter au loader plus petit */
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}

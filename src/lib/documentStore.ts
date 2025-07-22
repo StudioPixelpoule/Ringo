@@ -1,6 +1,8 @@
-import { create } from 'zustand';
 import { supabase } from './supabase';
-import { processDocument } from './universalProcessor';
+import { processDocument } from './secureProcessor'; // Utiliser la version sécurisée
+import { uploadFileInChunks } from './uploadUtils';
+import { logError } from './errorLogger';
+import { create } from 'zustand';
 
 export interface Folder {
   id: string;

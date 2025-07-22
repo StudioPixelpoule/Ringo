@@ -27,6 +27,217 @@ interface AudioProcessingResult {
   processingDate: string;
 }
 
+// Configuration optimisée pour la transcription
+const AUDIO_CONFIG = {
+  SAMPLE_RATE: 16000, // 16kHz suffit pour la voix
+  CHANNELS: 1, // Mono pour réduire la taille
+  MAX_PARALLEL_CHUNKS: 3, // Traiter 3 chunks en parallèle
+  CHUNK_DURATION_SECONDS: 300, // 5 minutes par chunk
+  MIN_CHUNK_SIZE: 1024 * 1024, // 1MB minimum
+  COMPRESSION_QUALITY: 0.7 // Qualité de compression
+};
+
+// Fonction optimisée de compression audio
+async function compressAudioForTranscription(file: File): Promise<Blob> {
+  const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({
+    sampleRate: AUDIO_CONFIG.SAMPLE_RATE
+  });
+  
+  const arrayBuffer = await file.arrayBuffer();
+  const originalBuffer = await audioContext.decodeAudioData(arrayBuffer);
+  
+  // Créer un buffer mono avec le sample rate optimisé
+  const duration = originalBuffer.duration;
+  const length = Math.ceil(duration * AUDIO_CONFIG.SAMPLE_RATE);
+  
+  const monoBuffer = new AudioBuffer({
+    numberOfChannels: AUDIO_CONFIG.CHANNELS,
+    length: length,
+    sampleRate: AUDIO_CONFIG.SAMPLE_RATE
+  });
+  
+  // Convertir en mono en moyennant les canaux
+  const monoData = monoBuffer.getChannelData(0);
+  
+  if (originalBuffer.numberOfChannels > 1) {
+    // Moyenne de tous les canaux
+    for (let i = 0; i < length; i++) {
+      const originalIndex = Math.floor(i * originalBuffer.sampleRate / AUDIO_CONFIG.SAMPLE_RATE);
+      if (originalIndex < originalBuffer.length) {
+        let sum = 0;
+        for (let channel = 0; channel < originalBuffer.numberOfChannels; channel++) {
+          sum += originalBuffer.getChannelData(channel)[originalIndex];
+        }
+        monoData[i] = sum / originalBuffer.numberOfChannels;
+      }
+    }
+  } else {
+    // Resample si nécessaire
+    const ratio = originalBuffer.sampleRate / AUDIO_CONFIG.SAMPLE_RATE;
+    for (let i = 0; i < length; i++) {
+      const originalIndex = Math.floor(i * ratio);
+      if (originalIndex < originalBuffer.length) {
+        monoData[i] = originalBuffer.getChannelData(0)[originalIndex];
+      }
+    }
+  }
+  
+  // Convertir en WAV optimisé
+  const wavData = convertToWavFormat(monoBuffer);
+  return new Blob([wavData], { type: 'audio/wav' });
+}
+
+// Découpage optimisé avec durée fixe
+async function splitAudioIntoOptimizedChunks(file: File): Promise<Blob[]> {
+  const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({
+    sampleRate: AUDIO_CONFIG.SAMPLE_RATE
+  });
+  
+  const arrayBuffer = await file.arrayBuffer();
+  const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+  
+  const chunks: Blob[] = [];
+  const samplesPerChunk = AUDIO_CONFIG.SAMPLE_RATE * AUDIO_CONFIG.CHUNK_DURATION_SECONDS;
+  const totalSamples = audioBuffer.length;
+  const originalSampleRate = audioBuffer.sampleRate;
+  
+  for (let offset = 0; offset < totalSamples; offset += samplesPerChunk) {
+    const originalChunkLength = Math.min(samplesPerChunk, totalSamples - offset);
+    
+    // Calculer la longueur après resampling
+    const resampledLength = Math.ceil(originalChunkLength * AUDIO_CONFIG.SAMPLE_RATE / originalSampleRate);
+    
+    const chunkBuffer = new AudioBuffer({
+      numberOfChannels: AUDIO_CONFIG.CHANNELS,
+      length: resampledLength,
+      sampleRate: AUDIO_CONFIG.SAMPLE_RATE
+    });
+    
+    const chunkData = chunkBuffer.getChannelData(0);
+    
+    // Resample et convertir en mono
+    const ratio = originalSampleRate / AUDIO_CONFIG.SAMPLE_RATE;
+    for (let i = 0; i < resampledLength; i++) {
+      const originalIndex = Math.floor(offset + i * ratio);
+      if (originalIndex < audioBuffer.length) {
+        let sum = 0;
+        for (let channel = 0; channel < audioBuffer.numberOfChannels; channel++) {
+          sum += audioBuffer.getChannelData(channel)[originalIndex];
+        }
+        chunkData[i] = sum / audioBuffer.numberOfChannels;
+      }
+    }
+    
+    const wavData = convertToWavFormat(chunkBuffer);
+    const chunkBlob = new Blob([wavData], { type: 'audio/wav' });
+    
+    // Vérifier que le chunk n'est pas trop petit
+    if (chunkBlob.size >= AUDIO_CONFIG.MIN_CHUNK_SIZE || chunks.length === 0) {
+      chunks.push(chunkBlob);
+    } else if (chunks.length > 0) {
+      // Fusionner avec le chunk précédent si trop petit
+      const lastChunk = chunks[chunks.length - 1];
+      const combined = new Blob([lastChunk, chunkBlob], { type: 'audio/wav' });
+      chunks[chunks.length - 1] = combined;
+    }
+  }
+  
+  return chunks;
+}
+
+// Traitement parallèle des chunks
+async function processChunksInParallel(
+  chunks: Blob[],
+  apiKey: string,
+  onProgress: (progress: ProcessingProgress) => void,
+  signal?: AbortSignal
+): Promise<{
+  transcription: string;
+  segments: Array<{ start: number; end: number; text: string }>;
+  totalDuration: number;
+}> {
+  const results: Array<{ text: string; segments: any[] }> = new Array(chunks.length);
+  let processedCount = 0;
+  let timeOffsets: number[] = new Array(chunks.length);
+  
+  // Calculer les offsets temporels
+  let currentOffset = 0;
+  for (let i = 0; i < chunks.length; i++) {
+    timeOffsets[i] = currentOffset;
+    currentOffset += AUDIO_CONFIG.CHUNK_DURATION_SECONDS;
+  }
+  
+  const processChunk = async (index: number): Promise<void> => {
+    try {
+      const result = await processAudioChunk(chunks[index], apiKey, signal);
+      results[index] = result;
+      processedCount++;
+      
+      onProgress({
+        stage: 'processing',
+        progress: Math.round(20 + (processedCount / chunks.length) * 70),
+        message: `Transcription ${processedCount}/${chunks.length} parties`,
+        canCancel: true
+      });
+    } catch (error) {
+      // En cas d'erreur, réessayer une fois
+      console.warn(`Erreur sur le chunk ${index}, nouvelle tentative...`);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      const result = await processAudioChunk(chunks[index], apiKey, signal);
+      results[index] = result;
+      processedCount++;
+      
+      onProgress({
+        stage: 'processing',
+        progress: Math.round(20 + (processedCount / chunks.length) * 70),
+        message: `Transcription ${processedCount}/${chunks.length} parties`,
+        canCancel: true
+      });
+    }
+  };
+  
+  // Traiter les chunks par batch
+  const batchSize = AUDIO_CONFIG.MAX_PARALLEL_CHUNKS;
+  for (let i = 0; i < chunks.length; i += batchSize) {
+    if (signal?.aborted) {
+      throw new Error('Processing cancelled');
+    }
+    
+    const batch: Promise<void>[] = [];
+    for (let j = 0; j < batchSize && i + j < chunks.length; j++) {
+      batch.push(processChunk(i + j));
+    }
+    
+    await Promise.all(batch);
+  }
+  
+  // Combiner les résultats
+  let transcription = '';
+  const allSegments: Array<{ start: number; end: number; text: string }> = [];
+  let totalDuration = 0;
+  
+  for (let i = 0; i < results.length; i++) {
+    const result = results[i];
+    transcription += (transcription ? ' ' : '') + result.text;
+    
+    // Ajuster les timestamps des segments
+    const adjustedSegments = result.segments.map(segment => ({
+      start: segment.start + timeOffsets[i],
+      end: segment.end + timeOffsets[i],
+      text: segment.text
+    }));
+    
+    allSegments.push(...adjustedSegments);
+    
+    if (result.segments.length > 0) {
+      const lastSegment = result.segments[result.segments.length - 1];
+      totalDuration = Math.max(totalDuration, lastSegment.end + timeOffsets[i]);
+    }
+  }
+  
+  return { transcription, segments: allSegments, totalDuration };
+}
+
 function detectLanguage(text: string): string {
   const frenchPattern = /^(le|la|les|un|une|des|je|tu|il|elle|nous|vous|ils|elles|et|ou|mais|donc)\s/i;
   return frenchPattern.test(text) ? 'fra' : 'eng';
@@ -181,8 +392,7 @@ async function processAudioChunk(chunk: Blob, apiKey: string, signal?: AbortSign
             'Authorization': `Bearer ${apiKey}`,
           },
           body: formData,
-          signal: controller.signal,
-          timeout: 60000 * 2 // 2 minute timeout
+          signal: controller.signal
         });
 
         if (!response.ok) {
@@ -328,101 +538,70 @@ export async function processAudioFile(
       onProgress({
         stage: 'processing',
         progress: 10,
-        message: 'Préparation du fichier audio...',
+        message: 'Préparation et optimisation du fichier audio...',
         canCancel: true
       });
     }
 
+    // OPTIMISATION 1: Compresser l'audio d'abord (mono + 16kHz)
+    let optimizedFile: Blob;
+    try {
+      console.log('[Audio Processing] Compressing audio for optimal transcription...');
+      optimizedFile = await compressAudioForTranscription(file);
+      console.log(`[Audio Processing] Compression done. Original: ${(file.size / 1024 / 1024).toFixed(2)}MB, Optimized: ${(optimizedFile.size / 1024 / 1024).toFixed(2)}MB`);
+    } catch (compressionError) {
+      console.warn('[Audio Processing] Compression failed, using original file:', compressionError);
+      optimizedFile = file;
+    }
+
+    // OPTIMISATION 2: Utiliser le découpage optimisé
     let audioChunks: Blob[];
-    if (file.size > MAX_CHUNK_SIZE) {
+    if (optimizedFile.size > MAX_CHUNK_SIZE) {
       if (typeof onProgress === 'function') {
         onProgress({
           stage: 'processing',
           progress: 20,
-          message: 'Découpage du fichier audio en segments...',
+          message: 'Découpage optimisé du fichier audio...',
           canCancel: true
         });
       }
-      audioChunks = await splitAudioIntoChunks(file);
+      audioChunks = await splitAudioIntoOptimizedChunks(file); // Utiliser le fichier original pour un découpage précis
     } else {
-      audioChunks = [file];
+      audioChunks = [optimizedFile];
     }
 
-    let transcription = '';
-    const segments: AudioProcessingResult['metadata']['segments'] = [];
-    let timeOffset = 0;
-    let totalDuration = 0;
+    console.log(`[Audio Processing] File will be processed in ${audioChunks.length} chunks`);
 
-    const totalChunks = audioChunks.length;
-    console.log(`[Audio Processing] File will be processed in ${totalChunks} chunks`);
-
-    for (let i = 0; i < totalChunks; i++) {
-      if (signal?.aborted) {
-        throw new Error('Processing cancelled');
-      }
-
-      const chunkProgress = (i / totalChunks) * 80;
+    // OPTIMISATION 3: Traitement parallèle
+    let result: { transcription: string; segments: any[]; totalDuration: number };
+    
+    if (audioChunks.length > 1) {
+      // Utiliser le traitement parallèle pour plusieurs chunks
+      result = await processChunksInParallel(
+        audioChunks,
+        apiKey,
+        (progress) => onProgress?.(progress),
+        signal
+      );
+    } else {
+      // Traitement simple pour un seul chunk
       if (typeof onProgress === 'function') {
         onProgress({
           stage: 'processing',
-          progress: 20 + chunkProgress,
-          message: `Transcription partie ${i + 1} sur ${totalChunks}`,
+          progress: 50,
+          message: 'Transcription en cours...',
           canCancel: true
         });
       }
-
-      let retryCount = 0;
-      let chunkResult;
       
-      while (retryCount < 3) {
-        try {
-          chunkResult = await processAudioChunk(audioChunks[i], apiKey, signal);
-          break;
-        } catch (error) {
-          if (error instanceof Error && 
-             (error.message.includes('network') || 
-              error.message.includes('internet') ||
-              error.message.includes('Failed to fetch'))) {
-            
-            retryCount++;
-            if (retryCount >= 3) throw error;
-            
-            const delay = 5000 * Math.pow(2, retryCount);
-            if (typeof onProgress === 'function') {
-              onProgress({
-                stage: 'processing',
-                progress: 20 + chunkProgress,
-                message: `Problème réseau détecté. Nouvelle tentative dans ${Math.round(delay/1000)} secondes...`,
-                canCancel: true
-              });
-            }
-            
-            await new Promise(resolve => setTimeout(resolve, delay));
-          } else {
-            throw error;
-          }
-        }
-      }
-      
-      if (!chunkResult) {
-        throw new Error('Échec de la transcription après plusieurs tentatives');
-      }
-
-      transcription += (transcription ? ' ' : '') + chunkResult.text;
-      
-      const adjustedSegments = chunkResult.segments.map(segment => ({
-        start: segment.start + timeOffset,
-        end: segment.end + timeOffset,
-        text: segment.text
-      }));
-      
-      segments.push(...adjustedSegments);
-      
-      const lastSegment = chunkResult.segments[chunkResult.segments.length - 1];
-      if (lastSegment) {
-        timeOffset += lastSegment.end;
-        totalDuration = Math.max(totalDuration, lastSegment.end + timeOffset);
-      }
+      const chunkResult = await processAudioChunk(audioChunks[0], apiKey, signal);
+      result = {
+        transcription: chunkResult.text,
+        segments: chunkResult.segments,
+        totalDuration: chunkResult.segments.length > 0 
+          ? chunkResult.segments[chunkResult.segments.length - 1].end 
+          : 0
+      };
     }
 
     if (typeof onProgress === 'function') {
@@ -438,21 +617,21 @@ export async function processAudioFile(
       throw new Error('Processing cancelled');
     }
 
-    let enhancedContent = transcription;
+    let enhancedContent = result.transcription;
     if (audioDescription && audioDescription.trim()) {
-      enhancedContent = `== CONTEXTE DE L'ENREGISTREMENT ==\n${audioDescription.trim()}\n\n== TRANSCRIPTION ==\n${transcription}`;
+      enhancedContent = `== CONTEXTE DE L'ENREGISTREMENT ==\n${audioDescription.trim()}\n\n== TRANSCRIPTION ==\n${result.transcription}`;
     }
 
-    const result: AudioProcessingResult = {
+    const finalResult: AudioProcessingResult = {
       content: enhancedContent,
       metadata: {
         title: file.name.replace(/\.[^/.]+$/, ''),
-        duration: totalDuration,
-        language: detectLanguage(transcription),
+        duration: result.totalDuration,
+        language: detectLanguage(result.transcription),
         fileType: file.type || `audio/${fileExtension}`,
         fileName: file.name,
         audioDescription: audioDescription?.trim(),
-        segments
+        segments: result.segments
       },
       confidence: 0.95,
       processingDate: new Date().toISOString()
@@ -468,7 +647,7 @@ export async function processAudioFile(
     }
 
     console.log('[Audio Processing] Processing completed successfully');
-    return result;
+    return finalResult;
   } catch (error) {
     if (error instanceof Error) {
       if (error.name === 'AbortError' || error.message === 'Processing cancelled') {

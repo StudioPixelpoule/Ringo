@@ -295,13 +295,19 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
               if (contentError) {
                 console.error('Error fetching document content:', contentError);
                 return `
-====== DÉBUT DU DOCUMENT: ${doc.name} (${doc.type}) ======
-${doc.description ? `DESCRIPTION: ${doc.description}\n\n` : ''}
+====== DOCUMENT ACTIF #${doc.id} ======
+TITRE: ${doc.name}
+TYPE: ${doc.type}
+ID UNIQUE: ${doc.id}
+CONVERSATION: ${conversation.id}
+${doc.description ? `DESCRIPTION: ${doc.description}` : ''}
+
+CONTENU:
 [Erreur lors de la récupération du contenu]
 
-====== FIN DU DOCUMENT: ${doc.name} ======
+====== FIN DU DOCUMENT #${doc.id} ======
 
-INSTRUCTIONS: Le contenu de ce document n'a pas pu être récupéré. Veuillez vous référer aux autres documents disponibles.
+⚠️ INSTRUCTION IMPORTANTE: Le contenu de ce document n'a pas pu être récupéré. Utilise uniquement les autres documents disponibles dans cette conversation.
 `;
               }
               
@@ -309,13 +315,19 @@ INSTRUCTIONS: Le contenu de ce document n'a pas pu être récupéré. Veuillez v
             } catch (error) {
               console.error('Error processing document content:', error);
               return `
-====== DÉBUT DU DOCUMENT: ${doc.name} (${doc.type}) ======
-${doc.description ? `DESCRIPTION: ${doc.description}\n\n` : ''}
+====== DOCUMENT ACTIF #${doc.id} ======
+TITRE: ${doc.name}
+TYPE: ${doc.type}
+ID UNIQUE: ${doc.id}
+CONVERSATION: ${conversation.id}
+${doc.description ? `DESCRIPTION: ${doc.description}` : ''}
+
+CONTENU:
 [Erreur lors du traitement du contenu]
 
-====== FIN DU DOCUMENT: ${doc.name} ======
+====== FIN DU DOCUMENT #${doc.id} ======
 
-INSTRUCTIONS: Le contenu de ce document n'a pas pu être traité. Veuillez vous référer aux autres documents disponibles.
+⚠️ INSTRUCTION IMPORTANTE: Le contenu de ce document n'a pas pu être traité. Utilise uniquement les autres documents disponibles dans cette conversation.
 `;
             }
 
@@ -363,21 +375,42 @@ INSTRUCTIONS: Le contenu de ce document n'a pas pu être traité. Veuillez vous 
             }
 
             return `
-====== DÉBUT DU DOCUMENT: ${doc.name} (${doc.type}) ======
-${doc.description ? `DESCRIPTION: ${doc.description}\n\n` : ''}
+====== DOCUMENT ACTIF #${doc.id} ======
+TITRE: ${doc.name}
+TYPE: ${doc.type}
+ID UNIQUE: ${doc.id}
+CONVERSATION: ${conversation.id}
+${doc.description ? `DESCRIPTION: ${doc.description}` : ''}
+${doc.type === 'audio' && doc.group_name ? `CONTEXTE AUDIO: ${doc.group_name}` : ''}
+
+CONTENU:
 ${documentContent}
 
-====== FIN DU DOCUMENT: ${doc.name} ======
+====== FIN DU DOCUMENT #${doc.id} ======
 
-INSTRUCTIONS: Le texte ci-dessus contient le contenu complet du document "${doc.name}". 
-${doc.description ? `La description générale fournie indique: "${doc.description}". ` : ''}
-${doc.type === 'audio' && doc.group_name ? `Le contexte de cet enregistrement audio est: "${doc.group_name}". ` : ''}
-Utilise ce contenu pour répondre aux questions de l'utilisateur.
+⚠️ INSTRUCTION IMPORTANTE: Ce document fait partie de la conversation actuelle (ID: ${conversation.id}). 
+Tu dois UNIQUEMENT utiliser les informations contenues dans ce document et les autres documents de cette conversation.
+NE PAS faire référence à des documents externes ou d'autres conversations.
 `;
           })
       );
 
       const documentContext = formattedDocuments.join('\n\n---\n\n');
+      
+      // Ajouter une instruction claire au début du contexte
+      const enhancedDocumentContext = `
+🔒 CONTEXTE ISOLÉ - CONVERSATION ${conversation.id}
+=====================================
+Tu as accès UNIQUEMENT aux ${formattedDocuments.length} document(s) suivants pour cette conversation.
+INTERDICTION de faire référence à tout autre document non listé ci-dessous.
+
+${documentContext}
+
+=====================================
+🔒 FIN DU CONTEXTE ISOLÉ
+
+RAPPEL: Utilise UNIQUEMENT les documents ci-dessus. Si une information n'est pas présente dans ces documents, indique clairement que tu ne peux pas répondre avec les documents fournis.
+`;
 
       // Create empty assistant message first
       const { data: aiMessage, error: aiError } = await supabase
@@ -399,7 +432,7 @@ Utilise ce contenu pour répondre aux questions de l'utilisateur.
       let streamedContent = '';
       await generateChatResponseStreaming(
         [...chatHistory, { role: 'user', content }],
-        documentContext,
+        enhancedDocumentContext,
         async (chunk) => {
           streamedContent += chunk;
           

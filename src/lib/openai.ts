@@ -237,6 +237,21 @@ function prepareMessages(messages: ChatMessage[], documentContent?: string): Cha
       });
     }
 
+    // Instruction d'isolation du contexte
+    preparedMessages.push({
+      role: 'system',
+      content: `🔒 RÈGLE CRITIQUE D'ISOLATION DU CONTEXTE 🔒
+
+Tu es dans une conversation isolée avec des documents spécifiques. Tu dois ABSOLUMENT :
+
+1. UTILISER UNIQUEMENT les documents fournis dans le contexte actuel
+2. NE JAMAIS faire référence à des documents d'autres conversations
+3. NE JAMAIS mentionner des informations non présentes dans les documents fournis
+4. Si une information demandée n'est pas dans les documents fournis, répondre clairement : "Cette information n'est pas disponible dans les documents fournis."
+
+Chaque document a un ID UNIQUE. Cite toujours l'ID du document quand tu références une information.`
+    });
+
     preparedMessages.push({
       role: 'system',
       content: `Tu as reçu plusieurs documents à analyser. Tu dois :
@@ -245,6 +260,7 @@ function prepareMessages(messages: ChatMessage[], documentContent?: string): Cha
 3. Comparer et contraster les informations entre les documents
 4. Fournir une réponse détaillée et structurée
 5. Citer des passages pertinents pour appuyer ton analyse
+6. TOUJOURS mentionner l'ID du document source entre parenthèses (Document #ID)
 
 Si tu ne trouves pas l'information dans les documents, indique-le clairement.`
     });

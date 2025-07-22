@@ -73,8 +73,40 @@ function App() {
       }
     });
 
+    // Déconnexion automatique lors de la fermeture de l'application
+    const handleBeforeUnload = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        // Marquer la session comme devant être nettoyée
+        sessionStorage.setItem('ringo_auto_logout', 'true');
+      }
+    };
+
+    // Gérer la visibilité de la page
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'hidden') {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session && sessionStorage.getItem('ringo_auto_logout') === 'true') {
+          // L'utilisateur a fermé l'onglet/fenêtre
+          await supabase.auth.signOut();
+        }
+      } else if (document.visibilityState === 'visible') {
+        // L'utilisateur est revenu, retirer le marqueur
+        sessionStorage.removeItem('ringo_auto_logout');
+      }
+    };
+
+    // Ajouter les écouteurs d'événements
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Nettoyer le marqueur au chargement
+    sessionStorage.removeItem('ringo_auto_logout');
+
     return () => {
       subscription.unsubscribe();
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
 

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from './supabase';
-import { processDocument } from './universalProcessor';
+import { processDocument } from './secureProcessor'; // Utiliser la version sécurisée
+import { logError } from './errorLogger';
 
 export interface Folder {
   id: string;
