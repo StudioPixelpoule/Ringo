@@ -143,7 +143,10 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         openaiApiKey: import.meta.env.VITE_OPENAI_API_KEY,
         onProgress: (progress) => {
           options?.onProgress?.(progress);
-          set({ processingStatus: progress });
+          set({ processingStatus: {
+            ...progress,
+            isProcessing: true
+          }});
         },
         signal: options?.signal
       });

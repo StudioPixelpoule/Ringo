@@ -280,9 +280,9 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
       const formattedDocuments = await Promise.all(
         conversationDocs
-          .map(doc => doc.documents)
+          .map(docWrapper => docWrapper.documents)
           .filter(Boolean)
-          .map(async doc => {
+          .map(async (doc: any) => {
             // Fetch document content safely with error handling
             let documentContent = '';
             try {

@@ -42,16 +42,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     headers: {
       'x-application-name': 'ringo'
     }
-  },
-  // Add retry configuration
-  retryFilter: (result, count, error) => {
-    if (error && count < 3) {
-      // Retry on network errors or 5xx server errors
-      return error instanceof Error || (result && result.status >= 500);
-    }
-    return false;
-  },
-  retryDelay: (retryCount) => Math.min(1000 * Math.pow(2, retryCount), 10000) // Exponential backoff
+  }
 });
 
 // Helper function to handle auth errors

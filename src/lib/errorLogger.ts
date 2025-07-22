@@ -12,7 +12,7 @@ export interface ErrorLog {
 }
 
 export async function logError(
-  error: Error | string,
+  error: Error | string | unknown,
   context?: Record<string, any>
 ) {
   try {
@@ -31,7 +31,7 @@ export async function logError(
     const { error: dbError } = await supabase
       .from('error_logs')
       .insert([{
-        error: error instanceof Error ? error.message : error,
+        error: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
         context: {
           ...context,
