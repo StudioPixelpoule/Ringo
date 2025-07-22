@@ -38,13 +38,15 @@ interface ConversationStore {
 
   fetchConversations: () => Promise<void>;
   createConversation: (title: string) => Promise<Conversation>;
-  createConversationWithDocument: (document: Document) => Promise<void>;
+  createConversationWithDocument: (document: Document, skipMessage?: boolean) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
   setCurrentConversation: (conversation: Conversation | null) => void;
   updateConversationTitle: (id: string, title: string) => Promise<void>;
   fetchMessages: (conversationId: string) => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
   linkDocument: (documentId: string) => Promise<void>;
+  linkDocumentSilently: (documentId: string) => Promise<void>;
+  linkMultipleDocuments: (documentIds: string[]) => Promise<{ success: boolean; addedCount: number; errors: string[] }>;
   unlinkDocument: (documentId: string) => Promise<void>;
   fetchConversationDocuments: (conversationId: string) => Promise<void>;
   markMessageAsStreamed: (messageId: string) => void;
@@ -112,7 +114,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     }
   },
 
-  createConversationWithDocument: async (document) => {
+  createConversationWithDocument: async (document, skipMessage = false) => {
     set({ loading: true, error: null });
     try {
       const conversation = await get().createConversation(document.name);
@@ -129,18 +131,22 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       set({ currentConversation: conversation });
       await get().fetchConversationDocuments(conversation.id);
       
-      const { data: welcomeMessage, error: messageError } = await supabase
-        .from('messages')
-        .insert([{
-          conversation_id: conversation.id,
-          sender: 'assistant',
-          content: `Bonjour, je suis Ringo ! Je vois que vous avez ajouté le document "${document.name}". Je suis prêt à analyser son contenu. Que souhaitez-vous savoir ?`
-        }])
-        .select()
-        .single();
+      if (!skipMessage) {
+        const { data: welcomeMessage, error: messageError } = await supabase
+          .from('messages')
+          .insert([{
+            conversation_id: conversation.id,
+            sender: 'assistant',
+            content: `Bonjour, je suis Ringo ! Je vois que vous avez ajouté le document "${document.name}". Je suis prêt à analyser son contenu. Que souhaitez-vous savoir ?`
+          }])
+          .select()
+          .single();
 
-      if (messageError) throw messageError;
-      set({ messages: [welcomeMessage] });
+        if (messageError) throw messageError;
+        set({ messages: [welcomeMessage] });
+      } else {
+        set({ messages: [] });
+      }
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Error creating conversation with document' });
     } finally {
@@ -535,6 +541,183 @@ RAPPEL: Utilise UNIQUEMENT les documents ci-dessus. Si une information n'est pas
       }
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Error linking document' });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  linkDocumentSilently: async (documentId) => {
+    const conversation = get().currentConversation;
+    if (!conversation) {
+      set({ error: 'No conversation selected' });
+      return;
+    }
+
+    try {
+      // Check if document is already linked
+      const { data: existingLink } = await supabase
+        .from('conversation_documents')
+        .select('id')
+        .eq('conversation_id', conversation.id)
+        .eq('document_id', documentId)
+        .maybeSingle();
+
+      if (existingLink) {
+        throw new Error('Ce document est déjà lié à la conversation');
+      }
+
+      const { error } = await supabase
+        .from('conversation_documents')
+        .insert([{
+          conversation_id: conversation.id,
+          document_id: documentId
+        }]);
+
+      if (error) throw error;
+      
+      await get().fetchConversationDocuments(conversation.id);
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  linkMultipleDocuments: async (documentIds: string[]) => {
+    const conversation = get().currentConversation;
+    if (!conversation) {
+      set({ error: 'No conversation selected' });
+      return { success: false, addedCount: 0, errors: [] };
+    }
+
+    set({ loading: true, error: null });
+    
+    const addedDocuments: string[] = [];
+    const alreadyLinkedDocuments: string[] = [];
+    const errors: string[] = [];
+    
+    try {
+      // Vérifier d'abord quels documents sont déjà liés
+      const { data: existingLinks } = await supabase
+        .from('conversation_documents')
+        .select('document_id')
+        .eq('conversation_id', conversation.id)
+        .in('document_id', documentIds);
+      
+      const existingDocumentIds = new Set(existingLinks?.map(link => link.document_id) || []);
+      
+      // Lier seulement les documents qui ne sont pas déjà liés
+      for (const documentId of documentIds) {
+        if (existingDocumentIds.has(documentId)) {
+          alreadyLinkedDocuments.push(documentId);
+          continue;
+        }
+        
+        try {
+          await get().linkDocumentSilently(documentId);
+          addedDocuments.push(documentId);
+        } catch (error: any) {
+          errors.push(`Erreur lors de l'ajout d'un document`);
+          console.error('Error linking document:', error);
+        }
+      }
+      
+      // Rafraîchir la liste des documents
+      await get().fetchConversationDocuments(conversation.id);
+      const totalDocs = get().documents.length;
+      
+      // Créer un message récapitulatif si on a des documents (ajoutés ou déjà présents)
+      // et qu'il n'y a pas encore de messages dans la conversation
+      const messages = get().messages;
+      if (documentIds.length > 0 && messages.length === 0) {
+        // Récupérer les noms de tous les documents demandés (ajoutés + déjà liés)
+        const allRequestedDocNames = documentIds
+          .map(id => get().documents.find(d => d.document_id === id))
+          .filter(Boolean)
+          .map(doc => doc!.documents.name);
+        
+        let messageContent = `Bonjour, je suis Ringo ! J'ai bien reçu `;
+        
+        if (allRequestedDocNames.length === 1) {
+          messageContent += `le document "${allRequestedDocNames[0]}".`;
+        } else {
+          messageContent += `${allRequestedDocNames.length} documents :`;
+          allRequestedDocNames.forEach(name => {
+            messageContent += `\n- ${name}`;
+          });
+        }
+        
+        if (totalDocs > 1) {
+          messageContent += `\n\n**Suggestions d'analyse multi-documents :**`;
+          messageContent += `\n- Comparer les informations entre les documents`;
+          messageContent += `\n- Créer une synthèse consolidée`;
+          messageContent += `\n- Identifier les points communs et différences`;
+          messageContent += `\n- Générer un tableau comparatif`;
+          messageContent += `\n\nQue souhaitez-vous que j'analyse ?`;
+        } else {
+          messageContent += ` Je suis prêt à l'analyser. Que souhaitez-vous savoir ?`;
+        }
+        
+        const { data: acknowledgmentMessage, error: messageError } = await supabase
+          .from('messages')
+          .insert([{
+            conversation_id: conversation.id,
+            sender: 'assistant',
+            content: messageContent
+          }])
+          .select()
+          .single();
+
+        if (messageError) throw messageError;
+        set({ messages: [...get().messages, acknowledgmentMessage] });
+      }
+      // Si des documents ont été ajoutés ET qu'il y a déjà des messages, créer un message pour les nouveaux
+      else if (addedDocuments.length > 0 && messages.length > 0) {
+        // Récupérer les noms des documents ajoutés
+        const addedDocNames = addedDocuments
+          .map(id => get().documents.find(d => d.document_id === id))
+          .filter(Boolean)
+          .map(doc => doc!.documents.name);
+        
+        let messageContent = `C'est Ringo ! J'ai bien reçu `;
+        
+        if (addedDocuments.length === 1) {
+          messageContent += `le document "${addedDocNames[0]}".`;
+        } else {
+          messageContent += `${addedDocuments.length} nouveaux documents :`;
+          addedDocNames.forEach(name => {
+            messageContent += `\n- ${name}`;
+          });
+        }
+        
+        messageContent += `\n\nJe dispose maintenant de ${totalDocs} documents dans cette conversation.`;
+        messageContent += `\n\n**Suggestions d'analyse multi-documents :**`;
+        messageContent += `\n- Comparer les informations entre tous les documents`;
+        messageContent += `\n- Créer une synthèse consolidée`;
+        messageContent += `\n- Identifier les points communs et différences`;
+        messageContent += `\n- Générer un tableau comparatif`;
+        messageContent += `\n\nQue souhaitez-vous que j'analyse ?`;
+        
+        const { data: acknowledgmentMessage, error: messageError } = await supabase
+          .from('messages')
+          .insert([{
+            conversation_id: conversation.id,
+            sender: 'assistant',
+            content: messageContent
+          }])
+          .select()
+          .single();
+
+        if (messageError) throw messageError;
+        set({ messages: [...get().messages, acknowledgmentMessage] });
+      }
+      
+      return { 
+        success: true, 
+        addedCount: addedDocuments.length, 
+        errors 
+      };
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Error linking documents' });
+      return { success: false, addedCount: 0, errors: [error instanceof Error ? error.message : 'Erreur inconnue'] };
     } finally {
       set({ loading: false });
     }

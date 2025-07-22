@@ -27,7 +27,7 @@ const getDocumentIcon = (type: string) => {
 };
 
 export function DocumentList({ documents, onRemove }: DocumentListProps) {
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   if (documents.length === 0) return null;
 

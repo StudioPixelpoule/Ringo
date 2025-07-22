@@ -255,7 +255,8 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
   const {
     currentConversation,
     createConversationWithDocument,
-    linkDocument
+    linkDocument,
+    linkMultipleDocuments
   } = useConversationStore();
 
   useEffect(() => {
@@ -351,45 +352,28 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
       
       if (!currentConversation) {
         // Créer une nouvelle conversation avec le premier document
-        await createConversationWithDocument(selectedDocs[0]);
+        // Si on a plusieurs documents, on skip le message pour créer un message récapitulatif
+        const skipMessage = selectedDocs.length > 1;
+        await createConversationWithDocument(selectedDocs[0], skipMessage);
         
-        // Ajouter les autres documents un par un avec un délai pour éviter les problèmes
-        for (let i = 1; i < selectedDocs.length; i++) {
-          await new Promise(resolve => setTimeout(resolve, 500));
-          await linkDocument(selectedDocs[i].id);
-        }
-        
-        // Message de succès pour nouvelle conversation
-        const successMessage = selectedDocs.length === 1
-          ? `Document "${selectedDocs[0].name}" ajouté à une nouvelle conversation`
-          : `${selectedDocs.length} documents ajoutés à une nouvelle conversation. Vous pouvez maintenant les analyser ensemble !`;
+        // Ajouter les autres documents s'il y en a plus d'un
+        if (selectedDocs.length > 1) {
+          const allDocIds = selectedDocs.map(doc => doc.id);
+          const result = await linkMultipleDocuments(allDocIds);
           
-      } else {
-        // Ajouter tous les documents à la conversation existante
-        let addedCount = 0;
-        const errors: string[] = [];
-        
-        for (const doc of selectedDocs) {
-          try {
-            await linkDocument(doc.id);
-            addedCount++;
-            await new Promise(resolve => setTimeout(resolve, 300)); // Petit délai entre chaque ajout
-          } catch (error: any) {
-            if (error?.message?.includes('déjà lié')) {
-              errors.push(`"${doc.name}" est déjà dans la conversation`);
-            } else {
-              errors.push(`Erreur avec "${doc.name}"`);
-            }
+          if (result.errors.length > 0) {
+            console.warn('Certains documents n\'ont pas pu être ajoutés:', result.errors);
           }
         }
+      } else {
+        // Ajouter tous les documents à la conversation existante
+        const docIds = selectedDocs.map(doc => doc.id);
+        const result = await linkMultipleDocuments(docIds);
         
-        // Message de résultat
-        if (addedCount > 0 && errors.length === 0) {
-          const successMessage = addedCount === 1
-            ? `Document ajouté à la conversation`
-            : `${addedCount} documents ajoutés. Analyse croisée disponible !`;
-        } else if (errors.length > 0) {
-          console.warn('Certains documents n\'ont pas pu être ajoutés:', errors);
+        if (result.errors.length > 0 && result.addedCount === 0) {
+          alert('Aucun document n\'a pu être ajouté. Ils sont peut-être déjà dans la conversation.');
+        } else if (result.errors.length > 0) {
+          console.warn('Certains documents n\'ont pas pu être ajoutés:', result.errors);
         }
       }
       
