@@ -29,7 +29,7 @@ const getDocumentIcon = (type: string) => {
 
 export function DocumentList({ documents, onRemove }: DocumentListProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-  
+
   if (documents.length === 0) return null;
 
   // Grouper les documents par type
@@ -83,8 +83,8 @@ export function DocumentList({ documents, onRemove }: DocumentListProps) {
             {Object.entries(documentsByType).map(([type, docs]) => (
               <div key={type} className="space-y-1">
                 {docs.map((doc) => (
-                  <div
-                    key={doc.document_id}
+              <div
+                key={doc.document_id}
                     className="group/item flex items-start gap-2 p-2 bg-white border border-gray-200 rounded-lg hover:border-gray-300 transition-all"
                   >
                     <div className="flex-shrink-0 mt-0.5">
@@ -101,16 +101,16 @@ export function DocumentList({ documents, onRemove }: DocumentListProps) {
                         </p>
                       )}
                     </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onRemove(doc.document_id);
-                      }}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemove(doc.document_id);
+                  }}
                       className="opacity-0 group-hover/item:opacity-100 p-1 hover:bg-gray-100 rounded transition-all"
                       title="Retirer ce document de la conversation"
-                    >
+                >
                       <X size={14} className="text-gray-400 hover:text-gray-600" />
-                    </button>
+                </button>
                   </div>
                 ))}
               </div>

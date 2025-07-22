@@ -112,13 +112,13 @@ export function ErrorLogViewer({ isOpen, onClose }: ErrorLogViewerProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedErrors, setExpandedErrors] = useState<Set<string>>(new Set());
   const [copiedPrompt, setCopiedPrompt] = useState<string | null>(null);
-  
+
   useEffect(() => {
     if (isOpen) {
       fetchLogs();
       const interval = setInterval(fetchLogs, 30000);
-      return () => clearInterval(interval);
-    }
+        return () => clearInterval(interval);
+      }
   }, [isOpen]);
 
   const fetchLogs = async () => {
@@ -208,12 +208,12 @@ export function ErrorLogViewer({ isOpen, onClose }: ErrorLogViewerProps) {
       await Promise.all(
         affectedLogs.map(log =>
           supabase
-            .from('error_logs')
+        .from('error_logs')
             .update({ status })
             .eq('id', log.id)
         )
       );
-      
+
       await fetchLogs();
     } catch (error) {
       console.error('Failed to update status:', error);
@@ -307,14 +307,14 @@ export function ErrorLogViewer({ isOpen, onClose }: ErrorLogViewerProps) {
               >
                 Dashboard
               </button>
-              <button
+            <button
                 onClick={() => setView('list')}
                 className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
                   view === 'list' ? 'bg-white text-[#f15922]' : 'text-white'
-                }`}
+              }`}
               >
                 Détails
-              </button>
+            </button>
             </div>
             <button
               onClick={onClose}
@@ -391,7 +391,7 @@ export function ErrorLogViewer({ isOpen, onClose }: ErrorLogViewerProps) {
                             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
                               <div className="flex items-start gap-2">
                                 <Lightbulb className="text-blue-600 mt-0.5" size={16} />
-                                <div className="flex-1">
+            <div className="flex-1">
                                   <p className="text-sm text-blue-900 font-medium mb-1">Solution suggérée :</p>
                                   <p className="text-sm text-blue-700">{group.suggestedFix}</p>
                                 </div>
@@ -501,7 +501,7 @@ export function ErrorLogViewer({ isOpen, onClose }: ErrorLogViewerProps) {
                   <option value="investigating">En cours</option>
                   <option value="resolved">Résolues</option>
                 </select>
-              </div>
+          </div>
 
               {/* Liste détaillée */}
               {filteredErrors.length === 0 ? (
@@ -509,8 +509,8 @@ export function ErrorLogViewer({ isOpen, onClose }: ErrorLogViewerProps) {
                   <Activity size={48} className="mb-4 text-gray-300" />
                   <p className="text-lg font-medium">Aucune erreur trouvée</p>
                   <p className="text-sm mt-2">Modifiez vos filtres pour voir plus de résultats</p>
-                </div>
-              ) : (
+                  </div>
+                ) : (
                 <div className="space-y-4">
                   {filteredErrors.map((group) => (
                     <motion.div
@@ -539,7 +539,7 @@ export function ErrorLogViewer({ isOpen, onClose }: ErrorLogViewerProps) {
                                 {group.status === 'new' ? 'Nouvelle' :
                                  group.status === 'investigating' ? 'En cours' :
                                  'Résolue'}
-                              </span>
+                                </span>
                             </div>
                             <p className="font-medium text-gray-900 mb-2">{group.error}</p>
                             
@@ -557,9 +557,9 @@ export function ErrorLogViewer({ isOpen, onClose }: ErrorLogViewerProps) {
                               Première occurrence : {new Date(group.firstOccurrence).toLocaleString('fr-FR')}
                               {' • '}
                               Dernière occurrence : {new Date(group.lastOccurrence).toLocaleString('fr-FR')}
-                            </div>
+                          </div>
 
-                            <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2">
                               <button
                                 onClick={() => copyPrompt(group.cursorPrompt!, group.error)}
                                 className="flex items-center gap-2 px-3 py-1.5 bg-[#f15922] text-white rounded-lg hover:bg-[#f15922]/90 transition-colors text-sm font-medium"
@@ -572,7 +572,7 @@ export function ErrorLogViewer({ isOpen, onClose }: ErrorLogViewerProps) {
                                   onClick={() => updateErrorStatus(group.error, 'investigating')}
                                   className="px-3 py-1.5 bg-yellow-100 text-yellow-700 rounded-lg hover:bg-yellow-200 transition-colors text-sm font-medium"
                                   title="Marquer cette erreur comme étant en cours d'investigation"
-                                >
+                              >
                                   Je m'en occupe
                                 </button>
                               )}
@@ -592,8 +592,8 @@ export function ErrorLogViewer({ isOpen, onClose }: ErrorLogViewerProps) {
                                   title="Rouvrir cette erreur"
                                 >
                                   Rouvrir
-                                </button>
-                              )}
+                              </button>
+                            )}
                               <button
                                 onClick={() => toggleErrorExpansion(group.error)}
                                 className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
@@ -620,8 +620,8 @@ export function ErrorLogViewer({ isOpen, onClose }: ErrorLogViewerProps) {
                                 <h4 className="text-sm font-medium text-gray-700 mb-2">Prompt Cursor complet :</h4>
                                 <pre className="text-xs bg-white p-3 rounded border overflow-x-auto whitespace-pre-wrap">
                                   {group.cursorPrompt}
-                                </pre>
-                              </div>
+                                  </pre>
+                                </div>
                               {group.logs[0].stack && (
                                 <div className="bg-gray-50 rounded-lg p-3">
                                   <h4 className="text-sm font-medium text-gray-700 mb-2">Stack Trace :</h4>

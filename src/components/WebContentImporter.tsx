@@ -333,16 +333,16 @@ export function WebContentImporter({
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-web-content`,
         {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
             'Authorization': `Bearer ${session.access_token}`
-          },
-          body: JSON.stringify({
+        },
+        body: JSON.stringify({
             url: targetUrl.href,
             htmlContent: htmlContent.substring(0, 50000), // Limite à 50k caractères
             description: description
-          })
+        })
         }
       );
 

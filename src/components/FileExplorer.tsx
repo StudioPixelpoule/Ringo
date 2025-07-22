@@ -355,8 +355,8 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
       if (filteredDocuments.length > maxSelectableDocuments) {
         alert(`Sélection limitée à ${maxSelectableDocuments} document(s). La limite est de ${MAX_DOCUMENTS_PER_CONVERSATION} documents par conversation.`);
         setSelectedDocuments(filteredDocuments.slice(0, maxSelectableDocuments).map(doc => doc.id));
-      } else {
-        setSelectedDocuments(filteredDocuments.map(doc => doc.id));
+    } else {
+      setSelectedDocuments(filteredDocuments.map(doc => doc.id));
       }
     }
   };
@@ -404,8 +404,8 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
           console.warn('Certains documents n\'ont pas pu être ajoutés:', result.errors);
           if (result.errors.some(err => err.includes('Limite de'))) {
             alert(`${result.addedCount} document(s) ajouté(s). ${result.errors[0]}`);
-          }
         }
+      }
       }
       
       // Réinitialiser et fermer
@@ -506,36 +506,36 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
           </div>
 
           {/* Document list (50% or 75% depending on selection) */}
-                      <div className={`flex-1 flex flex-col overflow-hidden ${isSearching ? 'w-3/4' : ''}`}>
-              {/* Filters */}
-              <div className="p-4 border-b bg-gray-50">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-medium text-gray-900">
-                    {isSearching 
-                      ? `Résultats de recherche pour "${searchQuery}"`
-                      : selectedFolder 
-                        ? selectedFolder.name 
-                        : 'Tous les documents'
-                    }
-                  </h3>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={clearFilters}
-                      className={`px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg ${
-                        searchQuery === '' && dateFilter === 'all' && typeFilter === 'all' 
-                          ? 'opacity-50 cursor-not-allowed' 
-                          : ''
-                      }`}
-                      disabled={searchQuery === '' && dateFilter === 'all' && typeFilter === 'all'}
-                    >
-                      Effacer les filtres
-                    </button>
-                  </div>
+          <div className={`flex-1 flex flex-col overflow-hidden ${isSearching ? 'w-3/4' : ''}`}>
+            {/* Filters */}
+            <div className="p-4 border-b bg-gray-50">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">
+                  {isSearching 
+                    ? `Résultats de recherche pour "${searchQuery}"`
+                    : selectedFolder 
+                      ? selectedFolder.name 
+                      : 'Tous les documents'
+                  }
+                </h3>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={clearFilters}
+                    className={`px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg ${
+                      searchQuery === '' && dateFilter === 'all' && typeFilter === 'all' 
+                        ? 'opacity-50 cursor-not-allowed' 
+                        : ''
+                    }`}
+                    disabled={searchQuery === '' && dateFilter === 'all' && typeFilter === 'all'}
+                  >
+                    Effacer les filtres
+                  </button>
                 </div>
-                
+              </div>
+              
                 <div className="space-y-3">
                   {/* Barre de recherche */}
-                  <div className="relative">
+                <div className="relative">
                     <Search 
                       size={18} 
                       className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
@@ -571,21 +571,21 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
                         <option value="month">Ce mois</option>
                       </select>
                       
-                      <select
-                        value={typeFilter}
+                  <select
+                    value={typeFilter}
                         onChange={(e) => setTypeFilter(e.target.value as any)}
                         className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:border-[#f15922]"
-                      >
-                        <option value="all">Tous les types</option>
-                        <option value="pdf">PDF</option>
+                  >
+                    <option value="all">Tous les types</option>
+                    <option value="pdf">PDF</option>
                         <option value="doc">Word</option>
                         <option value="presentation">PowerPoint</option>
-                        <option value="data">Données</option>
-                        <option value="audio">Audio</option>
-                        <option value="web">Web</option>
-                      </select>
-                    </div>
-                    
+                    <option value="data">Données</option>
+                    <option value="audio">Audio</option>
+                    <option value="web">Web</option>
+                  </select>
+                </div>
+                
                     <div className="flex items-center gap-2">
                       {filteredDocuments.length > 0 && (
                         <button
@@ -600,27 +600,27 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
                       )}
                       
                       <div className="flex items-center bg-white border border-gray-300 rounded-lg">
-                        <button
-                          onClick={() => setViewMode('grid')}
+                    <button
+                      onClick={() => setViewMode('grid')}
                           className={`p-1.5 ${viewMode === 'grid' ? 'text-[#f15922] bg-gray-50' : 'text-gray-400'}`}
-                          title="Vue grille"
-                        >
-                          <Grid size={18} />
-                        </button>
+                      title="Vue grille"
+                    >
+                      <Grid size={18} />
+                    </button>
                         <div className="w-px h-6 bg-gray-300" />
-                        <button
-                          onClick={() => setViewMode('list')}
+                    <button
+                      onClick={() => setViewMode('list')}
                           className={`p-1.5 ${viewMode === 'list' ? 'text-[#f15922] bg-gray-50' : 'text-gray-400'}`}
-                          title="Vue liste"
-                        >
-                          <List size={18} />
-                        </button>
-                      </div>
-                    </div>
+                      title="Vue liste"
+                    >
+                      <List size={18} />
+                    </button>
                   </div>
                 </div>
+                </div>
               </div>
-
+            </div>
+            
             
             <div className="flex-1 p-4 overflow-y-auto">
               {loading ? (
