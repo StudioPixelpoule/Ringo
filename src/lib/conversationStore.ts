@@ -504,12 +504,28 @@ RAPPEL: Utilise UNIQUEMENT les documents ci-dessus. Si une information n'est pas
 
       const doc = get().documents.find(d => d.document_id === documentId);
       if (doc) {
+        // Créer un message personnalisé selon le nombre de documents
+        const totalDocs = get().documents.length + 1; // +1 car le nouveau doc n'est pas encore dans la liste
+        let messageContent = `J'ai bien reçu le document "${doc.documents.name}".`;
+        
+        if (totalDocs > 1) {
+          messageContent += ` Je dispose maintenant de ${totalDocs} documents dans cette conversation.`;
+          messageContent += `\n\n💡 **Suggestions d'analyse multi-documents :**`;
+          messageContent += `\n- Comparer les informations entre les documents`;
+          messageContent += `\n- Créer une synthèse consolidée`;
+          messageContent += `\n- Identifier les points communs et différences`;
+          messageContent += `\n- Générer un tableau comparatif`;
+          messageContent += `\n\nQue souhaitez-vous que j'analyse ?`;
+        } else {
+          messageContent += ` Je suis prêt à l'analyser. Que souhaitez-vous savoir ?`;
+        }
+        
         const { data: acknowledgmentMessage, error: messageError } = await supabase
           .from('messages')
           .insert([{
             conversation_id: conversation.id,
             sender: 'assistant',
-            content: `J'ai bien reçu le document "${doc.documents.name}". Je suis prêt à l'analyser avec les autres documents.`
+            content: messageContent
           }])
           .select()
           .single();
