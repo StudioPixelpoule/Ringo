@@ -5,6 +5,7 @@ import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { formatMarkdownContent } from '../lib/markdownFormatter';
 import './EnhancedMarkdown.css';
 
 interface EnhancedMarkdownProps {
@@ -13,6 +14,11 @@ interface EnhancedMarkdownProps {
 }
 
 export const EnhancedMarkdown: React.FC<EnhancedMarkdownProps> = ({ content, className = '' }) => {
+  // Nettoyer et formater le contenu avant de l'afficher
+  const formattedContent = React.useMemo(() => {
+    return formatMarkdownContent(content);
+  }, [content]);
+
   return (
     <div className={`enhanced-markdown ${className}`}>
       <ReactMarkdown
@@ -68,7 +74,7 @@ export const EnhancedMarkdown: React.FC<EnhancedMarkdownProps> = ({ content, cla
           }
         }}
       >
-        {content}
+        {formattedContent}
       </ReactMarkdown>
     </div>
   );

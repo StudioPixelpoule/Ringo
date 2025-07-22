@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useConversationStore } from '../lib/conversationStore';
 import { EnhancedMarkdown } from './EnhancedMarkdown';
+import { cleanMarkdownFormatting } from '../lib/markdownFormatter';
 import './DirectStreamingText.css';
 
 interface DirectStreamingTextProps {
@@ -36,9 +37,12 @@ export const DirectStreamingText: React.FC<DirectStreamingTextProps> = ({
     
     if (!content) return;
     
+    // Nettoyer le contenu avant de streamer
+    const cleanedContent = cleanMarkdownFormatting(content);
+    
     let isMounted = true;
     let index = 0;
-    const characters = content.split('');
+    const characters = cleanedContent.split('');
     
     // Track Markdown structure
     const markdownState = {
@@ -241,7 +245,7 @@ export const DirectStreamingText: React.FC<DirectStreamingTextProps> = ({
   return (
     <div className="streaming-text-container">
       {isComplete ? (
-        <EnhancedMarkdown content={content} />
+        <EnhancedMarkdown content={cleanMarkdownFormatting(content)} />
       ) : (
         <div className="streaming-text">
           {!hasStarted && (
