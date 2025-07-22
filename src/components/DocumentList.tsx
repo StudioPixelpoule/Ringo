@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { FileText, X, ChevronDown, ChevronUp, FileSpreadsheet, FileAudio, Globe, FileCode, FileImage } from 'lucide-react';
 import { ConversationDocument } from '../lib/conversationStore';
+import { MAX_DOCUMENTS_PER_CONVERSATION } from '../lib/constants';
 
 interface DocumentListProps {
   documents: ConversationDocument[];
@@ -28,7 +29,7 @@ const getDocumentIcon = (type: string) => {
 
 export function DocumentList({ documents, onRemove }: DocumentListProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-
+  
   if (documents.length === 0) return null;
 
   // Grouper les documents par type
@@ -50,8 +51,8 @@ export function DocumentList({ documents, onRemove }: DocumentListProps) {
             <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
               <FileText size={18} className="text-[#f15922]" />
               <span>Documents actifs</span>
-              <span className="px-2 py-0.5 bg-[#f15922] text-white text-xs rounded-full font-semibold">
-                {documents.length}
+              <span className={`px-2 py-0.5 ${documents.length >= MAX_DOCUMENTS_PER_CONVERSATION ? 'bg-orange-500' : 'bg-[#f15922]'} text-white text-xs rounded-full font-semibold`}>
+                {documents.length}/{MAX_DOCUMENTS_PER_CONVERSATION}
               </span>
             </div>
             {documents.length > 1 && (
@@ -67,7 +68,13 @@ export function DocumentList({ documents, onRemove }: DocumentListProps) {
         
         {isExpanded && (
           <div className="mt-3 space-y-2">
-            {documents.length > 1 && (
+            {documents.length >= MAX_DOCUMENTS_PER_CONVERSATION && (
+              <div className="text-xs text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 mb-3">
+                <strong>Limite atteinte :</strong> Maximum {MAX_DOCUMENTS_PER_CONVERSATION} documents par conversation pour optimiser les performances.
+              </div>
+            )}
+            
+            {documents.length > 1 && documents.length < MAX_DOCUMENTS_PER_CONVERSATION && (
               <div className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 mb-3">
                 <strong>Astuce :</strong> Demandez-moi de comparer, synthétiser ou croiser les informations entre ces documents.
               </div>

@@ -1,16 +1,14 @@
 import OpenAI from 'openai';
-
-const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
-
-if (!apiKey) {
-  throw new Error(
-    'VITE_OPENAI_API_KEY is not set in environment variables. ' +
-    'Please add it to your .env file: VITE_OPENAI_API_KEY=your_api_key_here'
-  );
-}
+import { 
+  MAX_TOKENS, 
+  MAX_TOKENS_PER_DOC, 
+  MAX_SYSTEM_TOKENS, 
+  MAX_HISTORY_TOKENS,
+  MAX_RESPONSE_TOKENS 
+} from './constants';
 
 const openai = new OpenAI({
-  apiKey,
+  apiKey: import.meta.env.VITE_OPENAI_API_KEY,
   dangerouslyAllowBrowser: true
 });
 
@@ -88,12 +86,6 @@ EXEMPLES DE TÂCHES MULTI-DOCUMENTS :
 
 IMPORTANT : Toujours préciser de quel(s) document(s) provient chaque information importante.
 `;
-
-// Constants for token limits
-const MAX_TOKENS = 128000; // GPT-4o context window
-const MAX_TOKENS_PER_DOC = Math.floor(MAX_TOKENS * 0.7); // 70% of context for documents
-const MAX_SYSTEM_TOKENS = 2000; // Reserve 2K tokens for system messages
-const MAX_HISTORY_TOKENS = 4000; // Reserve 4K tokens for conversation history
 
 // Function to estimate tokens (4 chars ≈ 1 token)
 function estimateTokens(text: string): number {
@@ -291,13 +283,39 @@ export async function generateChatResponse(messages: ChatMessage[], documentCont
       throw new Error('Aucun contenu disponible pour analyse.');
     }
 
-    const preparedMessages = await prepareMessages(messages, documentContent);
+    // Estimer les tokens du contexte des documents
+    const documentTokens = estimateTokens(documentContent);
+    const messagesTokens = messages.reduce((total, msg) => total + estimateTokens(msg.content), 0);
+    const systemTokens = estimateTokens(SYSTEM_PROMPT) + estimateTokens(COMPARATIVE_ANALYSIS_PROMPT || '');
+    
+    const totalTokens = documentTokens + messagesTokens + systemTokens;
+    
+    // Si on dépasse la limite, tronquer le contexte des documents
+    let truncatedDocumentContext = documentContent;
+    if (totalTokens > MAX_TOKENS - MAX_RESPONSE_TOKENS) { // Garder des tokens pour la réponse
+      console.warn(`Contexte trop grand (${totalTokens} tokens), troncature nécessaire`);
+      
+      // Extraire la question de l'utilisateur pour optimiser le contexte
+      const lastUserMessage = messages.filter(m => m.role === 'user').pop();
+      const userQuery = lastUserMessage?.content || '';
+      
+      // Préparer le contenu des documents avec limitation
+      const documents = documentContent.split(/====== DOCUMENT ACTIF/).filter(Boolean);
+      const maxTokensPerDoc = Math.floor((MAX_TOKENS - systemTokens - messagesTokens - MAX_RESPONSE_TOKENS) / documents.length);
+      
+      truncatedDocumentContext = documents.map((doc, index) => {
+        const relevantContent = findRelevantContent(userQuery, doc, maxTokensPerDoc);
+        return `====== DOCUMENT ACTIF${relevantContent}`;
+      }).join('\n\n---\n\n');
+    }
+
+    const preparedMessages = await prepareMessages(messages, truncatedDocumentContext);
     
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: preparedMessages,
       temperature: 0.7,
-      max_tokens: 4000,
+      max_tokens: MAX_RESPONSE_TOKENS,
       presence_penalty: 0.1,
       frequency_penalty: 0.2,
       response_format: { type: 'text' },
@@ -311,20 +329,39 @@ export async function generateChatResponse(messages: ChatMessage[], documentCont
 
     return response;
   } catch (error: any) {
-    if (error?.error?.code === 'context_length_exceeded') {
-      console.warn("Limite de tokens dépassée, nouvel essai avec contexte minimal");
+    // Vérifier plusieurs formats d'erreur possibles pour la limite de tokens
+    const isTokenLimitError = 
+      error?.error?.code === 'context_length_exceeded' ||
+      error?.response?.data?.error?.code === 'context_length_exceeded' ||
+      (error?.message && error.message.includes('maximum context length')) ||
+      (error?.message && error.message.includes('tokens')) ||
+      (error?.status === 400 && error?.message?.includes('too many tokens'));
+    
+    if (isTokenLimitError) {
+      console.warn("Limite de tokens dépassée, utilisation d'un contexte minimal");
       
       const lastMessage = messages[messages.length - 1];
       if (!lastMessage) throw new Error('No message to process');
+
+      // Créer un contexte minimal avec seulement un résumé
+      const minimalContext = `
+CONTEXTE RÉDUIT - Limite de tokens dépassée
+===========================================
+Le contexte complet des documents est trop volumineux.
+Veuillez reformuler votre question de manière plus spécifique ou traiter moins de documents à la fois.
+
+Nombre de documents dans la conversation: ${(documentContent?.match(/====== DOCUMENT ACTIF/g) || []).length}
+`;
 
       const completion = await openai.chat.completions.create({
         model: 'gpt-4o',
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: minimalContext },
           lastMessage
         ],
         temperature: 0.7,
-        max_tokens: 4000,
+        max_tokens: 1000, // Réponse plus courte pour le contexte minimal
         presence_penalty: 0.1,
         frequency_penalty: 0.2,
         response_format: { type: 'text' },
@@ -336,7 +373,7 @@ export async function generateChatResponse(messages: ChatMessage[], documentCont
         throw new Error('No response content received from OpenAI');
       }
       
-      return response;
+      return response + "\n\n*Note: La réponse a été générée avec un contexte réduit car la limite de tokens a été dépassée. Pour une analyse complète, veuillez traiter moins de documents à la fois ou poser des questions plus spécifiques.*";
     }
     
     throw new Error(`Failed to generate response: ${error.message}`);
@@ -353,14 +390,40 @@ export async function generateChatResponseStreaming(
       throw new Error('Aucun contenu disponible pour analyse.');
     }
 
-    const preparedMessages = await prepareMessages(messages, documentContent);
+    // Estimer les tokens du contexte des documents
+    const documentTokens = estimateTokens(documentContent);
+    const messagesTokens = messages.reduce((total, msg) => total + estimateTokens(msg.content), 0);
+    const systemTokens = estimateTokens(SYSTEM_PROMPT) + estimateTokens(COMPARATIVE_ANALYSIS_PROMPT || '');
+    
+    const totalTokens = documentTokens + messagesTokens + systemTokens;
+    
+    // Si on dépasse la limite, tronquer le contexte des documents
+    let truncatedDocumentContext = documentContent;
+    if (totalTokens > MAX_TOKENS - MAX_RESPONSE_TOKENS) { // Garder des tokens pour la réponse
+      console.warn(`Contexte trop grand (${totalTokens} tokens), troncature nécessaire`);
+      
+      // Extraire la question de l'utilisateur pour optimiser le contexte
+      const lastUserMessage = messages.filter(m => m.role === 'user').pop();
+      const userQuery = lastUserMessage?.content || '';
+      
+      // Préparer le contenu des documents avec limitation
+      const documents = documentContent.split(/====== DOCUMENT ACTIF/).filter(Boolean);
+      const maxTokensPerDoc = Math.floor((MAX_TOKENS - systemTokens - messagesTokens - MAX_RESPONSE_TOKENS) / documents.length);
+      
+      truncatedDocumentContext = documents.map((doc, index) => {
+        const relevantContent = findRelevantContent(userQuery, doc, maxTokensPerDoc);
+        return `====== DOCUMENT ACTIF${relevantContent}`;
+      }).join('\n\n---\n\n');
+    }
+
+    const preparedMessages = await prepareMessages(messages, truncatedDocumentContext);
     let fullResponse = '';
 
     const stream = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: preparedMessages,
       temperature: 0.7,
-      max_tokens: 4000,
+      max_tokens: MAX_RESPONSE_TOKENS,
       presence_penalty: 0.1,
       frequency_penalty: 0.2,
       stream: true,
@@ -377,17 +440,64 @@ export async function generateChatResponseStreaming(
 
     return fullResponse;
   } catch (error: any) {
-    if (error?.error?.code === 'context_length_exceeded') {
-      console.warn("Limite de tokens dépassée, nouvel essai avec contexte minimal");
+    // Vérifier plusieurs formats d'erreur possibles pour la limite de tokens
+    const isTokenLimitError = 
+      error?.error?.code === 'context_length_exceeded' ||
+      error?.response?.data?.error?.code === 'context_length_exceeded' ||
+      (error?.message && error.message.includes('maximum context length')) ||
+      (error?.message && error.message.includes('tokens')) ||
+      (error?.status === 400 && error?.message?.includes('too many tokens'));
+    
+    if (isTokenLimitError) {
+      console.warn("Limite de tokens dépassée, utilisation d'un contexte minimal");
       
       const lastMessage = messages[messages.length - 1];
       if (!lastMessage) throw new Error('No message to process');
 
-      return generateChatResponseStreaming(
-        [{ role: 'system', content: SYSTEM_PROMPT }, lastMessage],
-        documentContent,
-        onChunk
-      );
+      // Créer un contexte minimal
+      const minimalContext = `
+CONTEXTE RÉDUIT - Limite de tokens dépassée
+===========================================
+Le contexte complet des documents est trop volumineux.
+Veuillez reformuler votre question de manière plus spécifique ou traiter moins de documents à la fois.
+
+Nombre de documents dans la conversation: ${(documentContent?.match(/====== DOCUMENT ACTIF/g) || []).length}
+`;
+
+      // Envoyer un message d'avertissement avant la réponse
+      const warningMessage = "*⚠️ Attention: La limite de tokens a été dépassée. Génération d'une réponse avec un contexte réduit...*\n\n";
+      onChunk(warningMessage);
+      
+      let fullResponse = warningMessage;
+
+      const stream = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: minimalContext },
+          lastMessage
+        ],
+        temperature: 0.7,
+        max_tokens: 1000,
+        presence_penalty: 0.1,
+        frequency_penalty: 0.2,
+        stream: true,
+        top_p: 0.95
+      });
+
+      for await (const chunk of stream) {
+        const content = chunk.choices[0]?.delta?.content || '';
+        if (!content) continue;
+
+        fullResponse += content;
+        onChunk(content);
+      }
+
+      const noteMessage = "\n\n*Note: Pour une analyse complète, veuillez traiter moins de documents à la fois ou poser des questions plus spécifiques.*";
+      onChunk(noteMessage);
+      fullResponse += noteMessage;
+
+      return fullResponse;
     }
     
     throw new Error(`Failed to generate streaming response: ${error.message}`);

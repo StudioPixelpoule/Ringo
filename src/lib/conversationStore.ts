@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { supabase } from './supabase';
 import { generateChatResponse, generateChatResponseStreaming } from './openai';
 import { Document } from './documentStore';
+import { MAX_DOCUMENTS_PER_CONVERSATION, ERROR_MESSAGES } from './constants';
 
 export interface Conversation {
   id: string;
@@ -444,28 +445,61 @@ RAPPEL: Utilise UNIQUEMENT les documents ci-dessus. Si une information n'est pas
 
       // Stream the response
       let streamedContent = '';
-      await generateChatResponseStreaming(
-        [...chatHistory, { role: 'user', content }],
-        enhancedDocumentContext,
-        async (chunk) => {
-          streamedContent += chunk;
-          
-          // Update message in database
-          const { error: updateError } = await supabase
-            .from('messages')
-            .update({ content: streamedContent })
-            .eq('id', aiMessage.id);
-            
-          if (updateError) throw updateError;
-          
-          // Update message in state
-          set({ 
-            messages: get().messages.map(m => 
-              m.id === aiMessage.id ? { ...m, content: streamedContent } : m
-            )
-          });
+      
+      try {
+        streamedContent = await generateChatResponseStreaming(
+          [...chatHistory, { role: 'user', content }],
+          enhancedDocumentContext,
+          (chunk) => {
+            streamedContent += chunk;
+            set(state => ({
+              messages: state.messages.map(msg => 
+                msg.id === aiMessage.id 
+                  ? { ...msg, content: streamedContent }
+                  : msg
+              )
+            }));
+          }
+        );
+
+        // Update final message with complete content
+        await supabase
+          .from('messages')
+          .update({ content: streamedContent })
+          .eq('id', aiMessage.id);
+
+      } catch (streamError: any) {
+        console.error('Error streaming response:', streamError);
+        
+        // Mettre à jour le message avec l'erreur
+        let errorMessage = ERROR_MESSAGES.GENERIC_ERROR;
+        
+        // Vérifier si c'est une erreur de limite de taux
+        if (streamError?.status === 429 || streamError?.message?.includes('rate limit')) {
+          errorMessage = ERROR_MESSAGES.RATE_LIMIT;
         }
-      );
+        // Vérifier si c'est une erreur de limite de tokens
+        else if (streamError?.message?.includes('tokens') || streamError?.message?.includes('context')) {
+          errorMessage = ERROR_MESSAGES.TOKEN_LIMIT;
+        }
+        
+        const errorContent = `${errorMessage}\n\n*Erreur technique: ${streamError.message}*`;
+        
+        set(state => ({
+          messages: state.messages.map(msg => 
+            msg.id === aiMessage.id 
+              ? { ...msg, content: errorContent }
+              : msg
+          )
+        }));
+        
+        await supabase
+          .from('messages')
+          .update({ content: errorContent })
+          .eq('id', aiMessage.id);
+        
+        throw streamError;
+      }
 
       // Mark message as streamed
       get().markMessageAsStreamed(aiMessage.id);
@@ -485,6 +519,13 @@ RAPPEL: Utilise UNIQUEMENT les documents ci-dessus. Si une information n'est pas
 
     set({ loading: true, error: null });
     try {
+      // Vérifier la limite de documents
+      const currentDocCount = get().documents.length;
+      
+      if (currentDocCount >= MAX_DOCUMENTS_PER_CONVERSATION) {
+        throw new Error(ERROR_MESSAGES.DOCUMENT_LIMIT);
+      }
+      
       // Check if document is already linked
       const { data: existingLink } = await supabase
         .from('conversation_documents')
@@ -554,6 +595,13 @@ RAPPEL: Utilise UNIQUEMENT les documents ci-dessus. Si une information n'est pas
     }
 
     try {
+      // Vérifier la limite de documents
+      const currentDocCount = get().documents.length;
+      
+      if (currentDocCount >= MAX_DOCUMENTS_PER_CONVERSATION) {
+        throw new Error(ERROR_MESSAGES.DOCUMENT_LIMIT);
+      }
+      
       // Check if document is already linked
       const { data: existingLink } = await supabase
         .from('conversation_documents')
@@ -586,6 +634,25 @@ RAPPEL: Utilise UNIQUEMENT les documents ci-dessus. Si une information n'est pas
     if (!conversation) {
       set({ error: 'No conversation selected' });
       return { success: false, addedCount: 0, errors: [] };
+    }
+
+    // Limiter le nombre de documents pour éviter les problèmes de tokens
+    const currentDocCount = get().documents.length;
+    
+    if (currentDocCount + documentIds.length > MAX_DOCUMENTS_PER_CONVERSATION) {
+      const availableSlots = Math.max(0, MAX_DOCUMENTS_PER_CONVERSATION - currentDocCount);
+      if (availableSlots === 0) {
+        set({ error: ERROR_MESSAGES.DOCUMENT_LIMIT });
+        return { 
+          success: false, 
+          addedCount: 0, 
+          errors: [ERROR_MESSAGES.DOCUMENT_LIMIT] 
+        };
+      } else {
+        // Limiter les documents à ajouter
+        documentIds = documentIds.slice(0, availableSlots);
+        console.warn(`Limitation à ${availableSlots} document(s) pour respecter la limite de ${MAX_DOCUMENTS_PER_CONVERSATION} par conversation.`);
+      }
     }
 
     set({ loading: true, error: null });

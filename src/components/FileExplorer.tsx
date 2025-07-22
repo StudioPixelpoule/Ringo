@@ -363,6 +363,10 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
           
           if (result.errors.length > 0) {
             console.warn('Certains documents n\'ont pas pu être ajoutés:', result.errors);
+            // Afficher un message d'erreur à l'utilisateur
+            if (result.errors.some(err => err.includes('Limite de'))) {
+              alert(result.errors[0]);
+            }
           }
         }
       } else {
@@ -371,9 +375,12 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
         const result = await linkMultipleDocuments(docIds);
         
         if (result.errors.length > 0 && result.addedCount === 0) {
-          alert('Aucun document n\'a pu être ajouté. Ils sont peut-être déjà dans la conversation.');
+          alert(result.errors[0] || 'Aucun document n\'a pu être ajouté.');
         } else if (result.errors.length > 0) {
           console.warn('Certains documents n\'ont pas pu être ajoutés:', result.errors);
+          if (result.errors.some(err => err.includes('Limite de'))) {
+            alert(`${result.addedCount} document(s) ajouté(s). ${result.errors[0]}`);
+          }
         }
       }
       
