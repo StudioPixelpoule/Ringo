@@ -692,22 +692,22 @@ RAPPEL: Utilise UNIQUEMENT les documents ci-dessus. Si une information n'est pas
       const totalDocs = get().documents.length;
       
       // Créer un message récapitulatif si on a des documents (ajoutés ou déjà présents)
-      // et qu'il n'y a pas encore de messages dans la conversation
       const messages = get().messages;
-      if (documentIds.length > 0 && messages.length === 0) {
-        // Récupérer les noms de tous les documents demandés (ajoutés + déjà liés)
-        const allRequestedDocNames = documentIds
-          .map(id => get().documents.find(d => d.document_id === id))
-          .filter(Boolean)
-          .map(doc => doc!.documents.name);
+      const isNewConversation = messages.length === 0 || (messages.length === 1 && messages[0].content === '');
+      
+      if (documentIds.length > 0 && isNewConversation) {
+        // Pour une nouvelle conversation, créer un message récapitulatif avec TOUS les documents
+        const allDocNames = get().documents
+          .map(docWrapper => docWrapper.documents.name)
+          .filter(Boolean);
         
         let messageContent = `Bonjour, je suis Ringo ! J'ai bien reçu `;
         
-        if (allRequestedDocNames.length === 1) {
-          messageContent += `le document "${allRequestedDocNames[0]}".`;
+        if (allDocNames.length === 1) {
+          messageContent += `le document "${allDocNames[0]}".`;
         } else {
-          messageContent += `${allRequestedDocNames.length} documents :`;
-          allRequestedDocNames.forEach(name => {
+          messageContent += `${allDocNames.length} documents :`;
+          allDocNames.forEach(name => {
             messageContent += `\n- ${name}`;
           });
         }
@@ -737,7 +737,7 @@ RAPPEL: Utilise UNIQUEMENT les documents ci-dessus. Si une information n'est pas
         set({ messages: [...get().messages, acknowledgmentMessage] });
       }
       // Si des documents ont été ajoutés ET qu'il y a déjà des messages, créer un message pour les nouveaux
-      else if (addedDocuments.length > 0 && messages.length > 0) {
+      else if (addedDocuments.length > 0 && !isNewConversation) {
         // Récupérer les noms des documents ajoutés
         const addedDocNames = addedDocuments
           .map(id => get().documents.find(d => d.document_id === id))

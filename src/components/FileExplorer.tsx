@@ -4,6 +4,7 @@ import { ChevronRight, Search, X, Send, Loader2, CheckSquare, Square, Filter, Fi
 import { useDocumentStore, Document, Folder } from '../lib/documentStore';
 import { useConversationStore } from '../lib/conversationStore';
 import { FileIcon } from './FileIcon';
+import { MAX_DOCUMENTS_PER_CONVERSATION } from '../lib/constants';
 
 interface FileCardProps {
   document: Document;
@@ -254,6 +255,7 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
 
   const {
     currentConversation,
+    documents: conversationDocuments,
     createConversationWithDocument,
     linkDocument,
     linkMultipleDocuments
@@ -323,18 +325,39 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
   });
 
   const toggleDocumentSelection = (documentId: string) => {
-    setSelectedDocuments(prev =>
-      prev.includes(documentId)
-        ? prev.filter(id => id !== documentId)
-        : [...prev, documentId]
-    );
+    setSelectedDocuments(prev => {
+      if (prev.includes(documentId)) {
+        // Retirer le document de la sélection
+        return prev.filter(id => id !== documentId);
+      } else {
+        // Vérifier la limite avant d'ajouter
+        const currentDocsInConversation = currentConversation ? conversationDocuments.length : 0;
+        const maxSelectableDocuments = MAX_DOCUMENTS_PER_CONVERSATION - currentDocsInConversation;
+        
+        if (prev.length >= maxSelectableDocuments) {
+          alert(`Vous ne pouvez sélectionner que ${maxSelectableDocuments} document(s) supplémentaire(s). La limite est de ${MAX_DOCUMENTS_PER_CONVERSATION} documents par conversation.`);
+          return prev;
+        }
+        
+        return [...prev, documentId];
+      }
+    });
   };
 
   const handleSelectAll = () => {
     if (selectedDocuments.length === filteredDocuments.length) {
       setSelectedDocuments([]);
     } else {
-      setSelectedDocuments(filteredDocuments.map(doc => doc.id));
+      // Limiter la sélection selon la limite
+      const currentDocsInConversation = currentConversation ? conversationDocuments.length : 0;
+      const maxSelectableDocuments = MAX_DOCUMENTS_PER_CONVERSATION - currentDocsInConversation;
+      
+      if (filteredDocuments.length > maxSelectableDocuments) {
+        alert(`Sélection limitée à ${maxSelectableDocuments} document(s). La limite est de ${MAX_DOCUMENTS_PER_CONVERSATION} documents par conversation.`);
+        setSelectedDocuments(filteredDocuments.slice(0, maxSelectableDocuments).map(doc => doc.id));
+      } else {
+        setSelectedDocuments(filteredDocuments.map(doc => doc.id));
+      }
     }
   };
 
@@ -358,8 +381,9 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
         
         // Ajouter les autres documents s'il y en a plus d'un
         if (selectedDocs.length > 1) {
-          const allDocIds = selectedDocs.map(doc => doc.id);
-          const result = await linkMultipleDocuments(allDocIds);
+          // Ne pas inclure le premier document qui a déjà été ajouté
+          const remainingDocIds = selectedDocs.slice(1).map(doc => doc.id);
+          const result = await linkMultipleDocuments(remainingDocIds);
           
           if (result.errors.length > 0) {
             console.warn('Certains documents n\'ont pas pu être ajoutés:', result.errors);
@@ -685,6 +709,15 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
                       })}
                     </div>
                   </div>
+
+                  {/* Indicateur de limite */}
+                  {currentConversation && conversationDocuments.length > 0 && (
+                    <div className="mb-3 p-2 bg-orange-50 border border-orange-200 rounded-lg">
+                      <p className="text-xs text-orange-700">
+                        <strong>Documents dans la conversation :</strong> {conversationDocuments.length}/{MAX_DOCUMENTS_PER_CONVERSATION}
+                      </p>
+                    </div>
+                  )}
 
                   <button
                     onClick={importDocumentsToChat}
