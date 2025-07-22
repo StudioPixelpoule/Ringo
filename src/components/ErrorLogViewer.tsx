@@ -355,9 +355,12 @@ export function ErrorLogViewer({ isOpen, onClose }: ErrorLogViewerProps) {
                 <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                   <Zap className="text-[#f15922]" size={20} />
                   Erreurs à traiter en priorité
+                  <span className="text-sm font-normal text-gray-500">
+                    (Top 10 sur {filteredErrors.length} erreurs)
+                  </span>
                 </h3>
                 <div className="space-y-4">
-                  {filteredErrors.slice(0, 5).map((group) => (
+                  {filteredErrors.slice(0, 10).map((group) => (
                     <motion.div
                       key={group.error}
                       initial={{ opacity: 0, y: 20 }}
@@ -446,6 +449,18 @@ export function ErrorLogViewer({ isOpen, onClose }: ErrorLogViewerProps) {
                     </motion.div>
                   ))}
                 </div>
+                
+                {filteredErrors.length > 10 && (
+                  <div className="mt-6 text-center">
+                    <button
+                      onClick={() => setView('list')}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-colors"
+                    >
+                      Voir toutes les {filteredErrors.length} erreurs
+                      <ChevronDown size={16} />
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -483,14 +498,150 @@ export function ErrorLogViewer({ isOpen, onClose }: ErrorLogViewerProps) {
               </div>
 
               {/* Liste détaillée */}
-              <div className="space-y-4">
-                {filteredErrors.map((group) => (
-                  <div key={group.error} className="bg-white rounded-lg border shadow-sm p-4">
-                    {/* Même contenu que dans le dashboard */}
-                    {/* ... */}
-                  </div>
-                ))}
-              </div>
+              {filteredErrors.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-gray-500">
+                  <Activity size={48} className="mb-4 text-gray-300" />
+                  <p className="text-lg font-medium">Aucune erreur trouvée</p>
+                  <p className="text-sm mt-2">Modifiez vos filtres pour voir plus de résultats</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {filteredErrors.map((group) => (
+                    <motion.div
+                      key={group.error}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-white rounded-lg border shadow-sm overflow-hidden"
+                    >
+                      <div className="p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              {getPriorityIcon(group.priority)}
+                              {getPriorityBadge(group.priority)}
+                              <span className="text-sm text-gray-600">
+                                {group.count} occurrence{group.count > 1 ? 's' : ''}
+                              </span>
+                              <span className="text-sm text-gray-500">
+                                {group.affectedUsers.length} utilisateur{group.affectedUsers.length > 1 ? 's' : ''}
+                              </span>
+                              <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                                group.status === 'new' ? 'bg-red-100 text-red-800' :
+                                group.status === 'investigating' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-green-100 text-green-800'
+                              }`}>
+                                {group.status === 'new' ? 'Nouvelle' :
+                                 group.status === 'investigating' ? 'En cours' :
+                                 'Résolue'}
+                              </span>
+                            </div>
+                            <p className="font-medium text-gray-900 mb-2">{group.error}</p>
+                            
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
+                              <div className="flex items-start gap-2">
+                                <Lightbulb className="text-blue-600 mt-0.5" size={16} />
+                                <div className="flex-1">
+                                  <p className="text-sm text-blue-900 font-medium mb-1">Solution suggérée :</p>
+                                  <p className="text-sm text-blue-700">{group.suggestedFix}</p>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="text-xs text-gray-500 mb-2">
+                              Première occurrence : {new Date(group.firstOccurrence).toLocaleString('fr-FR')}
+                              {' • '}
+                              Dernière occurrence : {new Date(group.lastOccurrence).toLocaleString('fr-FR')}
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => copyPrompt(group.cursorPrompt!, group.error)}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-[#f15922] text-white rounded-lg hover:bg-[#f15922]/90 transition-colors text-sm font-medium"
+                              >
+                                <Copy size={16} />
+                                {copiedPrompt === group.error ? 'Copié !' : 'Copier prompt Cursor'}
+                              </button>
+                              {group.status === 'new' && (
+                                <button
+                                  onClick={() => updateErrorStatus(group.error, 'investigating')}
+                                  className="px-3 py-1.5 bg-yellow-100 text-yellow-700 rounded-lg hover:bg-yellow-200 transition-colors text-sm font-medium"
+                                  title="Marquer cette erreur comme étant en cours d'investigation"
+                                >
+                                  Je m'en occupe
+                                </button>
+                              )}
+                              {group.status === 'investigating' && (
+                                <button
+                                  onClick={() => updateErrorStatus(group.error, 'resolved')}
+                                  className="px-3 py-1.5 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors text-sm font-medium"
+                                  title="Marquer cette erreur comme résolue"
+                                >
+                                  Marquer résolue
+                                </button>
+                              )}
+                              {group.status === 'resolved' && (
+                                <button
+                                  onClick={() => updateErrorStatus(group.error, 'new')}
+                                  className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium"
+                                  title="Rouvrir cette erreur"
+                                >
+                                  Rouvrir
+                                </button>
+                              )}
+                              <button
+                                onClick={() => toggleErrorExpansion(group.error)}
+                                className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                              >
+                                {expandedErrors.has(group.error) ? (
+                                  <ChevronUp size={18} />
+                                ) : (
+                                  <ChevronDown size={18} />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <AnimatePresence>
+                          {expandedErrors.has(group.error) && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              className="mt-4 space-y-3"
+                            >
+                              <div className="bg-gray-50 rounded-lg p-3">
+                                <h4 className="text-sm font-medium text-gray-700 mb-2">Prompt Cursor complet :</h4>
+                                <pre className="text-xs bg-white p-3 rounded border overflow-x-auto whitespace-pre-wrap">
+                                  {group.cursorPrompt}
+                                </pre>
+                              </div>
+                              {group.logs[0].stack && (
+                                <div className="bg-gray-50 rounded-lg p-3">
+                                  <h4 className="text-sm font-medium text-gray-700 mb-2">Stack Trace :</h4>
+                                  <pre className="text-xs bg-white p-3 rounded border overflow-x-auto">
+                                    {group.logs[0].stack}
+                                  </pre>
+                                </div>
+                              )}
+                              <div className="bg-gray-50 rounded-lg p-3">
+                                <h4 className="text-sm font-medium text-gray-700 mb-2">Utilisateurs affectés :</h4>
+                                <div className="flex flex-wrap gap-2">
+                                  {group.affectedUsers.map((email, index) => (
+                                    <span key={index} className="px-2 py-1 bg-white rounded border text-xs">
+                                      {email}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
