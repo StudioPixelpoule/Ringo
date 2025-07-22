@@ -110,15 +110,20 @@ export const useUserStore = create<UserStore>((set, get) => ({
   updateUser: async (id, data) => {
     set({ loading: true, error: null });
     try {
+      // Remove updated_at from data as it should be handled by database trigger
+      const { updated_at, ...updateData } = data as any;
+      
       const { error } = await supabase
         .from('profiles')
-        .update({ ...data, updated_at: new Date().toISOString() })
+        .update(updateData)
         .eq('id', id);
 
       if (error) throw error;
       await get().fetchUsers();
     } catch (error) {
+      console.error('Error updating user:', error);
       set({ error: error instanceof Error ? error.message : 'Failed to update user' });
+      throw error;
     } finally {
       set({ loading: false });
     }

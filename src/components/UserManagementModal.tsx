@@ -137,11 +137,17 @@ export function UserManagementModal() {
 
   const saveName = async (userId: string) => {
     try {
-      await updateUser(userId, { name: editingNameValue });
+      await updateUser(userId, { name: editingNameValue.trim() || null });
       setEditingNameId(null);
       setEditingNameValue('');
     } catch (error) {
       console.error('Failed to update name:', error);
+      // Si l'erreur est due à une colonne manquante, afficher un message spécifique
+      if (error instanceof Error && error.message.includes('column')) {
+        setLocalError('La mise à jour du nom n\'est pas disponible. Veuillez contacter l\'administrateur.');
+      } else {
+        setLocalError(error instanceof Error ? error.message : 'Erreur lors de la mise à jour du nom');
+      }
     }
   };
 
