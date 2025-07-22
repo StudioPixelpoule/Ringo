@@ -5,6 +5,18 @@ import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 
 // Types communs
+export interface ProcessingOptions {
+  onProgress?: (progress: ProcessingProgress) => void;
+  signal?: AbortSignal;
+}
+
+export interface ProcessingProgress {
+  stage: 'upload' | 'processing' | 'extraction' | 'complete';
+  progress: number;
+  message: string;
+  canCancel?: boolean;
+}
+
 export interface ProcessingResult {
   content: string;
   metadata: {
@@ -35,13 +47,6 @@ export interface ProcessingResult {
   processingDate: string;
 }
 
-interface ProcessingProgress {
-  stage: 'upload' | 'processing' | 'complete';
-  progress: number;
-  message: string;
-  canCancel?: boolean;
-}
-
 async function processDataFile(file: File, options?: ProcessingOptions): Promise<string> {
   try {
     options?.onProgress?.({
@@ -63,7 +68,7 @@ async function processDataFile(file: File, options?: ProcessingOptions): Promise
       }
     } else if (extension === 'csv') {
       const text = await file.text();
-      const parseResult = await new Promise((resolve, reject) => {
+      const parseResult = await new Promise<Papa.ParseResult<any>>((resolve, reject) => {
         Papa.parse(text, {
           header: true,
           dynamicTyping: true,
@@ -129,7 +134,7 @@ async function processDataFile(file: File, options?: ProcessingOptions): Promise
       data,
       metadata: {
         rowCount: Array.isArray(data) ? data.length : 
-                 typeof data === 'object' ? Object.values(data).reduce((sum: number, sheet: any[]) => sum + sheet.length, 0) : 1,
+                 typeof data === 'object' ? Object.values(data as Record<string, any[]>).reduce((sum: number, sheet: any[]) => sum + sheet.length, 0) : 1,
         fields: Array.isArray(data) ? Object.keys(data[0] || {}) :
                 typeof data === 'object' ? Object.keys(data).map(sheet => ({
                   sheet,
@@ -262,9 +267,7 @@ async function processPDFDocument(file: File, options?: ProcessingOptions): Prom
               viewport
             }).promise;
 
-            const worker = await createWorker();
-            await worker.loadLanguage('fra+eng');
-            await worker.initialize('fra+eng');
+            const worker = await createWorker('fra+eng');
             const { data } = await worker.recognize(canvas);
             await worker.terminate();
 

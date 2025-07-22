@@ -48,7 +48,7 @@ function App() {
         if (session) {
           fetchUserRole(session.user.id);
         }
-      } else if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+      } else if (event === 'SIGNED_OUT') {
         setSession(null);
         setUserRole('user');
         localStorage.clear();

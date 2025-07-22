@@ -1,5 +1,8 @@
 import { create } from 'zustand';
 import { supabase } from './supabase';
+import { createLogger } from './logger';
+
+const logger = createLogger('UserStore');
 
 export interface Profile {
   id: string;
@@ -17,15 +20,21 @@ interface UserStore {
   error: string | null;
   selectedUser: Profile | null;
   isModalOpen: boolean;
+  isAddUserModalOpen: boolean;
   userRole: string;
+  invitations: any[];
   
   fetchUsers: () => Promise<void>;
   updateUser: (id: string, data: Partial<Profile>) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
   createUser: (data: { email: string; password: string; role: Profile['role'] }) => Promise<void>;
+  inviteUser: (data: { email: string; role: string }) => Promise<void>;
   setSelectedUser: (user: Profile | null) => void;
   setModalOpen: (isOpen: boolean) => void;
+  setAddUserModalOpen: (isOpen: boolean) => void;
   clearError: () => void;
+  fetchInvitations: () => Promise<void>;
+  revokeInvitation: (id: string) => Promise<void>;
 }
 
 export const useUserStore = create<UserStore>((set, get) => ({
@@ -34,7 +43,9 @@ export const useUserStore = create<UserStore>((set, get) => ({
   error: null,
   selectedUser: null,
   isModalOpen: false,
+  isAddUserModalOpen: false,
   userRole: 'user',
+  invitations: [],
 
   fetchUsers: async () => {
     set({ loading: true, error: null });
@@ -99,7 +110,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
       // Refresh user list
       await get().fetchUsers();
     } catch (error) {
-      console.error('Error creating user:', error);
+      logger.error('Error creating user:', error);
       set({ error: error instanceof Error ? error.message : 'Failed to create user' });
       throw error;
     } finally {
@@ -121,7 +132,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
       if (error) throw error;
       await get().fetchUsers();
     } catch (error) {
-      console.error('Error updating user:', error);
+      logger.error('Error updating user:', error);
       set({ error: error instanceof Error ? error.message : 'Failed to update user' });
       throw error;
     } finally {
@@ -166,7 +177,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
 
       if (!response.ok) {
         const errorData = await response.json();
-        console.error('Server response:', errorData);
+        logger.error('Server response:', errorData);
         throw new Error(errorData.error || `Failed to delete user: ${response.status} ${response.statusText}`);
       }
 
@@ -174,7 +185,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
       const users = get().users;
       set({ users: users.filter(u => u.id !== id) });
     } catch (error) {
-      console.error('Error deleting user:', error);
+      logger.error('Error deleting user:', error);
       set({ error: error instanceof Error ? error.message : 'Failed to delete user' });
       throw error;
     } finally {
@@ -184,5 +195,48 @@ export const useUserStore = create<UserStore>((set, get) => ({
 
   setSelectedUser: (user: Profile | null) => set({ selectedUser: user }),
   setModalOpen: (isOpen: boolean) => set({ isModalOpen: isOpen }),
+  setAddUserModalOpen: (isOpen: boolean) => set({ isAddUserModalOpen: isOpen }),
   clearError: () => set({ error: null }),
+  
+  inviteUser: async (data: { email: string; role: string }) => {
+    set({ loading: true, error: null });
+    try {
+      // Logique d'invitation à implémenter
+      throw new Error('inviteUser not implemented');
+    } catch (error) {
+      logger.error('Error inviting user:', error);
+      set({ error: error instanceof Error ? error.message : 'Failed to invite user' });
+      throw error;
+    } finally {
+      set({ loading: false });
+    }
+  },
+  
+  fetchInvitations: async () => {
+    set({ loading: true, error: null });
+    try {
+      // Logique pour récupérer les invitations
+      set({ invitations: [] });
+    } catch (error) {
+      logger.error('Error fetching invitations:', error);
+      set({ error: error instanceof Error ? error.message : 'Failed to fetch invitations' });
+    } finally {
+      set({ loading: false });
+    }
+  },
+  
+  revokeInvitation: async (id: string) => {
+    set({ loading: true, error: null });
+    try {
+      // Logique pour révoquer une invitation
+      const invitations = get().invitations;
+      set({ invitations: invitations.filter(inv => inv.id !== id) });
+    } catch (error) {
+      logger.error('Error revoking invitation:', error);
+      set({ error: error instanceof Error ? error.message : 'Failed to revoke invitation' });
+      throw error;
+    } finally {
+      set({ loading: false });
+    }
+  },
 }));

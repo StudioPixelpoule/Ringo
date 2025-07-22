@@ -285,8 +285,8 @@ export async function generateChatResponse(messages: ChatMessage[], documentCont
 
 export async function generateChatResponseStreaming(
   messages: ChatMessage[], 
-  documentContent?: string,
-  onChunk: (chunk: string) => void
+  onChunk: (chunk: string) => void,
+  documentContent?: string
 ): Promise<string> {
   throw new Error('Cette fonction est désactivée pour des raisons de sécurité. Utilisez generateChatResponseStreamingSecure depuis secureChat.ts à la place.');
 }

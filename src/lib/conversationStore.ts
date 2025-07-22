@@ -442,7 +442,6 @@ RAPPEL: Utilise UNIQUEMENT les documents ci-dessus. Si une information n'est pas
       try {
         streamedContent = await generateChatResponseStreaming(
           [...chatHistory, { role: 'user', content }],
-          enhancedDocumentContext,
           (chunk) => {
             streamedContent += chunk;
             set(state => ({
@@ -452,7 +451,8 @@ RAPPEL: Utilise UNIQUEMENT les documents ci-dessus. Si une information n'est pas
                   : msg
               )
             }));
-          }
+          },
+          enhancedDocumentContext
         );
 
         // Update final message with complete content

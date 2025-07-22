@@ -47,12 +47,12 @@ export async function generateChatResponseSecure(
 
 export async function generateChatResponseStreamingSecure(
   messages: ChatMessage[],
-  documentContent?: string,
-  onChunk: (chunk: string) => void
+  onChunk: (chunk: string) => void,
+  documentContent?: string
 ): Promise<string> {
   if (!USE_SECURE_CHAT) {
     // Utiliser la fonction locale existante
-    return generateStreamingLocal(messages, documentContent, onChunk);
+    return generateStreamingLocal(messages, onChunk, documentContent);
   }
 
   try {
@@ -117,7 +117,7 @@ export async function generateChatResponseStreamingSecure(
   } catch (error) {
     console.error('Erreur avec l\'Edge Function, fallback sur traitement local:', error);
     // Fallback sur le traitement local
-    return generateStreamingLocal(messages, documentContent, onChunk);
+          return generateStreamingLocal(messages, onChunk, documentContent);
   }
 }
 

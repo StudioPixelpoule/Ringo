@@ -101,7 +101,7 @@ initializeAuthState().catch(error => logger.error("Error:", error));
 supabase.auth.onAuthStateChange((event, session) => {
   logger.info('Auth state change event:', event);
   
-  if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+  if (event === 'SIGNED_OUT') {
     // Clear any cached data and redirect to login
     localStorage.clear();
     sessionStorage.clear();
