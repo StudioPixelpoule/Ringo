@@ -44,11 +44,16 @@ export async function processDocumentSecure(
         throw new Error('Non authentifié');
       }
 
-      // Limiter la taille des fichiers audio à 25MB (limite OpenAI Whisper)
-      const MAX_AUDIO_SIZE = 25 * 1024 * 1024; // 25MB
+      // Limiter la taille des fichiers audio à 200MB
+      const MAX_AUDIO_SIZE = 200 * 1024 * 1024; // 200MB
       if (file.size > MAX_AUDIO_SIZE) {
-        throw new Error(`Le fichier audio est trop volumineux (${Math.round(file.size / 1024 / 1024)}MB). La limite est de 25MB pour la transcription.`);
+        throw new Error(`Le fichier audio est trop volumineux (${Math.round(file.size / 1024 / 1024)}MB). La limite est de 200MB.`);
       }
+
+      // Déterminer quelle Edge Function utiliser
+      const CHUNK_THRESHOLD = 25 * 1024 * 1024; // 25MB
+      const useChunkedProcessing = file.size > CHUNK_THRESHOLD;
+      const functionName = useChunkedProcessing ? 'process-audio-chunked' : 'process-audio';
 
       options.onProgress?.({
         stage: 'processing',
@@ -82,13 +87,15 @@ export async function processDocumentSecure(
       options.onProgress?.({
         stage: 'processing',
         progress: 30,
-        message: 'Transcription en cours sur le serveur...',
+        message: useChunkedProcessing 
+          ? `Transcription d'un fichier volumineux (${Math.round(file.size / 1024 / 1024)}MB) en cours...`
+          : 'Transcription en cours sur le serveur...',
         canCancel: false
       });
 
-      // Envoyer l'URL du fichier à l'Edge Function
+      // Envoyer l'URL du fichier à l'Edge Function appropriée
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-audio`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${functionName}`,
         {
           method: 'POST',
           headers: {
