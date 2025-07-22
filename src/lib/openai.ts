@@ -46,25 +46,48 @@ Guillemets fermants : » Exemple : « Bonjour, comment ça va ? »
 Apostrophes : Utilisez l'apostrophe typographique (') et non l'apostrophe droite ('). L'apostrophe typographique est courbée et s'utilise pour les élisions.
 Exemple : L'apostrophe typographique est préférable à l'apostrophe droite.`;
 
-const COMPARATIVE_ANALYSIS_PROMPT = `Lorsqu'une requête concerne l'analyse comparative de plusieurs documents ou instituts:
+export const COMPARATIVE_ANALYSIS_PROMPT = `
+ANALYSE COMPARATIVE ET CROISEMENT DE DOCUMENTS
+==============================================
 
-1. IMPORTANT: TOUJOURS analyser d'abord chaque document séparément avant de procéder à une comparaison.
+Lorsque plusieurs documents sont fournis dans une conversation, tu dois :
 
-2. Pour chaque document/institut:
-   - Extraire UNIQUEMENT les informations explicitement mentionnées
-   - Si une vision/mission n'est pas clairement identifiée, indiquer "Non mentionnée explicitement"
-   - Ne jamais générer ou inférer une vision non explicite
+1. IDENTIFIER LES RELATIONS
+   - Repérer les points communs entre les documents
+   - Identifier les différences et contradictions
+   - Mettre en évidence les complémentarités
 
-3. Format de réponse pour les comparaisons:
-   - Utiliser un tableau avec des colonnes uniformes
-   - Citer les sources exactes quand elles existent
-   - Utiliser des formulations identiques pour les cas similaires
+2. SYNTHÉTISER L'INFORMATION
+   - Créer une vue d'ensemble cohérente
+   - Éviter les répétitions inutiles
+   - Prioriser les informations les plus pertinentes
 
-4. Avant de finaliser la réponse:
-   - Vérifier la cohérence entre les analyses individuelles et la synthèse
-   - S'assurer que toutes les informations proviennent directement des documents
+3. CROISER LES DONNÉES
+   - Comparer les chiffres et statistiques
+   - Rapprocher les concepts similaires
+   - Identifier les tendances communes
 
-5. Dernière vérification: Ne jamais présenter une interprétation comme un fait explicite du document.`;
+4. RÉPONDRE DE MANIÈRE INTÉGRÉE
+   - Utiliser TOUS les documents pertinents
+   - Citer les sources (nom du document)
+   - Indiquer quand une info vient d'un document spécifique
+
+5. CAPACITÉS SPÉCIALES MULTI-DOCUMENTS
+   - Comparaisons détaillées
+   - Synthèses thématiques
+   - Analyses croisées
+   - Tableaux comparatifs
+   - Résumés consolidés
+
+EXEMPLES DE TÂCHES MULTI-DOCUMENTS :
+- "Compare les données de ces 3 rapports"
+- "Synthétise les points clés de tous les documents"
+- "Trouve les contradictions entre ces textes"
+- "Crée un tableau comparatif des différentes approches"
+- "Quels sont les points communs entre tous ces documents ?"
+
+IMPORTANT : Toujours préciser de quel(s) document(s) provient chaque information importante.
+`;
 
 // Constants for token limits
 const MAX_TOKENS = 128000; // GPT-4o context window
@@ -220,69 +243,46 @@ INSTRUCTIONS: Le texte ci-dessus contient le contenu pertinent du document ${ind
   }).join('\n\n---\n\n');
 }
 
-function prepareMessages(messages: ChatMessage[], documentContent?: string): ChatMessage[] {
-  const preparedMessages: ChatMessage[] = [
-    { role: 'system', content: SYSTEM_PROMPT }
-  ];
+export async function prepareMessages(
+  messages: ChatMessage[],
+  documentContext?: string
+): Promise<ChatMessage[]> {
+  const systemMessages: ChatMessage[] = [{
+    role: 'system',
+    content: SYSTEM_PROMPT
+  }];
 
-  if (documentContent) {
-    // Get the user's latest query
-    const latestQuery = messages[messages.length - 1]?.content || '';
+  // Ajouter le prompt d'analyse comparative si plusieurs documents
+  if (documentContext) {
+    const documentCount = (documentContext.match(/====== DOCUMENT ACTIF/g) || []).length;
     
-    // Check if this is a comparative analysis query
-    if (isComparativeAnalysisQuery(latestQuery)) {
-      preparedMessages.push({
+    if (documentCount > 1) {
+      systemMessages.push({
         role: 'system',
         content: COMPARATIVE_ANALYSIS_PROMPT
       });
     }
-
-    // Instruction d'isolation du contexte
-    preparedMessages.push({
+    
+    // Toujours ajouter l'isolation du contexte
+    systemMessages.push({
       role: 'system',
       content: `🔒 RÈGLE CRITIQUE D'ISOLATION DU CONTEXTE 🔒
+Tu as accès UNIQUEMENT aux ${documentCount} document(s) fournis dans cette conversation.
+INTERDICTION ABSOLUE de faire référence à :
+- Des documents d'autres conversations
+- Des connaissances externes non présentes dans les documents fournis
+- Des informations de ta base de connaissances générale sauf si explicitement demandé
 
-Tu es dans une conversation isolée avec des documents spécifiques. Tu dois ABSOLUMENT :
-
-1. UTILISER UNIQUEMENT les documents fournis dans le contexte actuel
-2. NE JAMAIS faire référence à des documents d'autres conversations
-3. NE JAMAIS mentionner des informations non présentes dans les documents fournis
-4. Si une information demandée n'est pas dans les documents fournis, répondre clairement : "Cette information n'est pas disponible dans les documents fournis."
-
-Chaque document a un ID UNIQUE. Cite toujours l'ID du document quand tu références une information.`
+Si une information n'est pas dans les documents fournis, tu dois clairement dire que tu ne peux pas répondre avec les documents disponibles.`
     });
-
-    preparedMessages.push({
+    
+    systemMessages.push({
       role: 'system',
-      content: `Tu as reçu plusieurs documents à analyser. Tu dois :
-1. Analyser en profondeur le contenu de chaque document
-2. Identifier les points clés et les mettre en évidence
-3. Comparer et contraster les informations entre les documents
-4. Fournir une réponse détaillée et structurée
-5. Citer des passages pertinents pour appuyer ton analyse
-6. TOUJOURS mentionner l'ID du document source entre parenthèses (Document #ID)
-
-Si tu ne trouves pas l'information dans les documents, indique-le clairement.`
-    });
-
-    preparedMessages.push({
-      role: 'system',
-      content: prepareDocumentContent(documentContent.split('---\n\n'), latestQuery)
+      content: documentContext
     });
   }
 
-  // Add recent conversation history for context
-  const historyMessages = messages.slice(-5); // Keep last 5 messages
-  let historyTokens = 0;
-
-  for (const message of historyMessages) {
-    const tokens = estimateTokens(message.content);
-    if (historyTokens + tokens > MAX_HISTORY_TOKENS) break;
-    preparedMessages.push(message);
-    historyTokens += tokens;
-  }
-
-  return preparedMessages;
+  return [...systemMessages, ...messages];
 }
 
 export async function generateChatResponse(messages: ChatMessage[], documentContent?: string): Promise<string> {
@@ -291,7 +291,7 @@ export async function generateChatResponse(messages: ChatMessage[], documentCont
       throw new Error('Aucun contenu disponible pour analyse.');
     }
 
-    const preparedMessages = prepareMessages(messages, documentContent);
+    const preparedMessages = await prepareMessages(messages, documentContent);
     
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o',
@@ -353,7 +353,7 @@ export async function generateChatResponseStreaming(
       throw new Error('Aucun contenu disponible pour analyse.');
     }
 
-    const preparedMessages = prepareMessages(messages, documentContent);
+    const preparedMessages = await prepareMessages(messages, documentContent);
     let fullResponse = '';
 
     const stream = await openai.chat.completions.create({

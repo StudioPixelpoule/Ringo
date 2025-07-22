@@ -404,13 +404,21 @@ NE PAS faire référence à des documents externes ou d'autres conversations.
 Tu as accès UNIQUEMENT aux ${formattedDocuments.length} document(s) suivants pour cette conversation.
 INTERDICTION de faire référence à tout autre document non listé ci-dessous.
 
+${formattedDocuments.length > 1 ? `
+📊 INSTRUCTIONS POUR ANALYSE MULTI-DOCUMENTS :
+- Compare et croise les informations entre TOUS les documents
+- Identifie les points communs et les différences
+- Synthétise les informations complémentaires
+- Cite toujours la source (nom du document) pour chaque information importante
+- Si demandé, crée des tableaux comparatifs ou des synthèses consolidées
+` : ''}
+
 ${documentContext}
 
 =====================================
 🔒 FIN DU CONTEXTE ISOLÉ
 
-RAPPEL: Utilise UNIQUEMENT les documents ci-dessus. Si une information n'est pas présente dans ces documents, indique clairement que tu ne peux pas répondre avec les documents fournis.
-`;
+RAPPEL: Utilise UNIQUEMENT les documents ci-dessus. Si une information n'est pas présente dans ces documents, indique clairement que tu ne peux pas répondre avec les documents fournis.`;
 
       // Create empty assistant message first
       const { data: aiMessage, error: aiError } = await supabase

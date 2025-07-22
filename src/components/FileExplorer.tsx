@@ -344,23 +344,62 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
       setIsProcessing(true);
       const selectedDocs = documents.filter(doc => selectedDocuments.includes(doc.id));
       
+      // Message personnalisé selon le nombre de documents
+      const processingMessage = selectedDocs.length === 1 
+        ? `Import de "${selectedDocs[0].name}"...`
+        : `Import de ${selectedDocs.length} documents...`;
+      
       if (!currentConversation) {
+        // Créer une nouvelle conversation avec le premier document
         await createConversationWithDocument(selectedDocs[0]);
         
+        // Ajouter les autres documents un par un avec un délai pour éviter les problèmes
         for (let i = 1; i < selectedDocs.length; i++) {
           await new Promise(resolve => setTimeout(resolve, 500));
           await linkDocument(selectedDocs[i].id);
         }
+        
+        // Message de succès pour nouvelle conversation
+        const successMessage = selectedDocs.length === 1
+          ? `Document "${selectedDocs[0].name}" ajouté à une nouvelle conversation`
+          : `${selectedDocs.length} documents ajoutés à une nouvelle conversation. Vous pouvez maintenant les analyser ensemble !`;
+          
       } else {
+        // Ajouter tous les documents à la conversation existante
+        let addedCount = 0;
+        const errors: string[] = [];
+        
         for (const doc of selectedDocs) {
-          await new Promise(resolve => setTimeout(resolve, 500));
-          await linkDocument(doc.id);
+          try {
+            await linkDocument(doc.id);
+            addedCount++;
+            await new Promise(resolve => setTimeout(resolve, 300)); // Petit délai entre chaque ajout
+          } catch (error: any) {
+            if (error?.message?.includes('déjà lié')) {
+              errors.push(`"${doc.name}" est déjà dans la conversation`);
+            } else {
+              errors.push(`Erreur avec "${doc.name}"`);
+            }
+          }
+        }
+        
+        // Message de résultat
+        if (addedCount > 0 && errors.length === 0) {
+          const successMessage = addedCount === 1
+            ? `Document ajouté à la conversation`
+            : `${addedCount} documents ajoutés. Analyse croisée disponible !`;
+        } else if (errors.length > 0) {
+          console.warn('Certains documents n\'ont pas pu être ajoutés:', errors);
         }
       }
       
+      // Réinitialiser et fermer
+      setSelectedDocuments([]);
       onClose();
+      
     } catch (error) {
       console.error('Failed to import documents:', error);
+      alert('Erreur lors de l\'import des documents. Veuillez réessayer.');
     } finally {
       setIsProcessing(false);
       setSelectedDocuments([]);
@@ -452,30 +491,96 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
           </div>
 
           {/* Document list (50% or 75% depending on selection) */}
-          <div className={`flex-1 flex flex-col overflow-hidden ${isSearching ? 'w-3/4' : ''}`}>
-            {/* Filters */}
-            <div className="p-4 border-b bg-gray-50">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-medium text-gray-900">
-                  {isSearching 
-                    ? `Résultats de recherche pour "${searchQuery}"`
-                    : selectedFolder 
-                      ? selectedFolder.name 
-                      : 'Tous les documents'
-                  }
-                </h3>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={clearFilters}
-                    className={`px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg ${
-                      searchQuery === '' && dateFilter === 'all' && typeFilter === 'all' 
-                        ? 'opacity-50 cursor-not-allowed' 
-                        : ''
+                      <div className={`flex-1 flex flex-col overflow-hidden ${isSearching ? 'w-3/4' : ''}`}>
+              {/* Filters */}
+              <div className="p-4 border-b bg-gray-50">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    {isSearching 
+                      ? `Résultats de recherche pour "${searchQuery}"`
+                      : selectedFolder 
+                        ? selectedFolder.name 
+                        : 'Tous les documents'
+                    }
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={clearFilters}
+                      className={`px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg ${
+                        searchQuery === '' && dateFilter === 'all' && typeFilter === 'all' 
+                          ? 'opacity-50 cursor-not-allowed' 
+                          : ''
+                      }`}
+                      disabled={searchQuery === '' && dateFilter === 'all' && typeFilter === 'all'}
+                    >
+                      Effacer les filtres
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-2 mb-3">
+                <div className="relative flex-1">
+                  <Search 
+                    size={18} 
+                    className={`absolute left-3 top-1/2 -translate-y-1/2 ${
+                      isSearchFocused ? 'text-[#f15922]' : 'text-gray-400'
                     }`}
-                    disabled={searchQuery === '' && dateFilter === 'all' && typeFilter === 'all'}
-                  >
-                    Effacer les filtres
-                  </button>
+                  />
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onFocus={() => setIsSearchFocused(true)}
+                    onBlur={() => setIsSearchFocused(false)}
+                    onKeyDown={handleSearchKeyDown}
+                    placeholder="Rechercher des documents..."
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg ${
+                      isSearchFocused 
+                        ? 'bg-white ring-2 ring-[#f15922] border-transparent' 
+                        : 'bg-gray-50 hover:bg-gray-100 border-gray-200'
+                    }`}
+                  />
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  {filteredDocuments.length > 0 && (
+                    <button
+                      onClick={handleSelectAll}
+                      className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
+                      title={selectedDocuments.length === filteredDocuments.length ? "Tout désélectionner" : "Tout sélectionner"}
+                    >
+                      {selectedDocuments.length === filteredDocuments.length ? (
+                        <>
+                          <Square size={16} />
+                          <span>Aucun</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckSquare size={16} />
+                          <span>Tous ({filteredDocuments.length})</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+                  
+                  <div className="flex items-center bg-white border border-gray-300 rounded-lg">
+                    <button
+                      onClick={() => setViewMode('grid')}
+                      className={`p-2 ${viewMode === 'grid' ? 'text-[#f15922]' : 'text-gray-400'}`}
+                      title="Vue grille"
+                    >
+                      <Grid size={18} />
+                    </button>
+                    <div className="w-px h-6 bg-gray-300" />
+                    <button
+                      onClick={() => setViewMode('list')}
+                      className={`p-2 ${viewMode === 'list' ? 'text-[#f15922]' : 'text-gray-400'}`}
+                      title="Vue liste"
+                    >
+                      <List size={18} />
+                    </button>
+                  </div>
                 </div>
               </div>
               
