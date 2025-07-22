@@ -75,6 +75,36 @@ export const FileIcon: React.FC<FileIconProps> = ({ type, file, className = '', 
     );
   }
 
+  // Presentation file icon (PowerPoint)
+  if (normalizedType === 'presentation' || ['ppt', 'pptx'].includes(normalizedType) || normalizedType.includes('presentation')) {
+    return (
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="currentColor"
+        className={className}
+      >
+        <path fillRule="evenodd" clipRule="evenodd" d="M9.29289 1.29289C9.48043 1.10536 9.73478 1 10 1H18C19.6569 1 21 2.34315 21 4V8C21 8.55228 20.5523 9 20 9C19.4477 9 19 8.55228 19 8V4C19 3.44772 18.5523 3 18 3H11V8C11 8.55228 10.5523 9 10 9H5V20C5 20.5523 5.44772 21 6 21H9C9.55228 21 10 21.4477 10 22C10 22.5523 9.55228 23 9 23H6C4.34315 23 3 21.6569 3 20V8C3 7.73478 3.10536 7.48043 3.29289 7.29289L9.29289 1.29289ZM6.41421 7H9V4.41421L6.41421 7ZM13 11C12.4477 11 12 11.4477 12 12V20C12 20.5523 12.4477 21 13 21C13.5523 21 14 20.5523 14 20V18H16.5C18.433 18 20 16.433 20 14.5C20 12.567 18.433 11 16.5 11H13ZM14 16V13H16.5C17.3284 13 18 13.6716 18 14.5C18 15.3284 17.3284 16 16.5 16H14Z" />
+      </svg>
+    );
+  }
+
+  // Web file icon
+  if (normalizedType === 'web' || normalizedType === 'url' || normalizedType.includes('url')) {
+    return (
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="currentColor"
+        className={className}
+      >
+        <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2ZM12 20C7.58172 20 4 16.4183 4 12C4 7.58172 7.58172 4 12 4C16.4183 4 20 7.58172 20 12C20 16.4183 16.4183 20 12 20ZM9 8C8.44772 8 8 8.44772 8 9V11C8 11.5523 8.44772 12 9 12C9.55228 12 10 11.5523 10 11V10H10.5C10.7761 10 11 9.77614 11 9.5C11 9.22386 10.7761 9 10.5 9H10V8.5C10 8.22386 10.2239 8 10.5 8H11C11.5523 8 12 7.55228 12 7C12 6.44772 11.5523 6 11 6H10.5C9.11929 6 8 7.11929 8 8.5V8ZM14 8C13.4477 8 13 8.44772 13 9V15C13 15.5523 13.4477 16 14 16C14.5523 16 15 15.5523 15 15V9C15 8.44772 14.5523 8 14 8ZM16 11C16 10.4477 16.4477 10 17 10H18C18.5523 10 19 10.4477 19 11V13C19 13.5523 18.5523 14 18 14H17C16.4477 14 16 13.5523 16 13V11Z" />
+      </svg>
+    );
+  }
+
   // Report icon (HTML)
   if (normalizedType === 'report' || normalizedType === 'html' || normalizedType.includes('text/html')) {
     return (

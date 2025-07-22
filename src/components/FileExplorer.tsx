@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronRight, Search, X, Send, Loader2, CheckSquare, Square, Calendar, Filter, FileText, List, Grid } from 'lucide-react';
+import { ChevronRight, Search, X, Send, Loader2, CheckSquare, Square, Filter, FileText, List, Grid } from 'lucide-react';
 import { useDocumentStore, Document, Folder } from '../lib/documentStore';
 import { useConversationStore } from '../lib/conversationStore';
 import { FileIcon } from './FileIcon';
