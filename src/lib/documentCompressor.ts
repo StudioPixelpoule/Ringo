@@ -74,6 +74,17 @@ function intelligentCompress(
   targetTokens: number,
   options: CompressionOptions
 ): string {
+  // Vérifier et nettoyer le contenu d'entrée
+  if (!content || content.length === 0) {
+    return '';
+  }
+  
+  // Normaliser les caractères et encodage
+  content = content
+    .normalize('NFC') // Normalisation Unicode
+    .replace(/\u00A0/g, ' ') // Remplacer les espaces insécables
+    .replace(/[\u200B-\u200D\uFEFF]/g, ''); // Supprimer les caractères invisibles
+  
   // Diviser le contenu en sections
   const sections = splitIntoSections(content);
   
@@ -102,7 +113,7 @@ function intelligentCompress(
       if (section.score > 1) {
         const remainingTokens = targetTokens - currentTokens;
         const summary = summarizeSection(section.content, remainingTokens);
-        if (summary) {
+        if (summary && summary.trim()) {
           result += `[Résumé] ${summary}\n\n`;
           currentTokens += estimateTokens(summary);
         }
@@ -110,8 +121,15 @@ function intelligentCompress(
     }
   }
 
-  // Ajouter une note de compression
-  result += '\n---\n[Note: Document compressé automatiquement pour optimiser le traitement]';
+  // Nettoyer et vérifier le résultat final
+  result = result
+    .replace(/\n{3,}/g, '\n\n') // Normaliser les sauts de ligne
+    .trim();
+  
+  // Ajouter une note de compression si du contenu a été compressé
+  if (result && scoredSections.some(s => s.tokens > 0 && !result.includes(s.content))) {
+    result += '\n---\n[Note: Document compressé automatiquement pour optimiser le traitement]';
+  }
   
   return result;
 }
@@ -193,10 +211,13 @@ function calculateSectionScore(section: string, priorityContent?: string[]): num
 // Résumer une section
 function summarizeSection(content: string, maxTokens: number): string {
   // Stratégie simple : extraire les phrases clés
+  // Améliorer le découpage des phrases pour éviter la corruption
   const sentences = content
-    .split(/[.!?]+/)
+    .replace(/\r\n/g, '\n') // Normaliser les sauts de ligne
+    .replace(/([.!?])\s*([A-Z])/g, '$1|$2') // Marquer les fins de phrase
+    .split('|')
     .map(s => s.trim())
-    .filter(s => s.length > 20);
+    .filter(s => s.length > 20 && s.length < 500); // Filtrer les phrases trop courtes ou trop longues
   
   if (sentences.length === 0) {
     return '';
@@ -216,14 +237,24 @@ function summarizeSection(content: string, maxTokens: number): string {
   const maxChars = maxTokens * 4; // Approximation
   
   for (const { text } of scoredSentences) {
+    // Vérifier que la phrase est complète et bien formée
+    if (!text.match(/[.!?]$/)) {
+      continue; // Ignorer les phrases incomplètes
+    }
+    
     if (currentTokens + estimateTokens(text) <= maxTokens && 
         summary.length + text.length <= maxChars) {
-      summary += (summary ? '. ' : '') + text;
+      summary += (summary ? ' ' : '') + text;
       currentTokens += estimateTokens(text);
     }
   }
   
-  return summary ? summary + '.' : '';
+  // S'assurer que le résumé se termine correctement
+  if (summary && !summary.match(/[.!?]$/)) {
+    summary += '.';
+  }
+  
+  return summary;
 }
 
 // Calculer l'importance d'une phrase

@@ -102,6 +102,10 @@ export const DirectStreamingText: React.FC<DirectStreamingTextProps> = ({
             chunk += content.slice(index, linkEnd + 1);
             index = linkEnd + 1;
             chunkSize += (linkEnd + 1 - index);
+          } else {
+            chunk += currentChar;
+            index++;
+            chunkSize++;
           }
           markdownState.link = false;
         } else if (currentChar === '#' && (prevChar === '\n' || index === 0)) {
@@ -151,7 +155,7 @@ export const DirectStreamingText: React.FC<DirectStreamingTextProps> = ({
           chunkSize++;
           
           // Capturer les espaces après la ponctuation
-          if (index < characters.length && characters[index] === ' ') {
+          while (index < characters.length && characters[index] === ' ') {
             chunk += characters[index];
             index++;
             chunkSize++;
@@ -161,6 +165,19 @@ export const DirectStreamingText: React.FC<DirectStreamingTextProps> = ({
           chunk += currentChar;
           index++;
           chunkSize++;
+        } else if (currentChar === '\n' || currentChar === '\r') {
+          // Gestion des sauts de ligne
+          shouldPause = true;
+          chunk += currentChar;
+          index++;
+          chunkSize++;
+          
+          // Capturer les sauts de ligne consécutifs
+          while (index < characters.length && (characters[index] === '\n' || characters[index] === '\r')) {
+            chunk += characters[index];
+            index++;
+            chunkSize++;
+          }
         } else if (currentChar === ' ') {
           // Capturer des mots entiers pour plus de fluidité
           chunk += currentChar;
@@ -169,9 +186,10 @@ export const DirectStreamingText: React.FC<DirectStreamingTextProps> = ({
           
           // Essayer de capturer le mot suivant en entier
           let wordBuffer = '';
+          let wordStart = index;
           while (index < characters.length && 
                 characters[index] !== ' ' && 
-                !'.!?,;:)('.includes(characters[index]) &&
+                !'.!?,;:)(\n\r'.includes(characters[index]) &&
                 chunkSize < maxChunkSize) {
             wordBuffer += characters[index];
             index++;
