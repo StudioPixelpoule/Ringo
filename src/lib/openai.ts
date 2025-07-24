@@ -220,9 +220,19 @@ function prepareDocumentContent(documents: string[], query: string): string {
     (MAX_TOKENS - MAX_SYSTEM_TOKENS - MAX_HISTORY_TOKENS) / documents.length
   );
   
+  // Log l'allocation des tokens
+  console.log(`📊 Allocation des tokens pour ${documents.length} documents:`);
+  console.log(`- Tokens totaux disponibles: ${MAX_TOKENS - MAX_SYSTEM_TOKENS - MAX_HISTORY_TOKENS}`);
+  console.log(`- Tokens par document: ${maxTokensPerDoc}`);
+  console.log(`- Caractères approximatifs par document: ${maxTokensPerDoc * 4}`);
+  
   return documents.map((doc, index) => {
     // Find relevant content for each document
     const relevantContent = findRelevantContent(query, doc, maxTokensPerDoc);
+    
+    // Log la taille du contenu extrait
+    const extractedTokens = estimateTokens(relevantContent);
+    console.log(`📄 Document ${index + 1}: ${extractedTokens} tokens extraits`);
     
     // Add document separator and metadata
     return `

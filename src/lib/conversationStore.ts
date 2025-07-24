@@ -1,8 +1,13 @@
 import { create } from 'zustand';
 import { supabase } from './supabase';
-import { generateChatResponseSecure as generateChatResponse, generateChatResponseStreamingSecure as generateChatResponseStreaming } from './secureChat';
+import { 
+  generateChatResponseSecure as generateChatResponse,
+  generateChatResponseStreamingSecure as generateChatResponseStreaming
+} from './secureChat';
 import { Document } from './documentStore';
 import { MAX_DOCUMENTS_PER_CONVERSATION, ERROR_MESSAGES } from './constants';
+import { compressDocuments, extractKeywordsFromQuery } from './documentCompressor';
+import { logger } from './logger';
 
 export interface Conversation {
   id: string;
@@ -395,16 +400,70 @@ NE PAS faire référence à des documents externes ou d'autres conversations.
           })
       );
 
-      const documentContext = formattedDocuments.join('\n\n---\n\n');
+      // Appliquer la compression intelligente si nécessaire
+      let processedDocuments = formattedDocuments;
+      
+      if (formattedDocuments.length > 4) {
+        logger.info(`📊 Compression nécessaire pour ${formattedDocuments.length} documents`);
+        
+        // Extraire le contenu structuré pour la compression
+        const docsForCompression = formattedDocuments.map(docStr => {
+          // Extraire le nom du document
+          const nameMatch = docStr.match(/====== DOCUMENT ACTIF "([^"]+)" ======/);
+          const name = nameMatch ? nameMatch[1] : 'Document sans nom';
+          
+          // Extraire le contenu entre CONTENU: et FIN DU DOCUMENT
+          const contentMatch = docStr.match(/CONTENU:\n([\s\S]*?)\n====== FIN DU DOCUMENT/);
+          const content = contentMatch ? contentMatch[1].trim() : docStr;
+          
+          return { name, content };
+        });
+        
+        // Extraire les mots-clés de la requête pour prioriser le contenu
+        const queryKeywords = extractKeywordsFromQuery(content);
+        
+        // Compresser les documents
+        const compressedDocs = compressDocuments(docsForCompression, formattedDocuments.length);
+        
+        // Reformater les documents compressés
+        processedDocuments = compressedDocs.map((doc, index) => {
+          const docWrapper = conversationDocs?.find(d => d.documents?.name === doc.name);
+          const originalDoc = docWrapper?.documents;
+          
+          const compressionNote = doc.compressed 
+            ? `\n[Note: Document compressé de ${doc.originalTokens} à ${doc.compressedTokens} tokens pour optimiser le traitement]` 
+            : '';
+          
+          return `
+====== DOCUMENT ACTIF "${doc.name}" ======
+TITRE: ${doc.name}
+TYPE: ${originalDoc?.type || 'document'}
+${originalDoc?.description ? `DESCRIPTION: ${originalDoc.description}` : ''}
+${originalDoc?.type === 'audio' && originalDoc?.group_name ? `CONTEXTE AUDIO: ${originalDoc.group_name}` : ''}${compressionNote}
+
+CONTENU:
+${doc.content}
+
+====== FIN DU DOCUMENT "${doc.name}" ======
+
+INSTRUCTION IMPORTANTE: Tu dois UNIQUEMENT utiliser les informations contenues dans ce document et les autres documents de cette conversation.
+NE PAS faire référence à des documents externes ou d'autres conversations.
+`;
+        });
+        
+        logger.info(`✅ Compression terminée: ${compressedDocs.filter(d => d.compressed).length} documents compressés`);
+      }
+
+      const documentContext = processedDocuments.join('\n\n---\n\n');
       
       // Ajouter une instruction claire au début du contexte
       const enhancedDocumentContext = `
 CONTEXTE ISOLÉ - CONVERSATION ${conversation.id}
 =====================================
-Tu as accès UNIQUEMENT aux ${formattedDocuments.length} document(s) suivants pour cette conversation.
+Tu as accès UNIQUEMENT aux ${processedDocuments.length} document(s) suivants pour cette conversation.
 INTERDICTION de faire référence à tout autre document non listé ci-dessous.
 
-${formattedDocuments.length > 1 ? `
+${processedDocuments.length > 1 ? `
 INSTRUCTIONS POUR ANALYSE MULTI-DOCUMENTS :
 - Compare et croise les informations entre TOUS les documents
 - Identifie les points communs et les différences
