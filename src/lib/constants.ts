@@ -20,6 +20,7 @@ export const ERROR_MESSAGES = {
 
 // Feature flags
 export const FEATURE_FLAGS = {
-  USE_HYBRID_MODE: false, // Désactivé par défaut pour tests progressifs
+  USE_HYBRID_MODE: true, // Activé pour tests du mode hybride GPT-4o + Claude
   HYBRID_MODE_DOCUMENT_THRESHOLD: 4, // Utiliser le mode hybride automatiquement au-delà de ce nombre
+  FORCE_OPENAI_FALLBACK: false, // Mode hybride complet avec bascule automatique
 }; 

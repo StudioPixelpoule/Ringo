@@ -5,6 +5,7 @@ import { useDocumentStore, Document, Folder } from '../lib/documentStore';
 import { useConversationStore } from '../lib/conversationStore';
 import { FileIcon } from './FileIcon';
 import { MAX_DOCUMENTS_PER_CONVERSATION } from '../lib/constants';
+import { LimitNotification } from './LimitNotification';
 
 interface FileCardProps {
   document: Document;
@@ -242,6 +243,10 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
   const [typeFilter, setTypeFilter] = useState<'all' | 'pdf' | 'doc' | 'data' | 'audio' | 'web'>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [isSearching, setIsSearching] = useState(false);
+  const [limitNotification, setLimitNotification] = useState<{ isOpen: boolean; maxSelectable: number }>({ 
+    isOpen: false, 
+    maxSelectable: 0 
+  });
   const searchInputRef = useRef<HTMLInputElement>(null);
   
   const {
@@ -335,7 +340,7 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
         const maxSelectableDocuments = MAX_DOCUMENTS_PER_CONVERSATION - currentDocsInConversation;
         
         if (prev.length >= maxSelectableDocuments) {
-          alert(`Vous ne pouvez sélectionner que ${maxSelectableDocuments} document(s) supplémentaire(s). La limite est de ${MAX_DOCUMENTS_PER_CONVERSATION} documents par conversation.`);
+          setLimitNotification({ isOpen: true, maxSelectable: maxSelectableDocuments });
           return prev;
         }
         
@@ -353,7 +358,7 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
       const maxSelectableDocuments = MAX_DOCUMENTS_PER_CONVERSATION - currentDocsInConversation;
       
       if (filteredDocuments.length > maxSelectableDocuments) {
-        alert(`Sélection limitée à ${maxSelectableDocuments} document(s). La limite est de ${MAX_DOCUMENTS_PER_CONVERSATION} documents par conversation.`);
+        setLimitNotification({ isOpen: true, maxSelectable: maxSelectableDocuments });
         setSelectedDocuments(filteredDocuments.slice(0, maxSelectableDocuments).map(doc => doc.id));
     } else {
       setSelectedDocuments(filteredDocuments.map(doc => doc.id));
@@ -742,6 +747,14 @@ export function FileExplorer({ isOpen, onClose }: FileExplorerProps) {
           </AnimatePresence>
         </div>
       </motion.div>
+      
+      {/* Notification de limite */}
+      <LimitNotification
+        isOpen={limitNotification.isOpen}
+        onClose={() => setLimitNotification({ isOpen: false, maxSelectable: 0 })}
+        maxSelectable={limitNotification.maxSelectable}
+        totalLimit={MAX_DOCUMENTS_PER_CONVERSATION}
+      />
     </div>
   );
 }

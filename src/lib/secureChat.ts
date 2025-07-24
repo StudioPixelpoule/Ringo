@@ -114,8 +114,12 @@ export async function generateChatResponseStreamingSecure(
       }
     );
 
+    console.log(`[SecureChat] Response status: ${response.status}`);
+
     if (!response.ok) {
-      throw new Error('Erreur lors de la génération de la réponse');
+      const errorText = await response.text();
+      console.error(`[SecureChat] Error response: ${errorText}`);
+      throw new Error(`Erreur lors de la génération de la réponse: ${response.status}`);
     }
 
     // Log le modèle utilisé si disponible dans les headers
@@ -123,19 +127,30 @@ export async function generateChatResponseStreamingSecure(
     const modelReason = response.headers.get('X-Model-Reason');
     if (useHybrid && modelUsed) {
       console.log(`[SecureChat] Streaming with model: ${modelUsed} - Reason: ${modelReason}`);
+      
+      // Log spécial pour les bascules transparentes
+      if (modelReason?.includes('transparente')) {
+        console.log(`[SecureChat] ✅ Bascule transparente effectuée - L'utilisateur ne voit aucune différence`);
+      }
     }
 
     const reader = response.body?.getReader();
     const decoder = new TextDecoder();
     let fullResponse = '';
+    let chunkCount = 0;
 
     if (!reader) {
       throw new Error('Pas de reader disponible');
     }
 
+    console.log('[SecureChat] Starting to read stream...');
+
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        console.log(`[SecureChat] Stream completed. Total chunks: ${chunkCount}`);
+        break;
+      }
       
       const chunk = decoder.decode(value);
       const lines = chunk.split('\n');
@@ -145,22 +160,39 @@ export async function generateChatResponseStreamingSecure(
           const data = line.slice(6);
           
           if (data === '[DONE]') {
+            console.log('[SecureChat] Received [DONE] signal');
             break;
           }
           
           try {
             const parsed = JSON.parse(data);
+            if (parsed.error) {
+              console.error('[SecureChat] Stream error:', parsed.error);
+              // Si c'est une erreur de surcharge, on continue à essayer de lire le stream
+              // car le backend devrait avoir fait un fallback
+              if (parsed.error.includes && (parsed.error.includes('529') || parsed.error.includes('Overloaded'))) {
+                console.log('[SecureChat] Detected overload error, waiting for fallback...');
+                continue;
+              }
+              // Pour les autres erreurs, on affiche le message
+              onChunk(`\n\n❌ ${parsed.error}\n\n`);
+              fullResponse = parsed.error;
+              break;
+            }
             if (parsed.content) {
+              chunkCount++;
               fullResponse += parsed.content;
               onChunk(parsed.content);
             }
           } catch (e) {
-            // Ignorer les erreurs de parsing
+            console.warn('[SecureChat] Failed to parse chunk:', data, e);
+            // Ignorer les erreurs de parsing non critiques
           }
         }
       }
     }
 
+    console.log(`[SecureChat] Full response length: ${fullResponse.length} characters`);
     return fullResponse;
   } catch (error) {
     console.error('Erreur avec l\'Edge Function, fallback sur traitement local:', error);
