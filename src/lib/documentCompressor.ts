@@ -79,11 +79,15 @@ function intelligentCompress(
     return '';
   }
   
-  // Normaliser les caractères et encodage
+  // Normalisation complète du contenu
   content = content
     .normalize('NFC') // Normalisation Unicode
     .replace(/\u00A0/g, ' ') // Remplacer les espaces insécables
-    .replace(/[\u200B-\u200D\uFEFF]/g, ''); // Supprimer les caractères invisibles
+    .replace(/[\u200B-\u200D\uFEFF]/g, '') // Supprimer les caractères invisibles
+    .replace(/[\u0080-\u009F]/g, '') // Supprimer les caractères de contrôle
+    .replace(/\r\n/g, '\n') // Normaliser les retours à la ligne
+    .replace(/\r/g, '\n')
+    .replace(/\t/g, '  '); // Remplacer les tabs par des espaces
   
   // Diviser le contenu en sections
   const sections = splitIntoSections(content);
@@ -102,33 +106,57 @@ function intelligentCompress(
   let result = '';
   let currentTokens = 0;
   const summaryThreshold = targetTokens * 0.8; // Garder 20% pour les résumés
+  const addedSections = new Set<string>(); // Pour éviter les doublons
 
   for (const section of scoredSections) {
+    // Éviter les doublons
+    const sectionKey = section.content.substring(0, 50);
+    if (addedSections.has(sectionKey)) {
+      continue;
+    }
+    
     if (currentTokens + section.tokens <= summaryThreshold) {
       // Ajouter la section complète
-      result += section.content + '\n\n';
+      if (result) {
+        result += '\n\n';
+      }
+      result += section.content.trim();
       currentTokens += section.tokens;
+      addedSections.add(sectionKey);
     } else if (currentTokens < targetTokens) {
       // Résumer les sections restantes importantes
       if (section.score > 1) {
         const remainingTokens = targetTokens - currentTokens;
-        const summary = summarizeSection(section.content, remainingTokens);
-        if (summary && summary.trim()) {
-          result += `[Résumé] ${summary}\n\n`;
-          currentTokens += estimateTokens(summary);
+        if (remainingTokens > 50) { // Au moins 50 tokens pour un résumé significatif
+          const summary = summarizeSection(section.content, remainingTokens);
+          if (summary && summary.trim().length > 20) {
+            if (result) {
+              result += '\n\n';
+            }
+            result += `📝 Résumé : ${summary}`;
+            currentTokens += estimateTokens(summary) + 10; // +10 pour le préfixe
+            addedSections.add(sectionKey);
+          }
         }
       }
+    }
+    
+    // Arrêter si on approche de la limite
+    if (currentTokens >= targetTokens * 0.95) {
+      break;
     }
   }
 
   // Nettoyer et vérifier le résultat final
   result = result
-    .replace(/\n{3,}/g, '\n\n') // Normaliser les sauts de ligne
+    .replace(/\n{3,}/g, '\n\n') // Normaliser les sauts de ligne multiples
+    .replace(/\s+$/gm, '') // Supprimer les espaces en fin de ligne
     .trim();
   
-  // Ajouter une note de compression si du contenu a été compressé
-  if (result && scoredSections.some(s => s.tokens > 0 && !result.includes(s.content))) {
-    result += '\n---\n[Note: Document compressé automatiquement pour optimiser le traitement]';
+  // Ajouter une note de compression seulement si beaucoup de contenu a été omis
+  const compressionRatio = currentTokens / estimateTokens(content);
+  if (result && compressionRatio < 0.7 && scoredSections.length > addedSections.size + 2) {
+    result += '\n\n---\n💡 Note : Document optimisé pour une analyse efficace. Les sections clés ont été préservées.';
   }
   
   return result;
@@ -210,51 +238,107 @@ function calculateSectionScore(section: string, priorityContent?: string[]): num
 
 // Résumer une section
 function summarizeSection(content: string, maxTokens: number): string {
-  // Stratégie simple : extraire les phrases clés
-  // Améliorer le découpage des phrases pour éviter la corruption
-  const sentences = content
+  // Stratégie améliorée : extraire les phrases complètes sans les tronquer
+  // Normaliser le contenu
+  const normalizedContent = content
     .replace(/\r\n/g, '\n') // Normaliser les sauts de ligne
-    .replace(/([.!?])\s*([A-Z])/g, '$1|$2') // Marquer les fins de phrase
-    .split('|')
-    .map(s => s.trim())
-    .filter(s => s.length > 20 && s.length < 500); // Filtrer les phrases trop courtes ou trop longues
+    .replace(/\s+/g, ' ') // Normaliser les espaces
+    .trim();
+  
+  // Découper en phrases de manière plus robuste
+  const sentenceRegex = /[^.!?]+[.!?]+(?:\s|$)/g;
+  const sentences = normalizedContent.match(sentenceRegex) || [];
   
   if (sentences.length === 0) {
     return '';
   }
   
+  // Nettoyer et filtrer les phrases
+  const cleanSentences = sentences
+    .map(s => s.trim())
+    .filter(s => {
+      // Garder seulement les phrases significatives (entre 15 et 1000 caractères)
+      return s.length >= 15 && s.length <= 1000 && /[a-zA-ZÀ-ÿ]{3,}/.test(s);
+    });
+  
+  if (cleanSentences.length === 0) {
+    return '';
+  }
+  
   // Prioriser les phrases avec des mots-clés importants
-  const scoredSentences = sentences.map(sentence => ({
+  const scoredSentences = cleanSentences.map(sentence => ({
     text: sentence,
     score: calculateSentenceImportance(sentence)
   }));
   
   scoredSentences.sort((a, b) => b.score - a.score);
   
-  // Construire le résumé avec les phrases les plus importantes
+  // Construire le résumé avec les phrases complètes
   let summary = '';
   let currentTokens = 0;
-  const maxChars = maxTokens * 4; // Approximation
+  const safetyMargin = 0.95; // Marge de sécurité pour éviter de dépasser
+  const targetTokens = Math.floor(maxTokens * safetyMargin);
   
   for (const { text } of scoredSentences) {
-    // Vérifier que la phrase est complète et bien formée
-    if (!text.match(/[.!?]$/)) {
-      continue; // Ignorer les phrases incomplètes
-    }
+    const sentenceTokens = estimateTokens(text);
     
-    if (currentTokens + estimateTokens(text) <= maxTokens && 
-        summary.length + text.length <= maxChars) {
-      summary += (summary ? ' ' : '') + text;
-      currentTokens += estimateTokens(text);
+    // Vérifier si on peut ajouter la phrase complète
+    if (currentTokens + sentenceTokens <= targetTokens) {
+      // S'assurer de ne pas avoir de double espaces ou de problèmes de ponctuation
+      if (summary) {
+        summary += ' ';
+      }
+      summary += text;
+      currentTokens += sentenceTokens;
+    } else if (currentTokens < targetTokens * 0.5) {
+      // Si on a très peu de contenu, essayer d'ajouter au moins une partie
+      const remainingTokens = targetTokens - currentTokens;
+      if (remainingTokens > 50) { // Au moins 50 tokens (~200 caractères)
+        // Tronquer la phrase à la fin d'un mot complet
+        const maxChars = remainingTokens * 4;
+        const truncated = truncateAtWordBoundary(text, maxChars);
+        if (truncated && truncated.length > 50) {
+          if (summary) {
+            summary += ' ';
+          }
+          summary += truncated;
+          if (!truncated.match(/[.!?]$/)) {
+            summary += '...';
+          }
+          break;
+        }
+      }
     }
   }
   
-  // S'assurer que le résumé se termine correctement
-  if (summary && !summary.match(/[.!?]$/)) {
-    summary += '.';
+  return summary.trim();
+}
+
+// Fonction helper pour tronquer à la limite d'un mot
+function truncateAtWordBoundary(text: string, maxLength: number): string {
+  if (text.length <= maxLength) {
+    return text;
   }
   
-  return summary;
+  // Trouver la dernière position d'espace avant la limite
+  let truncatePos = maxLength;
+  while (truncatePos > 0 && text[truncatePos] !== ' ') {
+    truncatePos--;
+  }
+  
+  // Si on n'a pas trouvé d'espace, chercher d'autres séparateurs
+  if (truncatePos === 0) {
+    truncatePos = maxLength;
+    const separators = [',', ';', ':', '-', '(', ')'];
+    for (let i = maxLength; i > maxLength * 0.7; i--) {
+      if (separators.includes(text[i])) {
+        truncatePos = i + 1;
+        break;
+      }
+    }
+  }
+  
+  return text.substring(0, truncatePos).trim();
 }
 
 // Calculer l'importance d'une phrase

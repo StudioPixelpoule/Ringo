@@ -20,7 +20,7 @@ export function AddUserModal() {
     e.preventDefault();
     if (!email.trim()) return;
 
-    await inviteUser(email.trim(), role);
+    await inviteUser({ email: email.trim(), role });
     if (!error) {
       setEmail('');
       setRole('user');

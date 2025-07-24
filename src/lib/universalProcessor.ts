@@ -420,8 +420,7 @@ Le fichier a été enregistré et vous pouvez poser des questions générales à
         fileName: file.name,
         fileType: file.type,
         language: 'fr',
-        pageCount: 0,
-        error: error instanceof Error ? error.message : 'Erreur inconnue'
+        pageCount: 0
       },
       confidence: 0.3,
       processingDate: new Date().toISOString()
@@ -693,7 +692,16 @@ export async function processDocument(
               file, 
               options.openaiApiKey, 
               undefined, // audioDescription
-              options.onProgress, 
+              options.onProgress ? (progress) => {
+                // Adapter le stage pour correspondre au type local
+                const mappedProgress: ProcessingProgress = {
+                  stage: progress.stage === 'upload' || progress.stage === 'extraction' ? 'processing' : progress.stage as 'processing' | 'complete',
+                  progress: progress.progress,
+                  message: progress.message,
+                  canCancel: progress.canCancel || false
+                };
+                options.onProgress!(mappedProgress);
+              } : undefined,
               options.signal
             );
             result = {

@@ -26,8 +26,8 @@ const MODEL_CONFIG = {
 // Seuils de sélection
 const SELECTION_THRESHOLDS = {
   tokenLimit: 100000,      // Basculer vers Claude au-delà
-  documentLimit: 4,        // Basculer vers Claude au-delà de 4 documents (aligné avec le frontend)
-  complexityKeywords: ['comparer', 'comparaison', 'analyse approfondie', 'synthèse complexe'],
+  documentLimit: 6,        // Basculer vers Claude au-delà de 6 documents (aligné avec le frontend)
+  complexityKeywords: ['comparer', 'comparaison', 'analyse approfondie', 'synthèse complexe', 'analyse détaillée', 'synthétiser'],
 };
 
 // Flag temporaire pour forcer OpenAI (peut être mis à jour dynamiquement)

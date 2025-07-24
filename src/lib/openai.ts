@@ -112,21 +112,66 @@ function truncateToTokenLimit(text: string, maxTokens: number): string {
     return text;
   }
 
-  // Split into paragraphs and accumulate until limit
-  const paragraphs = text.split('\n\n');
+  // Marge de sécurité pour éviter de dépasser
+  const targetTokens = Math.floor(maxTokens * 0.95);
+  
+  // D'abord essayer de couper par paragraphes
+  const paragraphs = text.split(/\n\n+/);
   let result = '';
   let currentTokens = 0;
 
   for (const paragraph of paragraphs) {
     const paragraphTokens = estimateTokens(paragraph);
-    if (currentTokens + paragraphTokens > maxTokens) {
-      break;
+    
+    if (currentTokens + paragraphTokens <= targetTokens) {
+      result += (result ? '\n\n' : '') + paragraph;
+      currentTokens += paragraphTokens;
+    } else if (currentTokens < targetTokens * 0.7) {
+      // Si on a de la place, essayer d'ajouter une partie du paragraphe
+      const remainingTokens = targetTokens - currentTokens;
+      
+      if (remainingTokens > 100) { // Au moins 100 tokens (~400 caractères)
+        // Découper le paragraphe en phrases
+        const sentences = paragraph.match(/[^.!?]+[.!?]+(?:\s|$)/g) || [];
+        let partialParagraph = '';
+        let partialTokens = 0;
+        
+        for (const sentence of sentences) {
+          const sentenceTokens = estimateTokens(sentence);
+          if (partialTokens + sentenceTokens <= remainingTokens) {
+            partialParagraph += sentence;
+            partialTokens += sentenceTokens;
+          } else {
+            break;
+          }
+        }
+        
+        if (partialParagraph) {
+          result += (result ? '\n\n' : '') + partialParagraph.trim();
+          currentTokens += partialTokens;
+        }
+      }
+      break; // On a atteint la limite
+    } else {
+      break; // Pas assez de place pour ce paragraphe
     }
-    result += (result ? '\n\n' : '') + paragraph;
-    currentTokens += paragraphTokens;
   }
 
-  return result + '\n\n[Texte tronqué pour respecter la limite de tokens]';
+  // S'assurer que le texte ne se termine pas au milieu d'une phrase
+  if (result && !result.match(/[.!?]\s*$/)) {
+    // Trouver la dernière phrase complète
+    const lastSentenceEnd = Math.max(
+      result.lastIndexOf('. '),
+      result.lastIndexOf('! '),
+      result.lastIndexOf('? ')
+    );
+    
+    if (lastSentenceEnd > result.length * 0.5) {
+      result = result.substring(0, lastSentenceEnd + 1).trim();
+    }
+  }
+
+  return result + '\n\n[Note: Contenu réduit pour optimiser le traitement. La réponse se base sur les sections les plus pertinentes.]';
 }
 
 // Function to detect if a query is asking for comparative analysis

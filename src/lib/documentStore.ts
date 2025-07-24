@@ -145,11 +145,15 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       // Process document content
       const result = await processDocument(file, {
         onProgress: (progress) => {
-          options?.onProgress?.(progress);
-          set({ processingStatus: {
-            ...progress,
-            isProcessing: true
-          }});
+          const status: ProcessingStatus = {
+            isProcessing: true,
+            progress: progress.progress,
+            stage: progress.stage === 'complete' ? 'complete' : 'processing',
+            message: progress.message,
+            canCancel: progress.canCancel
+          };
+          options?.onProgress?.(status);
+          set({ processingStatus: status });
         },
         signal: options?.signal
       });

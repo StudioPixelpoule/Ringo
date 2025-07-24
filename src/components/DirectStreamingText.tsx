@@ -204,10 +204,53 @@ export const DirectStreamingText: React.FC<DirectStreamingTextProps> = ({
             shouldPause = Math.random() > 0.6; // 40% de chance de pause après un mot long
           }
         } else {
-          // Regular character
+          // Regular character processing
           chunk += currentChar;
           index++;
           chunkSize++;
+          
+          // Ensure we don't break in the middle of a word
+          if (chunkSize >= maxChunkSize) { // Changed from targetSize to maxChunkSize
+            // Look ahead to find word boundary
+            let lookAhead = index;
+            let foundBoundary = false;
+            
+            // Check if we're in the middle of a word
+            if (index < characters.length && /[a-zA-ZÀ-ÿ0-9_\-]/.test(characters[index])) {
+              // We're in the middle of a word, continue until we find a boundary
+              while (lookAhead < characters.length && lookAhead < index + 20) {
+                const nextChar = characters[lookAhead];
+                if (!/[a-zA-ZÀ-ÿ0-9_\-]/.test(nextChar)) {
+                  // Found word boundary
+                  foundBoundary = true;
+                  break;
+                }
+                lookAhead++;
+              }
+              
+              if (foundBoundary && lookAhead - index < 20) {
+                // Complete the word
+                while (index < lookAhead) {
+                  chunk += characters[index];
+                  index++;
+                  chunkSize++;
+                }
+              }
+            }
+            shouldPause = true;
+          }
+        }
+        
+        // Natural pauses
+        if (!shouldPause) {
+          // Pause at punctuation for natural flow
+          if ('.!?:;,'.includes(currentChar)) {
+            shouldPause = true;
+          }
+          // Pause after newlines
+          else if (currentChar === '\n') {
+            shouldPause = true;
+          }
         }
       }
       

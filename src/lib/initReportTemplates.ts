@@ -1,12 +1,14 @@
-import { createReportTemplate } from './reportTemplateService';
+import { createReportTemplate, ReportTemplate } from './reportTemplateService';
 
-export async function initDefaultTemplates() {
-  const defaultTemplates = [
+export async function initializeReportTemplates() {
+  console.log('🚀 Initialisation des modèles de rapports...');
+  
+  const defaultTemplates: Array<Omit<ReportTemplate, 'id' | 'created_at' | 'updated_at'>> = [
     {
       name: 'Résumé Exécutif',
       description: 'Synthèse concise des points clés et conclusions principales',
       icon: 'FileText',
-      type: 'summary',
+      type: 'summary' as const,
       prompt: `Génère un résumé exécutif à partir des documents fournis.
 
 OBJECTIF : Fournir une synthèse claire et concise des informations essentielles.
@@ -46,7 +48,7 @@ STRUCTURE ATTENDUE :
       name: 'Analyse Approfondie',
       description: 'Analyse détaillée avec sections et interprétations',
       icon: 'FileSearch',
-      type: 'analysis',
+      type: 'analysis' as const,
       prompt: `Réalise une analyse approfondie des documents fournis.
 
 OBJECTIF : Fournir une analyse détaillée et structurée du contenu.
@@ -95,7 +97,7 @@ STRUCTURE ATTENDUE :
       name: 'Comparaison de Documents',
       description: 'Mise en parallèle des similarités et différences',
       icon: 'FileSpreadsheet',
-      type: 'comparison',
+      type: 'comparison' as const,
       prompt: `Compare et contraste les documents fournis.
 
 OBJECTIF : Identifier et analyser les similitudes et différences entre les documents.
@@ -147,7 +149,7 @@ STRUCTURE ATTENDUE :
       name: 'Extraction de Données',
       description: 'Exportation des données structurées en format tabulaire',
       icon: 'BarChart',
-      type: 'extraction',
+      type: 'extraction' as const,
       prompt: `Extrais et structure les données clés des documents fournis.
 
 OBJECTIF : Identifier et organiser les données importantes en format structuré.

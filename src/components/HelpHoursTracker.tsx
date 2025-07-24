@@ -79,11 +79,12 @@ export function HelpHoursTracker({ userId, totalHours = 40 }: HelpHoursTrackerPr
       <span>
         <strong className="text-[#dba747]">{remainingHours}</strong> heures d'assistance disponibles
       </span>
-      <HelpCircle 
-        size={14} 
+      <span 
         className="text-gray-400 cursor-help"
         title={`Vous disposez de ${totalHours} heures d'assistance incluses dans votre forfait.`}
-      />
+      >
+        <HelpCircle size={14} />
+      </span>
     </div>
   );
 }
