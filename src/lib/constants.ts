@@ -16,4 +16,10 @@ export const ERROR_MESSAGES = {
   TOKEN_LIMIT: 'Désolé, le contexte des documents est trop volumineux. Essayez avec moins de documents ou des questions plus spécifiques.',
   RATE_LIMIT: 'Désolé, trop de requêtes ont été effectuées. Veuillez patienter quelques instants avant de réessayer.',
   GENERIC_ERROR: 'Désolé, une erreur s\'est produite lors de la génération de la réponse.'
+};
+
+// Feature flags
+export const FEATURE_FLAGS = {
+  USE_HYBRID_MODE: false, // Désactivé par défaut pour tests progressifs
+  HYBRID_MODE_DOCUMENT_THRESHOLD: 4, // Utiliser le mode hybride automatiquement au-delà de ce nombre
 }; 
