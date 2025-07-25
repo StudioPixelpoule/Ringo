@@ -21,6 +21,8 @@ import { WebContentImporter } from '../components/WebContentImporter';
 import { ErrorLogViewer } from '../components/ErrorLogViewer';
 import { HelpRequestManager } from '../components/HelpRequestManager';
 import { HelpRequestButton } from '../components/HelpRequestButton';
+import { InactivityWarning } from '../components/InactivityWarning';
+import { useInactivityTimeout } from '../hooks/useInactivityTimeout';
 import { supabase, getUserRole } from '../lib/supabase';
 import { useUserStore } from '../lib/store';
 import { useDocumentStore } from '../lib/documentStore';
@@ -60,6 +62,9 @@ export function Chat({ session, userRole: propUserRole, authInitialized }: ChatP
     fetchConversations,
     unlinkDocument,
   } = useConversationStore();
+
+  // Hook pour la déconnexion automatique
+  const { showWarning, remainingTime, continueSession } = useInactivityTimeout();
 
   // Get the last assistant message index
   const lastAssistantMessageIndex = messages
@@ -461,8 +466,8 @@ export function Chat({ session, userRole: propUserRole, authInitialized }: ChatP
                   <button
                     type="submit"
                     disabled={!input.trim() || isTyping || !currentConversation}
-                    className="send-button absolute right-3 top-1/2 -translate-y-1/2"
-                    aria-label="Send message"
+                    className="send-button"
+                    aria-label="Envoyer le message"
                   >
                     <ArrowRight 
                       size={20} 
@@ -529,6 +534,15 @@ export function Chat({ session, userRole: propUserRole, authInitialized }: ChatP
         <ErrorLogViewer
           isOpen={isErrorLogOpen}
           onClose={() => setErrorLogOpen(false)}
+        />
+      )}
+      
+      {/* Avertissement d'inactivité */}
+      {showWarning && (
+        <InactivityWarning
+          remainingTime={remainingTime}
+          onContinue={continueSession}
+          onClose={continueSession}
         />
       )}
     </div>

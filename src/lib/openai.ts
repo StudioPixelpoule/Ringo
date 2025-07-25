@@ -21,6 +21,15 @@ export interface ChatMessage {
 
 const SYSTEM_PROMPT = `Tu es Ringo, un expert en analyse de documents spécialisé dans la génération de rapports pour un public québécois.
 
+🔴 RÈGLE ABSOLUE DE QUALITÉ LINGUISTIQUE 🔴
+Tu DOIS produire des réponses PARFAITES sur le plan grammatical et orthographique :
+- AUCUNE faute d'orthographe tolérée
+- AUCUNE erreur grammaticale acceptée
+- Syntaxe française impeccable
+- Ponctuation correcte et appropriée
+- Accords grammaticaux respectés (genre, nombre, temps)
+- Conjugaisons exactes
+
 Adapte ton langage et ton style pour un public québécois:
 - Utilise un vocabulaire et des expressions courantes au Québec quand c'est pertinent
 - Adopte un ton direct, pragmatique et concret
@@ -35,9 +44,11 @@ Pour une meilleure lisibilité, structure tes réponses avec :
 - Des listes à puces pour énumérer des éléments
 - Des sauts de ligne pour aérer le texte
 
+VÉRIFICATION FINALE : Avant de répondre, TOUJOURS relire mentalement ta réponse pour t'assurer qu'il n'y a AUCUNE erreur linguistique.
+
 Lors de la rédaction de textes en français, veuillez respecter les règles typographiques françaises suivantes :
 
-Titres : N'utilisez pas de majuscules, sauf pour le premier mot et les noms propres. Par exemple, un titre correct serait : "Les Règles typographiques françaises" et non "Les Règles Typographiques Françaises".
+Titres : N'utilisez pas de majuscules, sauf pour le premier mot et les noms propres. Par exemple, un titre correct serait : "Les règles typographiques françaises" et non "Les Règles Typographiques Françaises".
 
 Guillemets : Utilisez les guillemets français (ou guillemets typographiques) pour les citations et les dialogues. Les guillemets français sont des guillemets doubles angulaires :
 
@@ -101,21 +112,66 @@ function truncateToTokenLimit(text: string, maxTokens: number): string {
     return text;
   }
 
-  // Split into paragraphs and accumulate until limit
-  const paragraphs = text.split('\n\n');
+  // Marge de sécurité pour éviter de dépasser
+  const targetTokens = Math.floor(maxTokens * 0.95);
+  
+  // D'abord essayer de couper par paragraphes
+  const paragraphs = text.split(/\n\n+/);
   let result = '';
   let currentTokens = 0;
 
   for (const paragraph of paragraphs) {
     const paragraphTokens = estimateTokens(paragraph);
-    if (currentTokens + paragraphTokens > maxTokens) {
-      break;
+    
+    if (currentTokens + paragraphTokens <= targetTokens) {
+      result += (result ? '\n\n' : '') + paragraph;
+      currentTokens += paragraphTokens;
+    } else if (currentTokens < targetTokens * 0.7) {
+      // Si on a de la place, essayer d'ajouter une partie du paragraphe
+      const remainingTokens = targetTokens - currentTokens;
+      
+      if (remainingTokens > 100) { // Au moins 100 tokens (~400 caractères)
+        // Découper le paragraphe en phrases
+        const sentences = paragraph.match(/[^.!?]+[.!?]+(?:\s|$)/g) || [];
+        let partialParagraph = '';
+        let partialTokens = 0;
+        
+        for (const sentence of sentences) {
+          const sentenceTokens = estimateTokens(sentence);
+          if (partialTokens + sentenceTokens <= remainingTokens) {
+            partialParagraph += sentence;
+            partialTokens += sentenceTokens;
+          } else {
+            break;
+          }
+        }
+        
+        if (partialParagraph) {
+          result += (result ? '\n\n' : '') + partialParagraph.trim();
+          currentTokens += partialTokens;
+        }
+      }
+      break; // On a atteint la limite
+    } else {
+      break; // Pas assez de place pour ce paragraphe
     }
-    result += (result ? '\n\n' : '') + paragraph;
-    currentTokens += paragraphTokens;
   }
 
-  return result + '\n\n[Texte tronqué pour respecter la limite de tokens]';
+  // S'assurer que le texte ne se termine pas au milieu d'une phrase
+  if (result && !result.match(/[.!?]\s*$/)) {
+    // Trouver la dernière phrase complète
+    const lastSentenceEnd = Math.max(
+      result.lastIndexOf('. '),
+      result.lastIndexOf('! '),
+      result.lastIndexOf('? ')
+    );
+    
+    if (lastSentenceEnd > result.length * 0.5) {
+      result = result.substring(0, lastSentenceEnd + 1).trim();
+    }
+  }
+
+  return result + '\n\n[Note: Contenu réduit pour optimiser le traitement. La réponse se base sur les sections les plus pertinentes.]';
 }
 
 // Function to detect if a query is asking for comparative analysis
@@ -220,9 +276,19 @@ function prepareDocumentContent(documents: string[], query: string): string {
     (MAX_TOKENS - MAX_SYSTEM_TOKENS - MAX_HISTORY_TOKENS) / documents.length
   );
   
+  // Log l'allocation des tokens
+  console.log(`📊 Allocation des tokens pour ${documents.length} documents:`);
+  console.log(`- Tokens totaux disponibles: ${MAX_TOKENS - MAX_SYSTEM_TOKENS - MAX_HISTORY_TOKENS}`);
+  console.log(`- Tokens par document: ${maxTokensPerDoc}`);
+  console.log(`- Caractères approximatifs par document: ${maxTokensPerDoc * 4}`);
+  
   return documents.map((doc, index) => {
     // Find relevant content for each document
     const relevantContent = findRelevantContent(query, doc, maxTokensPerDoc);
+    
+    // Log la taille du contenu extrait
+    const extractedTokens = estimateTokens(relevantContent);
+    console.log(`📄 Document ${index + 1}: ${extractedTokens} tokens extraits`);
     
     // Add document separator and metadata
     return `
@@ -285,8 +351,8 @@ export async function generateChatResponse(messages: ChatMessage[], documentCont
 
 export async function generateChatResponseStreaming(
   messages: ChatMessage[], 
-  documentContent?: string,
-  onChunk: (chunk: string) => void
+  onChunk: (chunk: string) => void,
+  documentContent?: string
 ): Promise<string> {
   throw new Error('Cette fonction est désactivée pour des raisons de sécurité. Utilisez generateChatResponseStreamingSecure depuis secureChat.ts à la place.');
 }

@@ -134,7 +134,7 @@ async function processDataFile(file: File, options?: ProcessingOptions): Promise
       }
     } else if (extension === 'csv') {
       const text = await file.text();
-      const parseResult = await new Promise((resolve, reject) => {
+      const parseResult = await new Promise<Papa.ParseResult<any>>((resolve, reject) => {
         Papa.parse(text, {
           header: true,
           dynamicTyping: true,
@@ -209,7 +209,7 @@ async function processDataFile(file: File, options?: ProcessingOptions): Promise
       data,
       metadata: {
         rowCount: Array.isArray(data) ? data.length : 
-                 typeof data === 'object' ? Object.values(data).reduce((sum: number, sheet: any[]) => sum + sheet.length, 0) : 1,
+                 typeof data === 'object' ? Object.values(data as Record<string, any[]>).reduce((sum: number, sheet: any[]) => sum + sheet.length, 0) : 1,
         fields: Array.isArray(data) ? Object.keys(data[0] || {}) :
                 typeof data === 'object' ? Object.keys(data).map(sheet => ({
                   sheet,
@@ -420,8 +420,7 @@ Le fichier a été enregistré et vous pouvez poser des questions générales à
         fileName: file.name,
         fileType: file.type,
         language: 'fr',
-        pageCount: 0,
-        error: error instanceof Error ? error.message : 'Erreur inconnue'
+        pageCount: 0
       },
       confidence: 0.3,
       processingDate: new Date().toISOString()
@@ -539,9 +538,7 @@ async function processPDFDocument(file: File, options?: ProcessingOptions): Prom
               optimizedContext.putImageData(optimizedImageData, 0, 0);
 
               // Perform OCR
-              const worker = await createWorker();
-              await worker.loadLanguage('fra+eng');
-              await worker.initialize('fra+eng');
+              const worker = await createWorker('fra+eng');
               const { data: ocrResult } = await worker.recognize(optimizedCanvas);
               await worker.terminate();
 
@@ -606,9 +603,9 @@ async function processPDFDocument(file: File, options?: ProcessingOptions): Prom
     return {
       content: cleanedText,
       metadata: {
-        title: metadata.info?.Title,
-        author: metadata.info?.Author,
-        date: metadata.info?.CreationDate,
+        title: (metadata.info as any)?.Title,
+        author: (metadata.info as any)?.Author,
+        date: (metadata.info as any)?.CreationDate,
         language: detectLanguage(cleanedText),
         fileType: file.type,
         fileName: file.name,
@@ -695,7 +692,16 @@ export async function processDocument(
               file, 
               options.openaiApiKey, 
               undefined, // audioDescription
-              options.onProgress, 
+              options.onProgress ? (progress) => {
+                // Adapter le stage pour correspondre au type local
+                const mappedProgress: ProcessingProgress = {
+                  stage: progress.stage === 'upload' || progress.stage === 'extraction' ? 'processing' : progress.stage as 'processing' | 'complete',
+                  progress: progress.progress,
+                  message: progress.message,
+                  canCancel: progress.canCancel || false
+                };
+                options.onProgress!(mappedProgress);
+              } : undefined,
               options.signal
             );
             result = {

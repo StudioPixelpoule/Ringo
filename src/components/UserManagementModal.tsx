@@ -137,7 +137,7 @@ export function UserManagementModal() {
 
   const saveName = async (userId: string) => {
     try {
-      await updateUser(userId, { name: editingNameValue.trim() || null });
+      await updateUser(userId, { name: editingNameValue.trim() || undefined });
       setEditingNameId(null);
       setEditingNameValue('');
     } catch (error) {

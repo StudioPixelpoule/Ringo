@@ -5,6 +5,7 @@ import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { formatMarkdownContent } from '../lib/markdownFormatter';
 import './EnhancedMarkdown.css';
 
 interface EnhancedMarkdownProps {
@@ -13,6 +14,11 @@ interface EnhancedMarkdownProps {
 }
 
 export const EnhancedMarkdown: React.FC<EnhancedMarkdownProps> = ({ content, className = '' }) => {
+  // Nettoyer et formater le contenu avant de l'afficher
+  const formattedContent = React.useMemo(() => {
+    return formatMarkdownContent(content);
+  }, [content]);
+
   return (
     <div className={`enhanced-markdown ${className}`}>
       <ReactMarkdown
@@ -46,29 +52,27 @@ export const EnhancedMarkdown: React.FC<EnhancedMarkdownProps> = ({ content, cla
               {alt && <span className="markdown-img-caption">{alt}</span>}
             </div>
           ),
-          code: ({ node, inline, className, children, ...props }) => {
-            const match = /language-(\w+)/.exec(className || '');
-            return !inline && match ? (
+          code: ({ node, className, children, ...props }: any) => {
+            const match = /language-(\w+)/.exec(className || '')
+            const isInline = !match;
+            return isInline ? (
+              <code className="inline-code" {...props}>
+                {children}
+              </code>
+            ) : (
               <SyntaxHighlighter
-                style={atomDark}
+                style={atomDark as any}
                 language={match[1]}
                 PreTag="div"
-                className="markdown-code-block"
-                showLineNumbers={true}
-                wrapLines={true}
-                {...props}
+                className="syntax-highlighter"
               >
                 {String(children).replace(/\n$/, '')}
               </SyntaxHighlighter>
-            ) : (
-              <code className={`markdown-code ${className || ''}`} {...props}>
-                {children}
-              </code>
             );
           }
         }}
       >
-        {content}
+        {formattedContent}
       </ReactMarkdown>
     </div>
   );

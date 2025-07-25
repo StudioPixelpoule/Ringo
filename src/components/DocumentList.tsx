@@ -70,11 +70,17 @@ export function DocumentList({ documents, onRemove }: DocumentListProps) {
           <div className="mt-3 space-y-2">
             {documents.length >= MAX_DOCUMENTS_PER_CONVERSATION && (
               <div className="text-xs text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 mb-3">
-                <strong>Limite atteinte :</strong> Maximum {MAX_DOCUMENTS_PER_CONVERSATION} documents par conversation pour optimiser les performances.
+                <strong>Limite atteinte :</strong> Maximum {MAX_DOCUMENTS_PER_CONVERSATION} documents par conversation.
               </div>
             )}
             
-            {documents.length > 1 && documents.length < MAX_DOCUMENTS_PER_CONVERSATION && (
+            {documents.length > 6 && documents.length < MAX_DOCUMENTS_PER_CONVERSATION && (
+              <div className="text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 mb-3">
+                <strong>Mode avancé activé :</strong> Avec {documents.length} documents, j'utilise mes capacités étendues pour une analyse approfondie sans compression.
+              </div>
+            )}
+            
+            {documents.length > 1 && documents.length <= 6 && (
               <div className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 mb-3">
                 <strong>Astuce :</strong> Demandez-moi de comparer, synthétiser ou croiser les informations entre ces documents.
               </div>

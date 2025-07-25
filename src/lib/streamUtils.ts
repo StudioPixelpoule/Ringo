@@ -33,7 +33,7 @@ export async function validateAudioChunk(chunk: Blob): Promise<boolean> {
     }
     
     // For larger chunks, try to decode the audio
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
     const arrayBuffer = await chunk.arrayBuffer();
     
     try {

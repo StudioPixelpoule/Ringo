@@ -50,15 +50,11 @@ export function ReportGeneratorWidget() {
     
     setIsGenerating(true);
     try {
-      const blob = await generateReport(documents, selectedTemplate);
+      const content = await generateReport(documents, selectedTemplate);
+      const blob = new Blob([content], { type: 'text/markdown' });
       setReportBlob(blob);
-      
-      const reader = new FileReader();
-      reader.onload = () => {
-        setReportContent(reader.result as string);
-        setShowSuccessMessage(true);
-      };
-      reader.readAsText(blob);
+      setReportContent(content);
+      setShowSuccessMessage(true);
     } catch (error) {
       console.error('Error generating report:', error);
     } finally {

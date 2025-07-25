@@ -119,13 +119,16 @@ export async function uploadFileInChunks(
     const fileHash = await calculateFileHash(file);
 
     // Check if file already exists in cache
-    const { data: existingFile, error: cacheError } = await retryWithBackoff(
-      () => supabase
-        .from('document_cache')
-        .select('*')
-        .eq('hash', fileHash)
-        .limit(1)
-        .maybeSingle(),
+    const { data: existingFile, error: cacheError } = await retryWithBackoff<any>(
+      async () => {
+        const result = await supabase
+          .from('document_cache')
+          .select('*')
+          .eq('hash', fileHash)
+          .limit(1)
+          .maybeSingle();
+        return result;
+      },
       3,
       1000,
       'cache check'

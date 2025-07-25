@@ -8,6 +8,7 @@ import { FileIcon } from './FileIcon';
 import { logError } from '../lib/errorLogger';
 import { uploadFileInChunks, MAX_DIRECT_UPLOAD_SIZE } from '../lib/uploadUtils';
 import { processDocument, ProcessingProgress } from '../lib/secureProcessor'; // Utiliser la version sécurisée
+import { MAX_DOCUMENTS_PER_CONVERSATION } from '../lib/constants';
 
 interface ProcessingStatus {
   isProcessing: boolean;
@@ -193,6 +194,7 @@ export function DocumentImportModal() {
   const [description, setDescription] = useState('');
   const [audioDescription, setAudioDescription] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]); // State to hold multiple files
   const [processingStatus, setProcessingStatus] = useState<ProcessingStatus>({
     isProcessing: false,
     progress: 0,
@@ -257,15 +259,24 @@ export function DocumentImportModal() {
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0 && !processingStatus.isProcessing) {
+      // Prendre le premier fichier pour l'affichage
       const file = acceptedFiles[0];
       setSelectedFile(file);
+
+      // Afficher le nombre de fichiers si > 1
+      const message = acceptedFiles.length > 1 
+        ? `${acceptedFiles.length} fichiers sélectionnés` 
+        : '';
 
       setProcessingStatus({
         isProcessing: false,
         progress: 0,
         stage: 'preparation',
-        message: ''
+        message: message
       });
+      
+      // Stocker tous les fichiers pour traitement ultérieur
+      setSelectedFiles(acceptedFiles);
     }
   }, [processingStatus.isProcessing]);
 
@@ -293,7 +304,8 @@ export function DocumentImportModal() {
       'audio/m4a': ['.m4a'],
       'text/html': ['.html']
     },
-    multiple: false,
+    multiple: true,
+    maxFiles: MAX_DOCUMENTS_PER_CONVERSATION,
     disabled: processingStatus.isProcessing
   });
 

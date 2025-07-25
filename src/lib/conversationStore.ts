@@ -1,8 +1,19 @@
 import { create } from 'zustand';
 import { supabase } from './supabase';
-import { generateChatResponseSecure as generateChatResponse, generateChatResponseStreamingSecure as generateChatResponseStreaming } from './secureChat';
+import { generateChatResponseStreamingSecure } from './secureChat';
+import { processDocument } from './universalProcessor';
 import { Document } from './documentStore';
-import { MAX_DOCUMENTS_PER_CONVERSATION, ERROR_MESSAGES } from './constants';
+import { logger } from './logger';
+import { MAX_DOCUMENTS_PER_CONVERSATION, ERROR_MESSAGES, FEATURE_FLAGS, MAX_TOKENS, MAX_TOKENS_CLAUDE } from './constants';
+import { compressDocuments, extractKeywordsFromQuery } from './documentCompressor';
+
+// Fonction pour estimer le nombre total de tokens dans les documents
+const estimateTotalTokens = (documents: string[]): number => {
+  return documents.reduce((total, doc) => {
+    // Estimation approximative : 1 token ≈ 4 caractères
+    return total + Math.ceil(doc.length / 4);
+  }, 0);
+};
 
 export interface Conversation {
   id: string;
@@ -204,8 +215,8 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
         conversations: conversations.map(c =>
           c.id === id ? { ...c, title } : c
         ),
-        currentConversation: get().currentConversation?.id === id
-          ? { ...get().currentConversation, title }
+        currentConversation: get().currentConversation && get().currentConversation!.id === id
+          ? { ...get().currentConversation!, title }
           : get().currentConversation
       });
     } catch (error) {
@@ -279,7 +290,24 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
             processed
           )
         `)
-        .eq('conversation_id', conversation.id);
+        .eq('conversation_id', conversation.id) as { 
+          data: Array<{
+            id: string;
+            conversation_id: string;
+            document_id: string;
+            created_at: string;
+            documents: {
+              id: string;
+              name: string;
+              type: string;
+              url: string;
+              description?: string;
+              group_name?: string;
+              processed: boolean;
+            }
+          }> | null;
+          error: any;
+        };
 
       if (!conversationDocs?.length) {
         throw new Error('Aucun document disponible pour analyse');
@@ -395,16 +423,77 @@ NE PAS faire référence à des documents externes ou d'autres conversations.
           })
       );
 
-      const documentContext = formattedDocuments.join('\n\n---\n\n');
+      // Appliquer la compression intelligente si nécessaire
+      let processedDocuments = formattedDocuments;
+      
+      // Vérifier si la compression est nécessaire
+      const shouldCompress = !FEATURE_FLAGS.DISABLE_COMPRESSION || 
+        (FEATURE_FLAGS.DISABLE_COMPRESSION && estimateTotalTokens(formattedDocuments) > 
+          (FEATURE_FLAGS.USE_HYBRID_MODE && formattedDocuments.length > FEATURE_FLAGS.HYBRID_MODE_DOCUMENT_THRESHOLD 
+            ? MAX_TOKENS_CLAUDE * FEATURE_FLAGS.ADAPTIVE_COMPRESSION_THRESHOLD 
+            : MAX_TOKENS * FEATURE_FLAGS.ADAPTIVE_COMPRESSION_THRESHOLD));
+      
+      if (shouldCompress && formattedDocuments.length > 4) {
+        logger.info(`📊 Compression adaptative activée pour ${formattedDocuments.length} documents`);
+        
+        // Extraire le contenu structuré pour la compression
+        const docsForCompression = formattedDocuments.map(docStr => {
+          // Extraire le nom du document
+          const nameMatch = docStr.match(/====== DOCUMENT ACTIF "([^"]+)" ======/);
+          const name = nameMatch ? nameMatch[1] : 'Document sans nom';
+          
+          // Extraire le contenu entre CONTENU: et FIN DU DOCUMENT
+          const contentMatch = docStr.match(/CONTENU:\n([\s\S]*?)\n====== FIN DU DOCUMENT/);
+          const content = contentMatch ? contentMatch[1].trim() : docStr;
+          
+          return { name, content };
+        });
+        
+        // Extraire les mots-clés de la requête pour prioriser le contenu
+        const queryKeywords = extractKeywordsFromQuery(content);
+        
+        // Compresser les documents
+        const compressedDocs = compressDocuments(docsForCompression, formattedDocuments.length);
+        
+        // Reformater les documents compressés
+        processedDocuments = compressedDocs.map((doc, index) => {
+          const docWrapper = conversationDocs?.find(d => d.documents?.name === doc.name);
+          const originalDoc = docWrapper?.documents;
+          
+          const compressionNote = doc.compressed 
+            ? `\n[Note: Document compressé de ${doc.originalTokens} à ${doc.compressedTokens} tokens pour optimiser le traitement]` 
+            : '';
+          
+          return `
+====== DOCUMENT ACTIF "${doc.name}" ======
+TITRE: ${doc.name}
+TYPE: ${originalDoc?.type || 'document'}
+${originalDoc?.description ? `DESCRIPTION: ${originalDoc.description}` : ''}
+${originalDoc?.type === 'audio' && originalDoc?.group_name ? `CONTEXTE AUDIO: ${originalDoc.group_name}` : ''}${compressionNote}
+
+CONTENU:
+${doc.content}
+
+====== FIN DU DOCUMENT "${doc.name}" ======
+
+INSTRUCTION IMPORTANTE: Tu dois UNIQUEMENT utiliser les informations contenues dans ce document et les autres documents de cette conversation.
+NE PAS faire référence à des documents externes ou d'autres conversations.
+`;
+        });
+        
+        logger.info(`✅ Compression terminée: ${compressedDocs.filter(d => d.compressed).length} documents compressés`);
+      }
+
+      const documentContext = processedDocuments.join('\n\n---\n\n');
       
       // Ajouter une instruction claire au début du contexte
       const enhancedDocumentContext = `
 CONTEXTE ISOLÉ - CONVERSATION ${conversation.id}
 =====================================
-Tu as accès UNIQUEMENT aux ${formattedDocuments.length} document(s) suivants pour cette conversation.
+Tu as accès UNIQUEMENT aux ${processedDocuments.length} document(s) suivants pour cette conversation.
 INTERDICTION de faire référence à tout autre document non listé ci-dessous.
 
-${formattedDocuments.length > 1 ? `
+${processedDocuments.length > 1 ? `
 INSTRUCTIONS POUR ANALYSE MULTI-DOCUMENTS :
 - Compare et croise les informations entre TOUS les documents
 - Identifie les points communs et les différences
@@ -440,9 +529,8 @@ RAPPEL: Utilise UNIQUEMENT les documents ci-dessus. Si une information n'est pas
       let streamedContent = '';
       
       try {
-        streamedContent = await generateChatResponseStreaming(
+        streamedContent = await generateChatResponseStreamingSecure(
           [...chatHistory, { role: 'user', content }],
-          enhancedDocumentContext,
           (chunk) => {
             streamedContent += chunk;
             set(state => ({
@@ -452,7 +540,8 @@ RAPPEL: Utilise UNIQUEMENT les documents ci-dessus. Si une information n'est pas
                   : msg
               )
             }));
-          }
+          },
+          enhancedDocumentContext
         );
 
         // Update final message with complete content
@@ -582,6 +671,8 @@ RAPPEL: Utilise UNIQUEMENT les documents ci-dessus. Si une information n'est pas
 
   linkDocumentSilently: async (documentId) => {
     const conversation = get().currentConversation;
+    logger.info(`linkDocumentSilently appelé avec documentId: ${documentId} (type: ${typeof documentId})`);
+    
     if (!conversation) {
       set({ error: 'No conversation selected' });
       return;
@@ -595,6 +686,25 @@ RAPPEL: Utilise UNIQUEMENT les documents ci-dessus. Si une information n'est pas
         throw new Error(ERROR_MESSAGES.DOCUMENT_LIMIT);
       }
       
+      // Vérifier que le document existe
+      const { data: documentExists, error: checkError } = await supabase
+        .from('documents')
+        .select('id')
+        .eq('id', documentId)
+        .maybeSingle();
+        
+      if (checkError) {
+        logger.error(`Erreur lors de la vérification du document ${documentId}:`, checkError);
+        throw new Error(`Erreur lors de la vérification du document: ${checkError.message}`);
+      }
+        
+      if (!documentExists) {
+        logger.error(`Document ${documentId} n'existe pas dans la base de données`);
+        throw new Error(`Le document avec l'ID ${documentId} n'existe pas`);
+      }
+      
+      logger.info(`Document ${documentId} trouvé, vérification du lien existant...`);
+      
       // Check if document is already linked
       const { data: existingLink } = await supabase
         .from('conversation_documents')
@@ -604,8 +714,11 @@ RAPPEL: Utilise UNIQUEMENT les documents ci-dessus. Si une information n'est pas
         .maybeSingle();
 
       if (existingLink) {
+        logger.info(`Document ${documentId} déjà lié à la conversation ${conversation.id}`);
         throw new Error('Ce document est déjà lié à la conversation');
       }
+
+      logger.info(`Liaison du document ${documentId} à la conversation ${conversation.id}...`);
 
       const { error } = await supabase
         .from('conversation_documents')
@@ -614,7 +727,13 @@ RAPPEL: Utilise UNIQUEMENT les documents ci-dessus. Si une information n'est pas
           document_id: documentId
         }]);
 
-      if (error) throw error;
+      if (error) {
+        logger.error(`Erreur lors de l'insertion dans conversation_documents pour ${documentId}:`, error);
+        logger.error('Détails:', { conversation_id: conversation.id, document_id: documentId });
+        throw error;
+      }
+      
+      logger.success(`Document ${documentId} lié avec succès`);
       
       await get().fetchConversationDocuments(conversation.id);
     } catch (error) {
@@ -622,7 +741,7 @@ RAPPEL: Utilise UNIQUEMENT les documents ci-dessus. Si une information n'est pas
     }
   },
 
-  linkMultipleDocuments: async (documentIds: string[]) => {
+  linkMultipleDocuments: async (documentIds) => {
     const conversation = get().currentConversation;
     if (!conversation) {
       set({ error: 'No conversation selected' });
@@ -631,6 +750,8 @@ RAPPEL: Utilise UNIQUEMENT les documents ci-dessus. Si une information n'est pas
 
     // Limiter le nombre de documents pour éviter les problèmes de tokens
     const currentDocCount = get().documents.length;
+    
+    logger.info(`Tentative d'ajout de ${documentIds.length} documents. Documents actuels: ${currentDocCount}`);
     
     if (currentDocCount + documentIds.length > MAX_DOCUMENTS_PER_CONVERSATION) {
       const availableSlots = Math.max(0, MAX_DOCUMENTS_PER_CONVERSATION - currentDocCount);
@@ -644,7 +765,7 @@ RAPPEL: Utilise UNIQUEMENT les documents ci-dessus. Si une information n'est pas
       } else {
         // Limiter les documents à ajouter
         documentIds = documentIds.slice(0, availableSlots);
-        console.warn(`Limitation à ${availableSlots} document(s) pour respecter la limite de ${MAX_DOCUMENTS_PER_CONVERSATION} par conversation.`);
+        logger.warn(`Limitation à ${availableSlots} document(s) pour respecter la limite de ${MAX_DOCUMENTS_PER_CONVERSATION} par conversation.`);
       }
     }
 
@@ -684,22 +805,30 @@ RAPPEL: Utilise UNIQUEMENT les documents ci-dessus. Si une information n'est pas
       await get().fetchConversationDocuments(conversation.id);
       const totalDocs = get().documents.length;
       
+      logger.info(`Documents après rafraîchissement: ${totalDocs}`);
+      logger.info(`Documents ajoutés: ${addedDocuments.length}, déjà liés: ${alreadyLinkedDocuments.length}, erreurs: ${errors.length}`);
+      
       // Créer un message récapitulatif si on a des documents (ajoutés ou déjà présents)
       const messages = get().messages;
       const isNewConversation = messages.length === 0 || (messages.length === 1 && messages[0].content === '');
       
-      if (documentIds.length > 0 && isNewConversation) {
+      if (isNewConversation) {
         // Pour une nouvelle conversation, créer un message récapitulatif avec TOUS les documents
         const allDocNames = get().documents
           .map(docWrapper => docWrapper.documents.name)
           .filter(Boolean);
         
-        let messageContent = `Bonjour, je suis Ringo ! J'ai bien reçu `;
+        let messageContent = `Bonjour, je suis Ringo ! `;
         
-        if (allDocNames.length === 1) {
-          messageContent += `le document "${allDocNames[0]}".`;
+        if (allDocNames.length === 0 && documentIds.length > 0) {
+          // Aucun document n'a pu être ajouté
+          messageContent += `\n\n⚠️ Aucun document n'a pu être ajouté. Les documents sélectionnés n'existent pas ou ne sont pas accessibles.\n\nPour importer des documents :\n1. Utilisez le bouton "Importer un document" pour téléverser de nouveaux fichiers\n2. Ou sélectionnez des documents déjà importés dans l'explorateur`;
+        } else if (allDocNames.length === 0) {
+          messageContent += `Je suis prêt à analyser vos documents. Importez des fichiers pour commencer !`;
+        } else if (allDocNames.length === 1) {
+          messageContent += `J'ai bien reçu le document "${allDocNames[0]}".`;
         } else {
-          messageContent += `${allDocNames.length} documents :`;
+          messageContent += `J'ai bien reçu ${allDocNames.length} documents :`;
           allDocNames.forEach(name => {
             messageContent += `\n- ${name}`;
           });
@@ -830,6 +959,8 @@ RAPPEL: Utilise UNIQUEMENT les documents ci-dessus. Si une information n'est pas
 
   fetchConversationDocuments: async (conversationId) => {
     set({ loading: true, error: null });
+    logger.info(`Récupération des documents pour la conversation ${conversationId}`);
+    
     try {
       const { data, error } = await supabase
         .from('conversation_documents')
@@ -843,14 +974,24 @@ RAPPEL: Utilise UNIQUEMENT les documents ci-dessus. Si une information n'est pas
             name,
             type,
             url,
-            processed
+            description,
+            group_name,
+            processed,
+            folder_id,
+            created_at
           )
         `)
-        .eq('conversation_id', conversationId);
+        .eq('conversation_id', conversationId) as { data: ConversationDocument[] | null, error: any };
 
-      if (error) throw error;
+      if (error) {
+        logger.error(`Erreur lors de la récupération des documents:`, error);
+        throw error;
+      }
+      
+      logger.info(`Documents récupérés: ${data?.length || 0}`);
       set({ documents: data || [] });
     } catch (error) {
+      logger.error(`Erreur dans fetchConversationDocuments:`, error);
       set({ error: error instanceof Error ? error.message : 'Error fetching conversation documents' });
     } finally {
       set({ loading: false });
