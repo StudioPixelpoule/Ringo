@@ -404,6 +404,57 @@ INSTRUCTION IMPORTANTE: Le contenu de ce document n'a pas pu être traité. Util
                 }
               }
             }
+            
+            // Pour les fichiers de données (JSON, CSV), formater de manière plus lisible
+            if (doc.type === 'data' && documentContent) {
+              try {
+                // Vérifier si le contenu est un JSON formaté par processDocument
+                if (documentContent.trim().startsWith('{') && documentContent.trim().endsWith('}')) {
+                  const dataContent = JSON.parse(documentContent);
+                  
+                  // Si c'est un fichier de données traité par notre système
+                  if (dataContent.type && dataContent.data) {
+                    const dataInfo = dataContent.metadata || {};
+                    
+                    // Créer un résumé structuré des données
+                    let formattedContent = `== DONNÉES STRUCTURÉES ==\n`;
+                    formattedContent += `Type de fichier: ${dataContent.type.toUpperCase()}\n`;
+                    formattedContent += `Nom du fichier: ${dataContent.fileName}\n`;
+                    
+                    if (dataInfo.rowCount !== undefined) {
+                      formattedContent += `Nombre d'enregistrements: ${dataInfo.rowCount}\n`;
+                    }
+                    
+                    if (dataInfo.fields && dataInfo.fields.length > 0) {
+                      formattedContent += `Colonnes/Champs: ${dataInfo.fields.join(', ')}\n`;
+                    }
+                    
+                    formattedContent += `\n== CONTENU DES DONNÉES ==\n`;
+                    
+                    // Pour les tableaux de données, limiter l'affichage aux premiers enregistrements
+                    if (Array.isArray(dataContent.data)) {
+                      const sampleSize = Math.min(5, dataContent.data.length);
+                      formattedContent += `(Affichage des ${sampleSize} premiers enregistrements sur ${dataContent.data.length})\n\n`;
+                      formattedContent += JSON.stringify(dataContent.data.slice(0, sampleSize), null, 2);
+                      
+                      if (dataContent.data.length > sampleSize) {
+                        formattedContent += `\n\n... ${dataContent.data.length - sampleSize} enregistrements supplémentaires non affichés ...\n`;
+                        formattedContent += `\nPour une analyse complète, pose des questions spécifiques sur les données.`;
+                      }
+                    } else {
+                      // Pour les objets JSON simples, afficher de manière formatée
+                      formattedContent += JSON.stringify(dataContent.data, null, 2);
+                    }
+                    
+                    // Remplacer le contenu par la version formatée
+                    documentContent = formattedContent;
+                  }
+                }
+              } catch (e) {
+                // Si erreur de parsing, garder le contenu original
+                console.error('Erreur lors du formatage des données:', e);
+              }
+            }
 
             return `
 ====== DOCUMENT ACTIF "${doc.name}" ======
