@@ -1,0 +1,6 @@
+id,date,auteur,institut,type,contenu,note
+1,2025-09-18,Jean Tremblay,IRSST,évaluation,Excellente analyse des risques ergonomiques dans le secteur manufacturier.,4.5
+2,2025-09-18,Marie Dubois,INSPQ,feedback,Les recommandations sont pertinentes mais nécessitent plus de détails sur la mise en œuvre.,3.8
+3,2025-09-19,Pierre Gagnon,CNESST,suggestion,Il serait utile d'ajouter des statistiques comparatives avec d'autres provinces.,4.0
+4,2025-09-19,Sophie Lavoie,IRSST,évaluation,Méthodologie rigoureuse et conclusions bien supportées par les données.,4.7
+5,2025-09-20,Michel Roy,INSPQ,feedback,L'approche préventive proposée est innovante et applicable à court terme.,4.2

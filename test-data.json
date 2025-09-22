@@ -1,0 +1,55 @@
+{
+  "commentaires": [
+    {
+      "id": 1,
+      "date": "2025-09-18",
+      "auteur": "Jean Tremblay",
+      "institut": "IRSST",
+      "type": "évaluation",
+      "contenu": "Excellente analyse des risques ergonomiques dans le secteur manufacturier.",
+      "note": 4.5
+    },
+    {
+      "id": 2,
+      "date": "2025-09-18",
+      "auteur": "Marie Dubois",
+      "institut": "INSPQ",
+      "type": "feedback",
+      "contenu": "Les recommandations sont pertinentes mais nécessitent plus de détails sur la mise en œuvre.",
+      "note": 3.8
+    },
+    {
+      "id": 3,
+      "date": "2025-09-19",
+      "auteur": "Pierre Gagnon",
+      "institut": "CNESST",
+      "type": "suggestion",
+      "contenu": "Il serait utile d'ajouter des statistiques comparatives avec d'autres provinces.",
+      "note": 4.0
+    },
+    {
+      "id": 4,
+      "date": "2025-09-19",
+      "auteur": "Sophie Lavoie",
+      "institut": "IRSST",
+      "type": "évaluation",
+      "contenu": "Méthodologie rigoureuse et conclusions bien supportées par les données.",
+      "note": 4.7
+    },
+    {
+      "id": 5,
+      "date": "2025-09-20",
+      "auteur": "Michel Roy",
+      "institut": "INSPQ",
+      "type": "feedback",
+      "contenu": "L'approche préventive proposée est innovante et applicable à court terme.",
+      "note": 4.2
+    }
+  ],
+  "metadata": {
+    "version": "1.0",
+    "periode": "2025-09",
+    "total_commentaires": 5,
+    "note_moyenne": 4.24
+  }
+}
