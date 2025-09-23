@@ -3,6 +3,7 @@ import { createWorker } from 'tesseract.js';
 import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
+import { safeJsonParse, detectJsonStructure } from './jsonUtils';
 
 // Types communs
 export interface ProcessingOptions {
@@ -61,11 +62,13 @@ async function processDataFile(file: File, options?: ProcessingOptions): Promise
     // Handle different file types
     if (extension === 'json') {
       const text = await file.text();
-      try {
-        data = JSON.parse(text);
-      } catch (e) {
-        throw new Error('Le fichier JSON est invalide');
+      const parseResult = safeJsonParse(text);
+      
+      if (parseResult.error) {
+        console.warn('Avertissement lors du parsing JSON:', parseResult.error);
       }
+      
+      data = parseResult.data;
     } else if (extension === 'csv') {
       const text = await file.text();
       const parseResult = await new Promise<Papa.ParseResult<any>>((resolve, reject) => {
@@ -127,39 +130,6 @@ async function processDataFile(file: File, options?: ProcessingOptions): Promise
       message: 'Structuration des données...'
     });
 
-    // Fonction helper pour analyser la structure JSON
-    const analyzeJsonStructure = (obj: any): any => {
-      if (Array.isArray(obj)) {
-        return {
-          type: 'array',
-          length: obj.length,
-          itemType: obj.length > 0 ? typeof obj[0] : 'unknown',
-          sampleKeys: obj.length > 0 && typeof obj[0] === 'object' ? Object.keys(obj[0]).slice(0, 10) : []
-        };
-      } else if (typeof obj === 'object' && obj !== null) {
-        const structure: any = {
-          type: 'object',
-          keys: Object.keys(obj).slice(0, 20) // Limiter à 20 clés pour éviter les structures trop grandes
-        };
-        
-        // Analyser récursivement les propriétés principales (limité pour éviter trop de profondeur)
-        const subStructure: any = {};
-        for (const key of structure.keys.slice(0, 10)) {
-          const value = obj[key];
-          if (Array.isArray(value)) {
-            subStructure[key] = { type: 'array', length: value.length };
-          } else if (typeof value === 'object' && value !== null) {
-            subStructure[key] = { type: 'object', keys: Object.keys(value).length };
-          } else {
-            subStructure[key] = { type: typeof value };
-          }
-        }
-        structure.structure = subStructure;
-        return structure;
-      }
-      return { type: typeof obj };
-    };
-
     // Format data for storage
     const formattedData = {
       type: extension,
@@ -179,7 +149,7 @@ async function processDataFile(file: File, options?: ProcessingOptions): Promise
         size: file.size,
         sheets: extension === 'xlsx' || extension === 'xls' ? Object.keys(data) : undefined,
         // Ajouter une analyse structurelle pour les fichiers JSON complexes
-        jsonStructure: extension === 'json' ? analyzeJsonStructure(data) : undefined
+        jsonStructure: extension === 'json' ? detectJsonStructure(data) : undefined
       },
       processingDate: new Date().toISOString()
     };
