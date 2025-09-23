@@ -1,0 +1,193 @@
+{
+  "projet": {
+    "nom": "Ringo",
+    "version": "1.5.0",
+    "description": "Assistant IA spécialisé dans l'analyse de documents et la génération de rapports pour un public québécois",
+    "organisation": "Studio Pixel Poule",
+    "url_production": "https://ringo.pixelpoule.studio",
+    "repository": "https://github.com/StudioPixelpoule/Ringo"
+  },
+  
+  "architecture": {
+    "frontend": {
+      "framework": "React 18.3",
+      "bundler": "Vite 5.4",
+      "langage": "TypeScript",
+      "styling": "Tailwind CSS",
+      "routing": "React Router v6",
+      "animations": "Framer Motion",
+      "port_dev": 5173
+    },
+    "backend": {
+      "infrastructure": "Supabase",
+      "database": "PostgreSQL",
+      "auth": "Supabase Auth",
+      "storage": "Supabase Storage",
+      "edge_functions": [
+        "process-chat",
+        "process-chat-stream",
+        "process-chat-hybrid",
+        "process-document",
+        "process-audio",
+        "process-audio-chunked",
+        "process-web-content",
+        "generate-docx",
+        "send-invitation",
+        "send-password-reset"
+      ]
+    },
+    "ia": {
+      "modeles": {
+        "principal": "GPT-4o (OpenAI)",
+        "secondaire": "Claude 3 Opus (Anthropic)",
+        "mode_hybride": "Sélection automatique selon la charge"
+      },
+      "capacites": [
+        "Analyse de documents PDF",
+        "Transcription audio",
+        "Traitement de données structurées (JSON, CSV, Excel)",
+        "Génération de rapports",
+        "Analyse comparative",
+        "Chat conversationnel avec contexte"
+      ]
+    }
+  },
+  
+  "fonctionnalites": {
+    "gestion_documents": {
+      "types_supportes": [
+        "PDF",
+        "Word (.docx)",
+        "Excel (.xlsx, .xls)",
+        "CSV",
+        "JSON",
+        "Audio (MP3, WAV, M4A, OGG)",
+        "PowerPoint",
+        "Pages Web"
+      ],
+      "limite_taille": "100MB par fichier",
+      "limite_documents_conversation": 30,
+      "ocr": "Intégré pour PDF scannés"
+    },
+    "conversations": {
+      "historique": "Sauvegarde automatique",
+      "contexte": "Conservation du contexte entre messages",
+      "streaming": "Réponses en temps réel",
+      "compression": "Compression intelligente pour gros volumes"
+    },
+    "rapports": {
+      "templates": [
+        "Résumé",
+        "Analyse comparative",
+        "Extraction de données",
+        "Synthèse"
+      ],
+      "export": "Format DOCX",
+      "personnalisation": "Prompts personnalisables"
+    },
+    "securite": {
+      "authentification": "Email/Password avec 2FA optionnel",
+      "roles": ["admin", "user"],
+      "chiffrement": "AES-256 pour données sensibles",
+      "api_keys": "Sécurisées via Edge Functions"
+    }
+  },
+  
+  "ameliorations_recentes": {
+    "septembre_2025": [
+      {
+        "date": "2025-09-23",
+        "type": "amélioration",
+        "description": "Formatage intelligent des fichiers JSON/CSV pour meilleure analyse",
+        "impact": "Ringo peut maintenant analyser efficacement les données structurées"
+      },
+      {
+        "date": "2025-09-23",
+        "type": "optimisation",
+        "description": "Échantillonnage des gros fichiers de données",
+        "impact": "Performance améliorée pour fichiers volumineux"
+      }
+    ]
+  },
+  
+  "configuration": {
+    "environnement": {
+      "variables_requises": [
+        "VITE_SUPABASE_URL",
+        "VITE_SUPABASE_ANON_KEY",
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY"
+      ],
+      "node_version": "16.x recommandé (fonctionne avec 22.x)",
+      "npm_version": "10.x"
+    },
+    "developpement": {
+      "commande": "npm run dev",
+      "build": "npm run build",
+      "port": 5173,
+      "hot_reload": true
+    },
+    "production": {
+      "hebergement": "Netlify",
+      "build_command": "npm run build-netlify",
+      "output_directory": "dist"
+    }
+  },
+  
+  "structure_dossiers": {
+    "src/": {
+      "components/": "Composants React réutilisables",
+      "lib/": "Logique métier et utilitaires",
+      "pages/": "Pages de l'application",
+      "hooks/": "Hooks React personnalisés"
+    },
+    "supabase/": {
+      "functions/": "Edge Functions Deno",
+      "migrations/": "Scripts de migration SQL"
+    },
+    "public/": "Assets statiques"
+  },
+  
+  "equipe": {
+    "developpement": "Studio Pixel Poule",
+    "maintenance": "Active",
+    "support": "support@pixelpoule.studio"
+  },
+  
+  "metriques": {
+    "lignes_code": "~25000",
+    "composants_react": 45,
+    "edge_functions": 15,
+    "tables_db": 12,
+    "tests": "Non configurés"
+  },
+  
+  "roadmap": {
+    "court_terme": [
+      "Support requêtes SQL-like sur données",
+      "Visualisations de données (graphiques)",
+      "Export analyses en format structuré"
+    ],
+    "moyen_terme": [
+      "API REST publique",
+      "Plugins et extensions",
+      "Multi-tenancy complet"
+    ],
+    "long_terme": [
+      "Application mobile",
+      "Mode hors-ligne",
+      "Auto-apprentissage contextuel"
+    ]
+  },
+  
+  "documentation": {
+    "readme": "README.md",
+    "guides": [
+      "HYBRID_MODE_DEBUG_GUIDE.md",
+      "JSON_CSV_IMPROVEMENT.md",
+      "DOCUMENT_IMPORT_FIX.md",
+      "ENHANCED_DOCUMENT_CAPACITY.md"
+    ],
+    "api": "Non documentée publiquement"
+  }
+}
