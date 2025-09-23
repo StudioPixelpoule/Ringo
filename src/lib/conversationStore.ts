@@ -412,7 +412,7 @@ INSTRUCTION IMPORTANTE: Le contenu de ce document n'a pas pu être traité. Util
                 if (documentContent.trim().startsWith('{') && documentContent.trim().endsWith('}')) {
                   const dataContent = JSON.parse(documentContent);
                   
-                  // Si c'est un fichier de données traité par notre système
+                  // Si c'est un fichier de données traité par notre système (avec type et data)
                   if (dataContent.type && dataContent.data) {
                     const dataInfo = dataContent.metadata || {};
                     
@@ -448,11 +448,81 @@ INSTRUCTION IMPORTANTE: Le contenu de ce document n'a pas pu être traité. Util
                     
                     // Remplacer le contenu par la version formatée
                     documentContent = formattedContent;
+                  } else {
+                    // C'est un fichier JSON brut (non traité par notre système)
+                    // Analyser la structure pour créer un résumé intelligent
+                    let formattedContent = `== DONNÉES JSON STRUCTURÉES ==\n`;
+                    formattedContent += `Nom du fichier: ${doc.name}\n`;
+                    
+                    // Analyser la structure du JSON
+                    const keys = Object.keys(dataContent);
+                    formattedContent += `Clés principales: ${keys.slice(0, 10).join(', ')}${keys.length > 10 ? '...' : ''}\n`;
+                    
+                    // Compter les éléments si c'est un tableau
+                    if (Array.isArray(dataContent)) {
+                      formattedContent += `Type: Tableau\n`;
+                      formattedContent += `Nombre d'éléments: ${dataContent.length}\n`;
+                      if (dataContent.length > 0 && typeof dataContent[0] === 'object') {
+                        const firstItemKeys = Object.keys(dataContent[0]);
+                        formattedContent += `Structure des éléments: ${firstItemKeys.join(', ')}\n`;
+                      }
+                    } else if (typeof dataContent === 'object') {
+                      formattedContent += `Type: Objet\n`;
+                      // Analyser la structure imbriquée
+                      let totalItems = 0;
+                      let structureInfo = [];
+                      
+                      for (const key of keys) {
+                        const value = dataContent[key];
+                        if (Array.isArray(value)) {
+                          structureInfo.push(`${key}: tableau de ${value.length} éléments`);
+                          totalItems += value.length;
+                        } else if (typeof value === 'object' && value !== null) {
+                          const subKeys = Object.keys(value);
+                          structureInfo.push(`${key}: objet avec ${subKeys.length} propriétés`);
+                          totalItems += subKeys.length;
+                        }
+                      }
+                      
+                      if (structureInfo.length > 0) {
+                        formattedContent += `\nStructure détaillée:\n`;
+                        structureInfo.slice(0, 10).forEach(info => {
+                          formattedContent += `  - ${info}\n`;
+                        });
+                        if (structureInfo.length > 10) {
+                          formattedContent += `  ... et ${structureInfo.length - 10} autres sections\n`;
+                        }
+                      }
+                    }
+                    
+                    formattedContent += `\n== CONTENU COMPLET ==\n`;
+                    
+                    // Limiter la taille du contenu affiché
+                    const jsonString = JSON.stringify(dataContent, null, 2);
+                    const maxLength = 50000; // Limiter à 50000 caractères
+                    
+                    if (jsonString.length > maxLength) {
+                      // Pour les gros fichiers, afficher un échantillon
+                      formattedContent += `(Fichier volumineux - ${Math.round(jsonString.length / 1000)}KB - affichage partiel)\n\n`;
+                      formattedContent += jsonString.substring(0, maxLength);
+                      formattedContent += `\n\n... Contenu tronqué (${Math.round((jsonString.length - maxLength) / 1000)}KB supplémentaires) ...\n`;
+                      formattedContent += `\n💡 Ce fichier JSON est très volumineux. Pour une analyse efficace:\n`;
+                      formattedContent += `- Pose des questions spécifiques sur les sections qui t'intéressent\n`;
+                      formattedContent += `- Demande des extractions ciblées de données\n`;
+                      formattedContent += `- Utilise des filtres pour réduire les données affichées`;
+                    } else {
+                      formattedContent += jsonString;
+                    }
+                    
+                    // Remplacer le contenu par la version formatée
+                    documentContent = formattedContent;
                   }
                 }
               } catch (e) {
                 // Si erreur de parsing, garder le contenu original
                 console.error('Erreur lors du formatage des données:', e);
+                // Mais essayer quand même de donner des infos basiques
+                documentContent = `== FICHIER DE DONNÉES ==\nNom: ${doc.name}\nType: ${doc.type}\n\nNote: Le contenu de ce fichier n'a pas pu être analysé automatiquement.\n\n${documentContent}`;
               }
             }
 
