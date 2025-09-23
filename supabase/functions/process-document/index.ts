@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.39.7";
 import mammoth from "npm:mammoth@1.6.0";
 import * as XLSX from "npm:xlsx@0.18.5";
 import Papa from "npm:papaparse@5.4.1";
+import { safeJsonParse } from './jsonUtils.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -175,13 +176,14 @@ async function processJSONDocument(file: File): Promise<any> {
   console.log('[JSON Processing] Starting processing:', file.name);
   
   const text = await file.text();
-  let data;
+  const parseResult = safeJsonParse(text);
   
-  try {
-    data = JSON.parse(text);
-  } catch (e) {
-    throw new Error('Le fichier JSON est invalide');
+  if (parseResult.error) {
+    console.warn('[JSON Processing] Warning:', parseResult.error);
+    console.log('[JSON Processing] First 100 chars:', text.substring(0, 100));
   }
+  
+  const data = parseResult.data;
   
   // Formater les données pour le stockage
   const formattedData = {
