@@ -127,6 +127,39 @@ async function processDataFile(file: File, options?: ProcessingOptions): Promise
       message: 'Structuration des données...'
     });
 
+    // Fonction helper pour analyser la structure JSON
+    const analyzeJsonStructure = (obj: any): any => {
+      if (Array.isArray(obj)) {
+        return {
+          type: 'array',
+          length: obj.length,
+          itemType: obj.length > 0 ? typeof obj[0] : 'unknown',
+          sampleKeys: obj.length > 0 && typeof obj[0] === 'object' ? Object.keys(obj[0]).slice(0, 10) : []
+        };
+      } else if (typeof obj === 'object' && obj !== null) {
+        const structure: any = {
+          type: 'object',
+          keys: Object.keys(obj).slice(0, 20) // Limiter à 20 clés pour éviter les structures trop grandes
+        };
+        
+        // Analyser récursivement les propriétés principales (limité pour éviter trop de profondeur)
+        const subStructure: any = {};
+        for (const key of structure.keys.slice(0, 10)) {
+          const value = obj[key];
+          if (Array.isArray(value)) {
+            subStructure[key] = { type: 'array', length: value.length };
+          } else if (typeof value === 'object' && value !== null) {
+            subStructure[key] = { type: 'object', keys: Object.keys(value).length };
+          } else {
+            subStructure[key] = { type: typeof value };
+          }
+        }
+        structure.structure = subStructure;
+        return structure;
+      }
+      return { type: typeof obj };
+    };
+
     // Format data for storage
     const formattedData = {
       type: extension,
@@ -134,14 +167,19 @@ async function processDataFile(file: File, options?: ProcessingOptions): Promise
       data,
       metadata: {
         rowCount: Array.isArray(data) ? data.length : 
-                 typeof data === 'object' ? Object.values(data as Record<string, any[]>).reduce((sum: number, sheet: any[]) => sum + sheet.length, 0) : 1,
+                 typeof data === 'object' ? Object.values(data as Record<string, any[]>).reduce((sum: number, sheet: any[]) => {
+                   if (Array.isArray(sheet)) return sum + sheet.length;
+                   return sum + 1;
+                 }, 0) : 1,
         fields: Array.isArray(data) ? Object.keys(data[0] || {}) :
-                typeof data === 'object' ? Object.keys(data).map(sheet => ({
+                typeof data === 'object' && (extension === 'xlsx' || extension === 'xls') ? Object.keys(data).map(sheet => ({
                   sheet,
-                  fields: Object.keys(data[sheet][0] || {})
+                  fields: Array.isArray(data[sheet]) ? Object.keys(data[sheet][0] || {}) : []
                 })) : Object.keys(data || {}),
         size: file.size,
-        sheets: extension === 'xlsx' || extension === 'xls' ? Object.keys(data) : undefined
+        sheets: extension === 'xlsx' || extension === 'xls' ? Object.keys(data) : undefined,
+        // Ajouter une analyse structurelle pour les fichiers JSON complexes
+        jsonStructure: extension === 'json' ? analyzeJsonStructure(data) : undefined
       },
       processingDate: new Date().toISOString()
     };

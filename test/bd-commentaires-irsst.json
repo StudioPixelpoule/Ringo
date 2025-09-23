@@ -1,0 +1,556 @@
+{
+  "plan_strategique_2026_2028": {
+    "metadata": {
+      "date_extraction": "2025-09-19",
+      "nombre_equipes": 17,
+      "equipes": [
+        "SR-1",
+        "SR-2",
+        "SR-3",
+        "SR-4",
+        "SR-5",
+        "DL-1",
+        "DL-2",
+        "DL-3",
+        "DL-4",
+        "PDG-IMMO",
+        "DVM",
+        "SCRP",
+        "DFPR",
+        "DTI",
+        "DRH",
+        "GCSS",
+        "DFA"
+      ]
+    },
+    "vision": {
+      "commentaires": {
+        "SR-1": "Nous préférons la vision actuelle que la nouvelle, dans l’ensemble. Vision à laquelle nous adhérons encore. Les concepts sont mélangés et c’est plus dur à suivre.",
+        "SR-2": "Pas de commentaires",
+        "SR-3": "Reformulation puce 1 : guide l’action par développement et la mobilisation des connaissances scientifiques…\nCommentaire : plus clair que la version antérieure\nProposition, inverser l’ordre des puces 1 et 2 pour mettre de l’avant la SST",
+        "SR-4": "On pourrait inscrire milieux de travail au lieu employeurs et travailleurs\nPas eu beaucoup de changements depuis le PS 2022-2025\nRebrassage des mots.\nModifier de changer les choses ou pas\nDommage qu’il n’y ait plus le mot créativité",
+        "SR-5": "Réaliste = cela dépendra du budget disponible\nEst-ce qu’il y a un mécanisme de vérifications de ces énoncés ? Où en sommes-nous en 2025 ? Nous aimerions avoir un bilan des actions en cours et objectifs atteints ou non de l’ancien plan stratégique.\nEst-ce que le chef de file se traduit par un indicateur ?\nDans le dernier paragraphe, changer l’ordre des mots et devrait se lire ainsi : …qui multiplie l’impact de ses réalisations au bénéfice des travailleuses et travailleurs et des employeurs du Québec.",
+        "DL-1": "Ça nous va",
+        "DL-2": "Si on veut être chef de file, il faut être plus présent dans l’espace public.",
+        "DL-3": "D’actualité car plus de clients privés\nChef de file en tenant compte de notre taille et nos capacités. Car trop élargie et ça risque de laisser tomber certains créneaux.\nScènes nationale et internationale : conférences/congrès aux USA en stand-by limite la valorisation des travaux scientifiques (l’Europe n’est pas équivalente aux USA).\nChanger « répond » par « agir ».\nEspace de collaboration et d’innovation : Commencer par la création d’un espace de collaboration entre la DR et la DL. Pour partager l’information ou demandes qui provient de la clientèle.",
+        "DL-4": "Pas eu le temps d’aborder cela. Objectif 2 priorisé",
+        "PDG-IMMO": "La vision du projet immobilier s’inscrit dans le 3e point de la vision",
+        "DVM": "Question : Est-ce que le paritarisme devrait être énoncé dans la vision ?\nSuggestion : chef de file influent (est un pléonasme). On propose : chef de file (enlever influent)\nPoint + : être présent dans l’espace public et s’ouvrir vers l’extérieur",
+        "SCRP": "Le mot Impact a une connotation négative - utiliser plutôt effet, retombée, portée\nLe mot multiplier – serait plutôt de mieux-faire\nAu lieu de chef de file : Visionnaire, référence, premier-plan, moteur, figure de proue, vigie, fer de lance",
+        "DFPR": "Pas de commentaires",
+        "DTI": "Pas de commentaires",
+        "DRH": "Pas de commentaires",
+        "GCSS": "100% d’accord",
+        "DFA": "À ajouter : Par les nouvelles technologies, notamment l’intelligence artificielle, trouver des moyens d’être à jour au niveau de la publication des nouvelles recherches internationales (revues littéraires)."
+      }
+    },
+    "valeurs": {
+      "commentaires": {
+        "SR-1": "Esprit critique serait une valeur à ajouter.\nOpinion divisé sur la mention de bienveillance dans un plan stratégique.\nTransparence pourrait être intégré à intégrité.",
+        "SR-2": "Est-ce que ce sont les résultats de la réflexion du 13 mars 2025?\nToutes les valeurs citées semblent acceptables.\nEst-ce qu’il doit y avoir un lien avec les objectifs présentés après\nProposition : choix de quelques valeurs fortes (3/4) en lien avec les objectifs",
+        "SR-3": "Excellence et intégrité comme fondement de la crédibilité et du leadership de l’IRSST (à conserver comme #1)\nCohésion et transparence au sein de l’IRSST afin de favoriser les liens entre les personnes et les disciplines (en remplacement de bienveillance, respect et vivre ensemble)\nProactivité et ouverture pour anticiper et répondre de façon innovante aux besoins et aux problématiques émergentes;",
+        "SR-4": "D’accord séparer intégrité et transparence\nCréativité?\nInsisterait bienveillance et respect\nVivre ensemble\nouverture d’esprit",
+        "SR-5": "",
+        "DL-1": "On est d’accord avec ces termes mais nous trouvons qu’il y a beaucoup de valeurs… Viser d’en garder 4-5 ..",
+        "DL-2": "On focusserait davantage sur l’agilité avec le déménagement en conservant notre excellence.\nOn devrait nommer l’adaptation aux changements.\nLes améliorations proposées sont intéressantes, mais elles sont nombreuses, pas toujours liés à notre mandat et ça retire du focus sur les points majeurs, en particulier la DL.",
+        "DL-3": "Mettre le vivre-ensemble en action concrète.\nMettre en place des mécanismes (objectifs communs) pour favoriser les échanges des connaissances et collaboration entre les directions (surtout DR et DL).\nLa confiance et respect sont déjà bien ancrés à l’IRSST. Donc à continuer.",
+        "DL-4": "Pas eu le temps d’aborder cela. Objectif 2 priorisé",
+        "PDG-IMMO": "Fiers de notre mission et engagés à réaliser notre vision, nous incarnons les valeurs suivantes :\nExcellence comme fondement de la crédibilité et du leadership de l’IRSST;\nAudace pour anticiper et agilité pour répondre aux besoins et aux problématiques émergentes;\nOuverture au changement, à la collaboration et au maillage des expertises internes et externes\nIntégrité et transparence au cœur de nos travaux, de nos échanges et de nos actions\nVivre-ensemble avec bienveillance et respect des personnes et de l’environnement\nNous considérons qu’il n’est pas opportun de séparer intégrité et transparence",
+        "DVM": "Nous souhaitons conserver les valeurs suivantes : excellence (rigueur), ouverture aux changements, intégrité, respect, transparence.\nSuggestion : La valeur de respect nous semble essentielle.\nEnlever maillage avec les partenaires (pas une valeur)\nConstat : -Agilité, interdisciplinarité, vivre-ensemble, responsabilité envir. ne sont pas des valeurs\nS’assurer d’avoir des valeurs",
+        "SCRP": "Les anciennes valeurs - à garder; séparer intégrité et transparence",
+        "DFPR": "Incorporer bienveillance et respect au libellé de départ.\nFiers de notre mission et engagés à réaliser notre vision, avec bienveillance et respect nous incarnons les valeurs suivantes :",
+        "DTI": "La bienveillance et le respect constituent un point important à ajouter aux valeurs, puisqu’ils englobent également la reconnaissance des réalités propres aux autres directions.\nOuverture aux changements et à la collaboration en interne : Encourager d’abord l’expérimentation et la découverte avant toute résistance.\nCollaboration avec les partenaires externes : Favoriser le maillage et le partage d’expertise pour enrichir les pratiques et les projets communs.",
+        "DRH": "Proactif pour anticiper et répondre au besoin (pour remplacer agilité)\nConsidération et respect (pour remplacer bienveillance)",
+        "GCSS": "Deux éléments pourraient figurer en termes de Valeurs :\nBienveillance et respect\nOuverture au changement et au maillage avec les partenaires externes",
+        "DFA": "Corriger pour lire : Intégrer des valeurs comme le SAVOIR-vivre.\nL’ouverture au changement doit figurer dans le plan stratégique. Nous ne sommes plus dans le pourrait, mais dans le doit. C’est très important. Cela prend des gens qui ont une ouverture d’esprit, le vouloir de participer au projet.\nAjouter la tolérance envers les autres et envers les idées et manières de procédés."
+      }
+    },
+    "principes_directeurs": {
+      "commentaires": {
+        "SR-1": "Très tourné vers le fait d’être au service des acteurs. Il manque la notion de leadership.",
+        "SR-2": "‘Durabilité’ de nos actions : ‘impact durable’ ?",
+        "SR-3": "Pour et avec les milieux de travail\nCollaboration, partenariat et mutualisation des ressources\nDurabilité de nos actions, opérations et interventions",
+        "SR-4": "Ajouter pour les connaissances en SST principe directeur 1.\nAjouter un élément pour dynamiser et amener de l’émotion\nLa passion de la recherche pour faire une différence dans le monde\nUn peu trop beige",
+        "SR-5": "",
+        "DL-1": "Point de vigilance concernant la mutualisation (garder le contrôle)\nLes éléments nous semblent logiques à la lumière des objectifs décrits pour les enjeux 1 et 2.",
+        "DL-2": "C’est mignon et adéquat. Soutenir nos milieux, mais nous soutenir entre nous aussi face au déménagement.\n2. C’est bien.\n3. Ça l’a du sens",
+        "DL-3": "Publiciser nos services (marketing social).",
+        "DL-4": "Pas eu le temps d’aborder cela. Objectif 2 priorisé",
+        "PDG-IMMO": "Pas de commentaires",
+        "DVM": "Constat : Durabilité ne traduit pas l’idée de développement durable\nSuggestion : 3. Intégrer le développement durable dans nos actions, opérations et interventions (le terme durabilité n’est pas clair)",
+        "SCRP": "Pas de commentaires",
+        "DFPR": "On trouve que les principes directeurs sont un peu redondant. Ça amène une couche de trop.",
+        "DTI": "Pas de commentaires",
+        "DRH": "Pas de commentaires",
+        "GCSS": "Pas complété",
+        "DFA": "Reformuler : 1- Pour les travailleurs et avec les milieux de travail.\nL’employeur fait partie de la solution tout autant que les employés.\nResponsabilisation de l’employeur, des gestionnaires et de tous les employés."
+      }
+    },
+    "objectif_transversal": {
+      "titre": "Valoriser et démontrer la pertinence, l’impact et la portée de nos réalisations",
+      "commentaires": {
+        "SR-1": "OK",
+        "SR-2": "Pas de commentaires",
+        "SR-3": "Remplacer réalisations par travaux\nQu’est-ce qui sera inclus dans le tableau de bord? La réalisation du plan stratégique ou l’ensemble des réalisations?",
+        "SR-4": "Beaucoup de reconnaissance là-dedans\nPremière phrase à définir qu’est-ce que ça veut dire.\nTrop de mots\nLa phrase n’est pas claire",
+        "SR-5": "",
+        "DL-1": "Pas de commentaire",
+        "DL-2": "Ajouter des témoignages serait bien.\nUn tableau de bord serait pertinent.\nPartager les textos de Maura sur le site internet ou augmenter leur rayonnement (avoir des rapports plus fréquents que juste la Revue de Direction).\nAjouter et améliorer les indicateurs de performance a la DL. On dénombre le nombre d’échantillons et le nombre d’heures d’étalonnage, mais on ne sait pas sur quoi, ni les liens avec les milieux et les autres directions.",
+        "DL-3": "Pertinent. En lien avec l’objectif antérieur.\nÉlargir à tous les milieux de travail.",
+        "DL-4": "Pas eu le temps d’aborder cela. Objectif 2 priorisé",
+        "PDG-IMMO": "Pas de commentaires",
+        "DVM": "- Constat : Cet objectif ne s’intègre pas bien dans le plan stratégique. Il devrait être intégré dans un enjeu, car il est important.\nSuggestion : L’intégrer dans un enjeu ou en faire un principe directeur : démontrer la pertinence, l’impact et la portée des réalisations.\nIl nous semble trop important pour flotter tout seul détaché des enjeux.\nAction : enlever positives de retombées positives",
+        "SCRP": "Le mot Impact a une connotation négative - utiliser plutôt effet, retombée, portée",
+        "DFPR": "Pas de commentaires",
+        "DTI": "Pas de commentaires",
+        "DRH": "Pas de commentaires",
+        "GCSS": "Pas complété",
+        "DFA": "Pas de commentaires"
+      }
+    },
+    "enjeu_1": {
+      "titre": "S’ADAPTER AUX NOUVELLES RÉALITÉS DU TRAVAIL POUR MIEUX ACCOMPAGNER NOS PARTENAIRES EN SST",
+      "orientations": {
+        "1.1": {
+          "titre": "Documenter les réalités, les risques et les besoins des milieux de travail, notamment ceux nouvellement interpelés par la LMRSST",
+          "objectifs": {
+            "1.1.1": {
+              "titre": "Connaître les nouveaux milieux ciblés par la LMRSST et leurs besoins",
+              "commentaires": {
+                "SR-2": "Ajouter dans les partenaires les DRSP/SAT Montréal dans cet objectif aussi",
+                "SR-3": "Action 1: Élargir et renforcer les liens…",
+                "SR-4": "Action 1 collaboration avec DVM, mais aussi toutes les directions impliqués DR, DL\nUn chercheur : je me reconnais pas la dedans.\nCibler nouveaux milieux avec leurs risques\nFormulation : à revoir pour l’action 2, le mot cartographie n’est pas claire\nAction 2 : recherche plus fondamentale, cartographie pas le bon terme\n2- Cibler les besoins des milieux par rapport aux risques\nSecteur pas couvert, contaminant sous le radar pendant des décennies. La recherche peut être interpellé immédiatement\nAjouter Action 3 : Plus systémique : Identifier les différents enjeux dans les milieux nouvellement ciblés par la LMRSST. Réfléchir à une problématique (adopter un modèle écologique de recherche).",
+                "SR-5": "Pourquoi nouveaux milieux alors que la LMRSST englobe maintenant tous les secteurs = Reformuler le titre par : Connaître les secteurs ciblés par la LMRSST et leurs besoins.",
+                "DL-2": "Continuer et augmenter nos présences dans des kiosques et les réseaux sociaux pour nous faire connaître davantage et construire davantage notre réseau, en particulier les PME. Inviter des acteurs cibles/nouveaux gros clients dans nos locaux et leur montrer tout ce que nous avons à offrir. Faire de la prospection davantage sur les risques en visitant les milieux de travail et en effectuant de la recherche bibliographique afin de mieux identifier les risques présents et futures.",
+                "DL-3": "Mettre l’effort pour cibler les substances/risques à venir ou d’intérêt.\nLa formation (être un guide) pourra être une action pour tisser des liens avec les milieux.\nInverser les actions 1 et 2 (commencer par cartographier et les former par la suite).",
+                "DVM": "Très important et un besoin exprimé par nos partenaires actuels. Suggestion : Action 1 et 2 : ne sont pas assez précises pour être des actions. Elles sont des objectifs. Action 2 : modifier mieux connaitre (trouver un terme plus précis)",
+                "DFPR": "Nouveaux milieux : PME, travailleurs autonomes, etc. Action 2 : comment cela va se faire et qui le fera?",
+                "GCSS": "Bonne idée"
+              }
+            },
+            "1.1.2": {
+              "titre": "Renforcer le potentiel de surveillance de l’état de santé des travailleuses et travailleurs",
+              "commentaires": {
+                "SR-1": "Explorer la pertinence d’établir des ententes de collaboration à l’international.",
+                "SR-4": "Avoir une réflexion sur : Est-ce que les outils et les indicateurs sont les bons’ ? Action 1 : Plus précis avec les collaborations avec l’INSPQ Quelle sera la nature de la collaboration? C’est très bon si on s’implique dans cet objectif (Action 2 et 3)",
+                "SR-5": "Que veut dire maximiser ? Pourquoi ne pas cibler la DVM en plus. Voir comment la mobilisation est retournée dans les milieux de travail. Les 3 actions sont trop statiques : allons nous continuer à les nourrir ? Retirer l’information de la cible dans l’énoncé de l’action 3. Ajouter à l’action 3 dans quel cadre utiliser les données de surveillance etc…. Cet énoncé d’objectif laisse penser qu’on va pousser la surveillance statistique seulement en fonction du nombre de victimes.",
+                "DL-2": "Développer aussi notre collaboration avec le CEAEQ, en particulier avec l’amiante, Urgence Santé et Urgence Environnement. Rendre accessible l’observatoire et l’utilisation aisée pour les PME afin de favoriser le suivi de leur travailleur. Fournir un équivalent de SISAT dans ClicLab au besoin pour les aider à effectuer leurs calculs et leur suivi de santé.",
+                "DL-3": "Point de surveillance : les réalités des interventions en santé publique ne sont pas les mêmes qu’en santé au travail. Et même le volet santé au travail de l’INSPQ est influencé par l’approche santé publique.",
+                "DFPR": "On y travaille déjà avec des partenariats nouveaux et renouvelés avec l’INSPQ et la DSRP/SAT Mtl.",
+                "GCSS": "Bonne idée, entente INSPQ. Un CADISQ-SST svp. Go d’accord à 100%. Surveiller des dangers. Collaboration avec IWH"
+              }
+            },
+            "1.1.3": {
+              "titre": "Faire connaître les résultats de l’exercice de prospective pilotés par l’IWH",
+              "commentaires": {
+                "SR-2": "Quel niveau d’engagement est attendu de la SR? Participation à la recherche prospective – participation à la ‘diffusion’ – participation au suivi.",
+                "GCSS": "Bonne idée"
+              }
+            },
+            "1.1.4": {
+              "titre": "Impliquer les groupes/centres de recherche peu investis en SST au développement de nouvelles connaissances afin qu’ils intègrent la SST à leurs activités de recherche",
+              "commentaires": {
+                "SR-1": "Mieux expliquer le mécanisme derrière le concours et le processus (pertinence, priorités, paritarisme, CS, etc.). Par exemple, en produisant une vidéo, ou une séance annuelle d’informations.",
+                "SR-2": "Attention à l’effet compétitif dans les subventions, en conséquence éventuelle de cet élargissement. Pourquoi ne pas mettre les universités dans cet élargissement, afin d’augmenter le bassin d’étudiant ? Augmenter les possibilités de fonds utilisables pour certaines recherches ?",
+                "SR-4": "Y aura-t-il la relève pour réaliser cet objectif et avec quelles ressources?",
+                "SR-5": "Préciser dans l’action 1 si nous faisons référence aux centres de recherche nationaux et/ou internationaux. Sur la base de quels critères désignons-nous des centres peu investis en SST ? Proposition d’ajouter une action supplémentaire afin de faire le suivi d’un partenariat signé après plusieurs années. Cet objectif implique des $$$$ et des ressources humaines. Y a-t-il un plan de ressources prévus ?",
+                "DVM": "Suggestion : reformuler l’objectif, enlever le jugement (peu investis). On comprend et adhère à l’idée d’apporter la perspective SST dans des milieux de recherche qui ne l’étudient pas.",
+                "SCRP": "Action 1 : Établir les partenariats avec groupes/centres de recherche visés afin d’élargir le bassin de chercheurs et chercheuses aux expertises variées à réaliser des recherches en SST.",
+                "DFPR": "Remplacer peu investis en SST par qui pourrait s’intéresser à la SST ou susceptible d’avoir un intérêt en SST",
+                "GCSS": "Bonne idée"
+              }
+            },
+            "1.1.5": {
+              "titre": "Faire connaître notre offre auprès des milieux de travail",
+              "commentaires": {
+                "SR-1": "Définir le concept d’offre auprès des milieux, qui semble inapproprié pour le service de la rechercher. Est-ce que ça concerne davantage la DL ?",
+                "SR-2": "Le titre de l’objectif est un peu réducteur comparé aux actions prévues. L’objectif pourrait plus viser les PME. Action 3: les incitatifs financiers ne sont peut-être pas le seul levier, les mutuelles de prévention et les ASP devraient être sollicités, et ajoutés en tant que partenaires.",
+                "SR-4": "Action 4 : Adopter une approche PME dans les activités de la DVM : refaire la formulation de cette action\nAdaptée aux PME\nSondage : revoir cette cible les PME ne répondront pas au sondage\nRéflexion avec la vulgarisation de la SST pour les secteurs PME\nEst-ce qu’on s’occupera des Travailleurs qui ne sont pas couvert par le CNESST ? Notre offre : Terme à changer Demanderait des ressources supplémentaires Comment on peut développer des projets de recherche pour rejoindre les PME",
+                "SR-5": "Dans le titre, définir le mot OFFRE. Il n’y a pas de mécanisme au niveau facturation de la DR contrairement à la DL Comment faire connaitre l’offre ? Action 1 : quelle est la définition de nouveaux publics ? Action 2 : ajouter le mot aussi devant réalités = concernant aussi les réalités… Action 3 : définition pas claire Action 4 : définition pas claire. En général dans tout le document, prévoir un lexique pour expliquer et comprendre les termes utilisés qui peuvent porter à confusion",
+                "DL-1": "Il est clair que l’accessibilité et la facilité d’accès à l’information (conditions, prix) pour le public est un enjeu pour le service des laboratoires. Toutefois, on remet en question la disponibilité des ressources pour la mise à jour du site web (section laboratoires), en contexte de préparation au déménagement. Faire connaitre notre offre passe par les formations appliquées (recoupe le point 1.3).",
+                "DL-2": "C’est bien de nous faire connaitre par les milieux, mais il est nécessaire aussi de les former de manière continue (p. ex. capsule vidéo, démonstration, etc.) afin de les soutenir. Un sondage est pertinent, mais l’échantillonnage est souvent biaisé, car c’est souvent les mêmes qui répondent. Il est donc difficile de rejoindre l’écho des nouveaux. Profiter de la refonte du site (services de laboratoires qui auront un nouveau site) pour faciliter la recherche dessus et pour que l’information ressorte. Assurer que le contenu de l’information apparaisse à même la fiche substance ou l’agresseur physique (prix, délais, capsules vidéos, informations pertinentes, etc.) Permettre le paiement par carte de crédit, en particulier pour les PME (et une carte de crédit à la DL pour faciliter les achats de matériels pour certains sous-traitants)",
+                "DL-3": "La tournée de Bruno dans les régions bon exemple d’action concrète. Point de surveillance : l’approche des médecins en toxicologie. Utiliser la CNESST (les ordres professionnelles ou organisations des médecins, les tables des médecins) comme plateforme pour se faire connaitre.",
+                "DVM": "Modifier l’objectif pour cibler les PME. Objectif: faire connaitre notre offre auprès des PME au Québec. Action 3 devrait venir en 1er, action 1 en 3e. Action 2 : pas juste site web aussi les outils de diffusion de la DVM. Action 4 : l’enlever, on ne comprend pas ce que cela veut dire.",
+                "SCRP": "Action 1 : Préciser «nouveaux publics». Mesurer la notoriété auprès de nos partenaires (?) quels autres publics cible? Préciser - en faire un point à part? Action 2 : no Maintenir et faciliter l’accès ... Soutenir nos efforts continus en matière de diffusion et d’accessibilité. Mesurer notre effet et les retombées, réajuster nos stratégies de diffusion afin d’atteindre les publics cible à prioriser.",
+                "GCSS": "Bonne idée"
+              }
+            }
+          },
+          "commentaires_generaux": {
+              "PDG-IMMO": "Pas de commentaires",
+              "DL-4": "Pas eu le temps d’aborder cela. Objectif 2 priorisé",
+              "DTI": "Pas de commentaires",
+              "DRH": "Pas de commentaires",
+              "DFA": "Pas de commentaires"
+          }
+        },
+        "1.2": {
+          "titre": "Favoriser l’appropriation des connaissances scientifiques par les milieux de travail",
+          "objectifs": {
+            "1.2.1": {
+              "titre": "Redéfinir le cadre institutionnel en transfert des connaissances",
+              "commentaires": {
+                "SR-2": "Clarifier le rôle de la SR dans cette action. Et celle de la DR et DVM. Action 1 : Que veut-on dire par levier scientifique de transfert de connaissance? Pris en charge par la SR ou par la DVM?",
+                "SR-3": "D’accord. Suggestion: besoin d’une ressource spécialisée en transfert des connaissances.",
+                "SR-4": "Pas certain qu’on va résoudre cette action 1. Grand besoin de résoudre cette action 1. Transfert des connaissances passe beaucoup par les normes et on ne mentionne pas les normes. Déterminer les Mécanismes d’action. Établir une liste de critères est une idée intéressante. Arrimer recherche avec DVM. Faire plus de liens entre DVM et communications pour transférer les connaissances.",
+                "SR-5": "Vise à clarifier et redéfinir le rôle du chercheur et des services offerts par chaque service. Pas de pertinence d’établir une liste des critères. Raccourcir les énoncés des actions. Responsabilités devraient revenir à la DVM pour le transfert des connaissances = vulgarisation",
+                "DL-2": "C’est mieux que c’était. Peut être améliorer aussi en cas de retrait préventif, afin d’assurer l’embauche lors du retrait préventif et non lors du congé de maternité. Favoriser l’utilisation de la matrice de polyvalence et l’optimiser pour tenir compte des absences.",
+                "DVM": "- Constat : on n’aime pas du tout la manière dont l’objectif est énoncé. On ne comprend pas à quoi faire référence un cadre institutionnel. Suggestion : développer un modèle d’appropriation des connaissances à l’IRSST. Le transfert et l’appropriation ce n’est pas la même chose. Pour l’instant on ne voit pas comment le transfert conduit à l’appropriation. Intégrer la question de l’évaluation dans le modèle d’appropriation. Action 1 : cette action redonne la responsabilité aux directions sans qu’on sente l’organisationnel. Il faut éviter de travailler en silos. Comment avoir une perspective organisationnelle ? Transfert ou appropriation. Il faut enlever le terme transfert",
+                "DFPR": "Appui financier de la DFPR à ces initiatives de transfert de connaissances. Allons-définir des responsabilités et des fonctions par rapport au transfert des connaissances dans chacune des directions?",
+                "GCSS": "Bonne idée"
+              }
+            },
+            "1.2.2": {
+              "titre": "Évaluer l’efficacité des mesures et des interventions en SST",
+              "commentaires": {
+                "SR-2": "Est-ce que ça ne se fait pas déjà par des actions de recherche ? Intervention = prévention : quel niveau de prévention est ciblé ici ? Lesquels veut-on prioriser ? Est-ce qu’on va prévoir des fonds supplémentaires pour cette évaluation ? Pourquoi est-ce que la SR est en dernier dans les directions impliquées ? Quel est le rôle de la DVM ?",
+                "SR-3": "D’accord.",
+                "SR-4": "Évaluer les interventions existantes. Plusieurs sortes d’évaluations, il faut évaluer toutes les sortes. 3 ans c’est court pour une recherche évaluative (projet de recherche IRSST sont sur 3 ans). C’est bon de l’ajouter.",
+                "SR-5": "Qui fait les interventions ? Comment allons-nous financer? Ajouter une action : établir les critères d’évaluation. Ajouter une autre action pour ajuster les financements pour les recherches longitudinales pour avoir les avant et les après.",
+                "DVM": "Enlever l’efficacité des mesures (c’est trop restrictif car cela fait référence à un type d’évaluation). Il y en a plusieurs … Suggestion : Évaluer les interventions en SST (efficacité des mesures est trop restrictif). Enlever DVM de 1.2.2 car pour l’instant ce sont des projets de recherche.",
+                "DFPR": "Des appels de propositions sur la recherche évaluative (des études ou outils et méthodes développés par IRSST ?",
+                "GCSS": "Très bonne idée"
+              }
+            },
+            "1.2.3": {
+              "titre": "Établir une stratégie média pour diffuser des connaissances scientifiques sur des enjeux ou problématiques SST émergentes ou d’actualité, leur incidence et des solutions appropriées/utiles/concrètes",
+              "commentaires": {
+                "SR-1": "Avons-nous les ressources (humaines, financières) pour répondre aux problématiques émergentes et pour trouver des solutions dans un si court laps de temps ? Enjeux de communication dans les médias pour les chercheurs.",
+                "SR-2": "Est-ce que c’est relié aux stratégies média telles que ‘Savoir media’ ou plus ‘ponctuel et d’actualité’ ?",
+                "SR-3": "D’accord, nous sommes déjà super bons!",
+                "SR-4": "Cet objectif est intéressant. Action 3 : tout à fait d’accord.",
+                "SR-5": "Retirer les indicateur et cible dans l’énoncé de l’action 2. Action 2 : expliquer à quel stade du projet. Action 3 : de qui parle-t ’on ? ici",
+                "DVM": "Une stratégie média est un moyen pour répondre à un objectif. Suggestion : Objectif : diffuser les connaissances scientifiques sur les enjeux…. Action : développer une stratégie média",
+                "SCRP": "Aligner notre stratégie média afin de mieux se positionner dans l’actualité et atteindre nos publics cible - définir; préciser ces publics. Intégrer dans nos plans de diffusion, une approche spontanée, directe, plus connectée, plus proche, plus informelle, dans le développement de notre communauté connectée. Campagnes live sur les médias sociaux – en mettant à l’avant l’expérience participant – indicateur : cinq campagnes. Action 3: Moyen: Produire une série d’ateliers de formations médiatiques et de communication publique et scientifique.",
+                "GCSS": "Beau programme"
+              }
+            }
+          },
+          "commentaires_generaux": {
+            "SR-1": "Faire le point sur les interventions de communication actuelles et les différentes stratégies de communication mises en place, avant d’augmenter l’offre.",
+            "SR-4": "Ajouter un objectif sur le suivi d’implantation de la nouvelle loi (long terme) dans différents domaines (mesures introduites, nouveaux outils)",
+            "DL-1": "Pas de commentaires",
+            "DL-2": "Pas de commentaires",
+            "DL-3": "Pas de commentaires",
+            "DL-4": "Pas eu le temps d’aborder cela. Objectif 2 priorisé",
+            "PDG-IMMO": "Pas de commentaires",
+            "DTI": "Pas de commentaires",
+            "DRH": "Pas de commentaires",
+            "DFA": "Pas de commentaires"
+          }
+        },
+        "1.3": {
+          "titre": "Participer à la formation d’une main-d’œuvre qualifiée en SST",
+          "objectifs": {
+            "1.3.1": {
+              "titre": "Formaliser un mécanisme spécifique et une capacité d’accueil pour les stagiaires de niveau collégial, de premier et de deuxième cycle universitaire",
+              "commentaires": {
+                "SR-2": "Qu’est-ce que ça veut dire ‘un cadre d’accueil spécifique’ ? recrutement ? financement ? syndical ? Quelle serait la spécificité de ces étudiants ?",
+                "SR-3": "Oui, super! Mais prévoir du financement institutionnel pour les accueillir. Étant donné le nombre d’étudiants disponibles réduit, travailler sur l’attractivité de l’IRSST comme milieu d’accueil",
+                "SR-5": "Pourquoi le 3e cycle n’est pas mentionné ? Action 1 : ajouter un incitatif financier. Action 2 : ajouter au libellé de mettre en place un système de gestion des dossiers d’immigration. Ajouter une action 3 : que l’IRSST soit reconnu par le Qc comme organisme qui peut accueillir des immigrants.",
+                "DL-2": "Assurer le recrutement d’étudiants l’été et pour des projets de recherche afin d’améliorer le recrutement d’employés. Présentement, le gestionnaire n’est pas dans l’encadrement des stagiaires. Assurer le moins d’intervenants possibles pour l’étudiant pour son encadrement, car même si les rôles et responsabilités sont bien définies, c’est dur pour l’étudiant de s’y retrouver parfois.",
+                "DL-3": "On le fait depuis quelque temps. Il s’agit d’un mécanisme assez mature. Transférer cette expérience aux autre directions /professionnels de la DL.",
+                "DL-4": "Action1: Revoir en profondeur quelle politique ou instruction de travail sont indispensable à l’accueil d’un étudiant courte durée. Alléger le processus. Mieux cibler les lectures en fonction du profil de la personne qui arrive.",
+                "DTI": "Aucune modification n’est apportée au libellé. Toutefois, l’objectif nécessitera une simplification et une automatisation du processus d’accueil, afin de faciliter l’intégration des stations de travail provenant d’autres organisations. Il faudra également prévoir le financement lié aux licences ainsi qu’à l’acquisition des ordinateurs.",
+                "DRH": "Action 1 déjà en cours. S’assurer du soutien et de l’accompagnement de l’équipe et du gestionnaire et RH ainsi que de la disponibilité des équipements et des locaux. Action 2 : définir les paramètres de communication afin d’assurer le suivi lors de l’embauche et tout au long de son séjour à l’IRSST.",
+                "GCSS": "Bonne idée Nécessaire de préciser 1er cycle et 2e cycle"
+              }
+            },
+            "1.3.2": {
+              "titre": "Contribuer à la formation technique en hygiène industrielle en collaboration avec les CEGEP concernés et le réseau de santé publique en santé au travail",
+              "commentaires": {
+                "SR-1": "Ne s’applique pas au SR",
+                "SR-5": "Pourquoi ne pas ajouter la DR pour la formation dans les CEGEP cela permettrait de donner de la visibilité à l’Institut, de valider les formations données et de s’assurer qu’elles sont à jour.",
+                "DL-1": "Offre de stage d’un jour niveau secondaire. Stage d’été. Conférence et participation à certains cours au collégial. Inviter le public (ex : écoles secondaires) dans notre établissement. D’ici le déménagement, ce pourrait être en mode exploratoire, pour préparer ce volet à être déployé sur le nouveau site.",
+                "DL-2": "Assurer le recrutement d’étudiants l’été et pour des projets de recherche afin d’améliorer le recrutement d’employés.",
+                "DL-4": "Avoir les moyens (financier et ressource disponible) pour proposer des formation à l’IRSST ou sur place. Créer un département hygiène industriel qui serait dédier aux expertise terrains, formation étudiant et répondre à la nouvelle clientèle n’ayant aucune expertise dans ce domaine",
+                "DFPR": "Discussions déjà en cours. Justifier le désire de financer principalement la formation technique en hygiène industrielle. Intéressant, mais pas facile de voir le lien avec la mission de l’IRSST",
+                "GCSS": "OK"
+              }
+            },
+            "1.3.3": {
+              "titre": "Développer et offrir des formations en réponse à des besoins exprimés par nos partenaires et qui demandent notre expertise de pointe, principalement la DL, DR, SR, DVM, SCRP",
+              "commentaires": {
+                "SR-1": "Actions 2-3 : Nous pensons ne pas avoir les ressources, ça demande trop de temps. Cet objectif est trop ambitieux. Est-ce vraiment en lien avec la mission de l’Institut ?",
+                "SR-2": "Il faut les moyens qui y correspondent. Quelle est la part de la SR dans cet objectif ? Pour la SR, quelles seraient les modalités pour prendre en compte ces formations dans l’évaluation de rendement des chercheurs et professionnels de recherche ?",
+                "SR-3": "Oui, mais qui et comment? Comment l’encadrer? Selon disponibilité et recherche du personnel? Comment déterminer la priorité formation vs recherche?",
+                "SR-5": "Retirer le bout de phrase en jaune dans le titre (pas besoin de spécifier ou alors le faire dans tous les énoncé).",
+                "DL-1": "On trouve l’action 3 très pertinente et nous aurions tendance à le prioriser.",
+                "DL-2": "Particulièrement important. Le renouvellement de personnel dans les milieux de même que les changements législatifs nécessitent une formation initiale et continue des milieux (p. ex changement d’instruments). Être proactif pour définir des besoins qui pourraient émergés.",
+                "DL-3": "Continuer avec ces formations (DL). Élargir le public cible.",
+                "DL-4": "Pas eu le temps de traiter cela",
+                "SCRP": "Offrir l’accompagnement pour une communication plus fluide; développer une stratégie multicanaux pour diffuser et faire rayonner l’offre de formations et les formations. Privilégier les approches interactives, les ateliers (formation participative). Renforcer le rôle conseil du service des communications et relations publiques",
+                "GCSS": "OK. Action 3: Super pour GCSS et observatoire SST"
+              }
+            }
+          },
+          "commentaires_generaux": {
+            "SR-4": "C’est important, c’est la base pour la pérennité de l’IRSST et la SP",
+            "PDG-IMMO": "Pas de commentaires",
+            "DVM": "Pas de commentaires",
+            "DTI": "Pas de commentaires",
+            "DFA": "Pas de commentaires"
+          }
+        }
+      }
+    },
+    "enjeu_2": {
+      "titre": "Relocaliser les activités et optimiser les opérations",
+      "orientations": {
+        "2.1": {
+          "titre": "Assurer la continuité des opérations d’ici et pendant la période de relocalisation",
+          "objectifs": {
+            "2.1.1": {
+              "titre": "Assurer la poursuite des activités nécessitant des laboratoires d’analyse, d’étalonnage et de recherche",
+              "commentaires": {
+                "DL-2": "Action 1, 2 et 3. Point de vigilance en cas de 2 emplacements temporairement concernant l’acheminement des échantillons et des instruments, leur traçabilité et les licences d’assurance qualité pour l’AIHA. Action 4 : Point de vigilance. Améliorer la communication avec la clientèle, car actuellement, les info-labos ne rejoignent pas toujours bien la clientèle. Peut-être ajouter une mise en garde dans Cliclab sur les adresses ou les interruptions ou sur le site web de manière plus évidente. Point d’inquiétude : Plus difficile pour l’instrumentation de prévoir la période entre l’ancienne et la nouvelle adresse (par exemple, la valise ne se rend pas au bon endroit). Pour les analyses, plus « facile » de maintenir les activités en ayant des labos sous-traitants. Est-ce que d’autres directions dont le déménagement est plus facile pourraient aider les autres qui auront besoin de plus de soutien? Attention au réseau informatique qui devra nous soutenir pendant toute l’adaptation.",
+                "DL-4": "Action1 : Partenariat avec d’autres laboratoires pour aller faire nos analyses dans leurs locaux (centre universitaire, polytechnique et autres). Planifier les scénarios à l’avance avec Pierre B. et son équipe si nous avons des bris mécanique pour lequel il n’y auras pas d’investissement ou de réparation et visualiser les impacts sur les secteurs concernés. Action 2 :Faire une analyse de risque pour chaque type d’analyse (sous-traité possible ou pas) et tenir compte des délais d’analyse et de la fréquence des urgences et du niveau de production de chacune. Préparation de Matériel en surplus. En fonction des pics de productivité. S’assurer d’avoir du stock commander en surplus pour éviter les commandes virto. Prévoir avec L’équipe de Pierre ce qui est critique au niveau de la vétusté des installations mécanique et l’impact sur les laboratoires et par conséquent sur nos analyses. Prévoir une plus grande flexibilité des horaires et la possibilité d’avoir un budget supplémentaire pour financer de l’overtime soir et weekend. Action 3 : La sous traitance des échantillons va créer une surcharge de travail aux Sac labo ainsi qu’à l’expédition (10e étage). Planifier un plan pour palier à cela. Planifier l’ajout ou l’embauche de personnel en conséquence dans les secteurs concernés. Plusieurs membres de l’équipe auront à gérer le déménagement et la mise en service du nouveau laboratoire. Prévoir de l’ajout de personnel pour effectuer la routine et dégager les ressources plus expérimentées pour faire les validations ou la remise en service des nouveaux laboratoires. (voir si on pourrait faire appel à nos jeunes retraiter). Faire un déménagement, une remise en service graduel, prévoir une période assez longue ou les opérations seraient à cheval pour certains secteurs entre les nouveaux et les anciens labos. Éviter de créer une situation de KO dans tous les secteurs éviterait de gérer le mécontentement de masse de notre clientèle. Assurer la santé sécurité de nos locaux avant le déménagement et durant la remise en service graduel. Action 4 : Impliquer le service des communications pour nous aider avec notre approche clientèle. Action5 : Faire une planification à la DR en fonction de la réalité déménagement et de la remise en service de nos laboratoires. Favoriser les partenariats externes (universitaire ou école d’ingénieurs) si les délais ne correspondent pas à la réalité des labos durant cette période. Action 6 : Arrimer le déménagement avec les autres départements de l’IRSST (TI, DFA, RH, Équipe mécanique). En lien avec le choix du site les membres du groupe ont insisté pour mentionner que la rétention du personnel était un enjeu majeur au bon déroulement du déménagement et la remise en service des laboratoires dans un délai optimal afin d’éviter de devoir recruter et former Juste avant, pendant et après le déménagement.",
+                "PDG-IMMO": "Assurer la poursuite de l’ensemble des activités de l’IRSST. Action 1 : Prévoir des mesures d’atténuation ou des solutions de rechange en cas de bris qui compromettent le maintien des services, la sécurité des usagers et leur confort. Indicateur : 100% de nos mesures d’atténuation ou de nos solutions de rechange ont permis d’éviter les bris de service. Moyen : produire un plan de contingence. Moyen : Définir les services essentiels, les services critiques et intégrer les services internes. Action 2 : Lors du déménagement, planifier les interruptions de service de manière à annuler ou atténuer les conséquences pour les clientèles et communiquer avec la clientèle. Indicateur : 100% des interruptions de service ont été anticipées, planifiées et communiquées. Moyen : identification des interruptions possibles, plan de contingence et plan de communication. Action 3 : Planifier et organiser le déménagement. Indicateur 1 : 100% des directions / services sont élaborés à temps. Indicateur 2 : les plans sont réalistes ! Indicateur 3 : la date de déménagement doit être annoncée au moins 18 mois à l’avance. Moyen : élaborer un plan de déménagement pour chaque direction / service. Moyen : informer de la date de déménagement.",
+                "DTI": "Aucune modification au libellé. Toutefois, l’impact sur la DTI sera le suivant : Planifier la main-d’œuvre en conséquence. Définir une stratégie pour l’exploitation en mode multisites. En cas d’implantation de nouvelles technologies, prévoir une période d’assimilation des connaissances. Déterminer si de nouveaux postes de travail devront être acquis afin d’assurer la continuité des opérations.",
+                "GCSS": "100%",
+                "DFA": "Nous sommes en accord avec toutes les actions. Action 6 : pour atténuer les conséquences pour les clientèles. Négociations avec les propriétaires de l’immeuble pour les modalités d’utilisation des corridors, des escaliers, des ascenseurs et du quai de chargement et des heures."
+              }
+            }
+          },
+          "commentaires_generaux": {
+            "SR-1": "Prévoir une ressource (via des rencontres individuelles) pour soutenir, informer et accompagner les membres du personnel qui en ont besoin, qui ont des interrogations et de l’anxiété face au déménagement.",
+            "SR-2": "Peu de contrôle dans cet objectif.\nComment prendre en compte l’impact du déménagement (temps et financier) dans les projets de recherche prévus ? Ces impacts peuvent être difficilement envisagés du fait du peu de contrôle dans le déménagement.",
+            "SR-3": "S’assurer de consulter et communiquer de façon fluide DL-SR pour l’utilisation et partage de locaux et équipements.",
+            "SR-4": "C’est pertinent",
+            "SR-5": "Retirer les indicateurs et cibles dans les actions 1 et 6.\nAction 2 : définir services essentiels ou critiques",
+            "DL-1": "Une reformulation pourrait permettre de mieux clarifier la période incluse et concernée par cet objectif précis. Amont du déménagement\nENJEU 2 : On se questionne sur la portion « optimiser les opérations », comme on est en période de planification et préparation du déménagement.",
+            "DL-3": "Pas de commentaires",
+            "PDG-IMMO": "Exclusion de la partie administrative ! Il ne faut pas se centrer sur les labos et la recherche",
+            "DVM": "La relocalisation du centre de documentation n’est pas inclut dans l’enjeu de relocalisation. Or cela demande une bonne planification et l’objectif de planification sans arrêté les services devraient aussi concerner la DVM et son centre de doc",
+            "SCRP": "Pas de commentaires",
+            "DFPR": "Pas de commentaires",
+            "DRH": "Pas de commentaires"
+          }
+        },
+        "2.2": {
+          "titre": "Optimiser l’offre de services et l’aménagement des laboratoires d’analyse et d’étalonnage en adéquation avec les besoins de l’écosystème SST",
+          "objectifs": {
+            "2.2.1": {
+              "titre": "Concevoir des espaces de laboratoires de services durables/viables/pérennes adaptés aux besoins des clientèles",
+              "commentaires": {
+                "DL-2": "Le PFT est pas mal complété, mais il reste à l’ajuster au site retenu. Tenir compte du risque financier du PFT, des superficies proposées en fonction de notre réalité et des besoins futurs des clients. Les pieds carrés proposés sont importants parfois (p. ex organique) et il faut s’assurer de les rentabiliser. Action 3 : Changement du modèle en cours (modèle basé sur le réseau, alors que le hors-réseau prend de plus en plus de place). Action 1 et 3 assez liés. Il est important qu’elles soient bien entreprises pour bien ajuster le PFT et son volume proposé (qu’on n’ait pas trop d’espace au final).",
+                "DL-3": "Réalisé!",
+                "DL-4": "Action1 : Clients moins expérimentés du priver requiert plus d’accompagnement en hygiène donc prévoir une ressource en hygiène (expérimenté) pour répondre au client (interne et externe) peut faire un suivi avec le client par la suite. (Ceci est valable pour l’objectif 1). Le changement du type de clientèle dû à la LMRSST et accroitre les questionnements, , les besoins en information et en formation. Prévoir de former une équipe en hygiène capable d’avoir une approche terrain dédier à orienté les questionnements de notre nouvelle clientèle. Développer une mécanique pour faire remonter à la direction les demande clients (demande de formation ou autres). Action 2 : aucune action particulière supplémentaire n’est souhaité tant que on n’a pas les plans des nouveaux laboratoires. Les plan dans nos nouveaux locaux sont nécessaire avant de retravailler dessus et aménager en fonction de l’espace réellement disponible. Action3 : souhaitable, prévoir plus d’accompagnement et formation pour les plus petite compagnie. Bonne opportunité pour l’IRSST de rayonner. Créer des ponts avec la CNESST / IRRST pour les expertises PME ou formation.",
+                "PDG-IMMO": "Action 2 : il doit y avoir un participant de PDG Projet immo sur ce groupe de travail. Il doit y avoir une date limite pour la modification du PFT.",
+                "GCSS": "Pas d’enjeux",
+                "DFA": "Implication de la DFA principalement pour les finances."
+              }
+            },
+            "2.2.2": {
+              "titre": "Planifier l’acquisition de nouveaux équipements/instruments pour réduire les coûts et accélérer la reprise des opérations/activités des services de laboratoires",
+              "commentaires": {
+                "DL-2": "On est d’accord. Concernant l’action 2, il est intéressant que les chercheurs et le SR acquiert aussi des équipements et que les équipements soient davantage mutualisés, en respect des accréditations. Actuellement, la DL acquiert la majorité des équipements en chimie ce qui n’est pas souhaitable à long terme. Attention au SR qui devra se conformer à un minimum de nos exigences en termes d’assurance qualité. En cas de mutualisation des équipements, il serait intéressant d’avoir une ressource en gestion des équipements métrologiques. La production serait prioritaire à la recherche, toutefois, des ressources doivent être réservées à la recherche.",
+                "DL-3": "Point de surveillance : délai de 6 mois à prévoir car les équipements/instruments devient désuets rapidement.",
+                "DL-4": "Action1 : plan amorcé avec les professionnels (en cours). Action 2 : Proposer à la recherche les vieux équipements avant de s’en débarrasser.",
+                "PDG-IMMO": "Compatibilité des nouveaux équipements avec le PFT",
+                "DTI": "Aucun ajout, modifications déjà rapportées au point 2.1.1",
+                "GCSS": "Pas d’enjeux",
+                "DFA": "Implication de la DFA principalement pour les finances."
+              }
+            }
+          },
+          "commentaires_generaux": {
+            "SR-1": "OK",
+            "SR-2": "Est-ce que c’est un budget additionnel ou est-ce que c’est une limitation des achats avant le déménagement pour l’acquisition de ces nouveaux équipement?",
+            "SR-3": "D’accord",
+            "SR-4": "Pas de commentaires",
+            "SR-5": "Pas de commentaires",
+            "DL-1": "Proposition pour reformuler l’énoncé de l’orientation : Optimiser l’aménagement des laboratoires afin de maintenir l’offre de services… ou ajout d’une action spécifiquement en lien avec l’optimisation de l’offre de services. Aucun des actions ne permet d’optimiser l’offre de services.",
+            "DVM": "Pas de commentaires",
+            "SCRP": "Pas de commentaires",
+            "DFPR": "Pas de commentaires",
+            "DRH": "Pas de commentaires"
+          }
+        },
+        "2.3": {
+          "titre": "Favoriser la mutualisation des infrastructures de recherche avec nos collaboratrices et collaborateurs de recherche en SST",
+          "objectifs": {
+            "2.3.1": {
+              "titre": "Planifier notre structure d’accueil et de collaboration",
+              "commentaires": {
+                "SR-2": "Niveau informatique : Est-ce que c’est pour améliorer / mieux répondre aux besoins de la SR (espace de stockage, partage de données, etc.)? Si non, ajouter ce point.",
+                "SR-5": "Concerne plus les RH, pourquoi DR ?",
+                "DL-2": "Améliorer l’accueil des ressources au SR pour montrer les bons côtés de l’accréditation et de laboratoires contrôlés. Actuellement, c’est vu comme un frein.",
+                "DL-3": "Point de surveillance: accès aux données sensibles.",
+                "DL-4": "Action1: souhaitable car l’accueil des personnes à courtes durée n’est pas possible. Alléger le processus. Mieux cibler les lectures en fonction du profile de la personne qui arrive.",
+                "PDG-IMMO": "Compatibilité avec la sécurité des déplacements des personnes (zones d’accès, gestion des portes, etc.). Enregistrement automatique des visiteurs et du personnel présent.",
+                "DTI": "Aucune modification au libellé. Simplifier le partage d’informations avec les collaborateurs. Tenir compte des contraintes géopolitiques lors du partage d’informations. Faciliter l’accueil de postes de travail externes à notre organisation.",
+                "DRH": "Similaire à 1.3.1. Action 1 déjà en cours. S’assurer du soutien et de l’accompagnement de l’équipe et du gestionnaire et RH ainsi que de la disponibilité des équipements et des locaux. Action 2 : définir les paramètres de communication afin d’assurer le suivi lors de l’embauche et tout au long de son séjour à l’IRSST.",
+                "GCSS": "OK",
+                "DFA": "DFA pour les finances."
+              }
+            },
+            "2.3.2": {
+              "titre": "Aménager des laboratoires de recherche polyvalents / versatiles qui tiennent compte de l’évolution/démarche/processus de l’activité de recherche",
+              "commentaires": {
+                "SR-5": "Retirer la note dans action 1. Texte pas clair si pour les locaux actuels ou futurs puisque ce plan est pour 2026-2028.",
+                "PDG-IMMO": "Il doit y avoir une date limite pour la modification du PFT. Définition des principes de versatilité et de polyvalence, avec une logique financière sur les surcoûts de polyvalence / gain en recherche.",
+                "DRH": "S’assurer de suivre la réglementation et autres paramètres de SST.",
+                "GCSS": "OK",
+                "DFA": "DFA pour les finances."
+              }
+            },
+            "2.3.3": {
+              "titre": "Partager des infrastructures de laboratoires d’analyse et d’essai pour les activités de recherche, lorsque possible (interne)",
+              "commentaires": {
+                "SR-2": "Il faut les ressources qui gèrent ces processus / partages et des processus clairs.",
+                "SR-3": "Oui, vraiment nécessaire",
+                "SR-5": "Ne fonctionne pas car les raisons d’être de la DL et de la DR sont très différentes.",
+                "DL-2": "Voir point 2.2.2. Il y aura probablement une période de tensions et frictions avant d’atteindre une atmosphère de partage.",
+                "DL-4": "Déjà en cours. Mais pas de réel processus établi. Besoin d’établir un processus plus formel entre la recherche (chercheur) et la DL (professionnel et équipe de direction) pour optimiser le fonctionnement et éviter les frustrations.",
+                "DTI": "Tenir compte des contraintes technologiques et des exigences réglementaires (loi 25 et sécurité)",
+                "GCSS": "OK",
+                "DFA": "DFA pour les finances."
+              }
+            },
+            "2.3.4": {
+              "titre": "Mutualiser les laboratoires de recherche",
+              "commentaires": {
+                "SR-2": "Est-ce que ça peut amputer la disposition des laboratoires pour l’IRSST ? Pour mettre en place des nouveaux partenariats, a-t-on les ressources (de soutien et financières) nécessaires ?",
+                "SR-3": "S’assurer d’être autonomes et non dépendant d’autres institutions.",
+                "SR-4": "Soulève beaucoup d’enjeux",
+                "SR-5": "Attention contraintes de calendrier et disponibilités des locaux. Ne fonctionne jamais actuellement. Prévoir calendrier dynamique.",
+                "DL-2": "Au-delà des employés de l’IRSST, en ouvrant les instruments au SR, des stagiaires académiques et étudiants aussi vont venir dans nos locaux, d’où l’importance de les encadrer et faire un accueil structuré dès le début. Il est possible de voir avec des partenaires externes similaires au nôtre comme le CEAEQ, l’INSPQ, le fédéral, etc. pour mutualiser davantage nos espaces et nos équipements.",
+                "DL-3": "Point de surveillance : établir de règles et des façons de faire pour ne pas nuire à la clientèle.",
+                "DL-4": "Action 1 : bonne idée si pas de coupure de poste et si pas plus de contraintes pour les laboratoires. Action 2 : souhaiter. Avoir une vision global sur l’impact sur les laboratoires.",
+                "PDG-IMMO": "Compatibilité avec la sécurité des déplacements des personnes pour notre espace IRSST (zones d’accès, gestion des portes, etc.). Le hall industriel devrait être intégré dans les discussions avec les partenaires sur la mutualisation des espaces.",
+                "DFPR": "Il faudrait probablement avoir un plan sur la mutualisation des laboratoires de recherche",
+                "GCSS": "OK",
+                "DFA": "DFA pour les finances."
+              }
+            }
+          },
+          "commentaires_generaux": {
+            "SR-1": "OK",
+            "DL-1": "Ajouter la DL dans le titre (3 des 4 sous-objectifs concernent la DL). Cet objectif concerne les infrastructures mais il serait intéressant de s’attarder à l’attribution des ressources humaines dans l’optique d’un partage DL-SR-externe.",
+            "PDG-IMMO": "PDG projet immo devrait être un partenaire des autres directions afin d’être au courant des évolutions",
+            "DVM": "Pas de commentaires",
+            "SCRP": "Pas de commentaires"
+          }
+        },
+        "2.4": {
+          "titre": "Concevoir des espaces de travail et renforcer les pratiques favorables à la SST, à la performance organisationnelle et au développement durable",
+          "objectifs": {
+            "2.4.1": {
+              "titre": "Placer la SST au cœur de nos installations et de nos pratiques quotidiennes",
+              "commentaires": {
+                "SR-3": "D’accord. Spécifier expert INTERNE.",
+                "PDG-IMMO": "Intégrer la SST dans le PFT et dans la conception de nos installation",
+                "DRH": "Lors de notre développement de politiques/procédures/instruction ou autres, nous nous assurons de consulter nos experts. Lors de l’achat ou l’installation d’équipement, une évaluation SST devrait être effectuée.",
+                "GCSS": "OK"
+              }
+            },
+            "2.4.2": {
+              "titre": "Concevoir/aménager des espaces de travail qui optimisent la collaboration intra et interéquipes, et qui répondent aux besoins de réalisation de l’activité de travail",
+              "commentaires": {
+                "SR-1": "Nous sommes un peu perplexes. Nous avons hâte que ça se concrétise et de voir les plans et les décisions finales. Inviter l’ensemble du personnel à vérifier les simulations et à se prononcer sur les plans. Prévoir du temps et des moyens pour modifier les plans en fonction des simulations.",
+                "SR-4": "Pendant l’élaboration des plans, prévoir, prévoir des espaces de discussions avec de l’ouverture d’esprit aux propositions. Concepteurs des plans, ceux qui prennent les décisions et les travailleurs. Réaliser des simulations pour discuter des situations de travail. Prévoir plusieurs rencontres d’ajustement pour réajuster les plans (coconstruction)",
+                "DTI": "Aucune modification au libellé. Faciliter le travail collaboratif en mode présentiel, hybride ou à distance (outils technologiques de visioconférence et équipements audiovisuels). Offrir une expérience utilisateur fluide au sein du MTAA.",
+                "GCSS": "OK",
+                "DFA": "Prévoir et organiser les activités du Sac-Labo et de la réception des marchandises pour optimiser les espaces l’un près de l’autre. Bureau des électromécaniciens près de la salle mécanique."
+              }
+            },
+            "2.4.3": {
+              "titre": "Établir un processus de gestion de la demande informatique qui permet de définir les besoins de soutien et de prioriser les projets de développement significatif",
+              "commentaires": {
+                "DL-1": "Il serait souhaitable de penser à trouver une façon de pouvoir utiliser l’accès à distance pour les contrôleurs des instruments. Amélioration continue des services informatiques (accessibilité réseaux, connexions à distance) pour le contexte particulier des laboratoires.",
+                "DL-2": "Assurer une flexibilité dans la planification pour des plus petits ou moyens projets qui sont aussi pertinents afin qu’ils soient adressés dans un délai raisonnable. Éviter que ces projets, car non planifiés se retrouvent constamment repoussés.",
+                "PDG-IMMO": "S’assurer de pouvoir transférer la solution informatique dans les nouveaux lieux",
+                "DFPR": "Qu’en est-il du plan des TI concernant le soutien aux usagers?",
+                "DTI": "Aucune modification au libellé. Moyen efficace de répondre aux besoins des différentes directions et de favoriser leur autonomie, notamment pour la plupart des points identifiés dans le plan stratégique.",
+                "GCSS": "OK",
+                "DFA": "Seulement l’action 3 concerne la DFA."
+              }
+            },
+            "2.4.4": {
+              "titre": "Agir sur notre empreinte environnementale",
+              "commentaires": {
+                "SR-2": "Action 1 : possibilité d’ajouter la notion de réparation dans cette action. Action 5 : Est-ce que ça prend en compte les participations à des congres ? Objectif : ‘agir’, mais les actions sont de planifier, évaluer, etc. Peut être prévoir plus d’action.",
+                "SR-3": "D’accord, sauf que c’est très ambitieux sur 3 ans. Ajouter qu’il faudrait en tenir compte dans les projets de recherche.",
+                "DL-1": "Optimisation du sans papier",
+                "DL-2": "Les instruments du parc de la CNESST leur appartiennent et il faut que le comité des instruments de la CNESST (SCGPIM) en valide leurs destructions. Le réutilisation et le recyclage sont toujours privilégié.",
+                "PDG-IMMO": "Bâtiment LEED ou avec les principes LEED. Énergie solaire pour alimenter notre chauffage ou électricité. Géothermie. Gestion de la charge thermique des instruments pour la récupérer au maximum. Se débarrasser des énergies fossiles au maximum.",
+                "DFPR": "Pourquoi ne pas avoir impliquée toutes les directions comme directions responsables?",
+                "DRH": "Action 1 : appel d’offre pour la gestion documentaire (numérisation + gestion papier). Faire l’inventaire du nombre de bureaux et chaises.",
+                "GCSS": "OK",
+                "DFA": "Action 4 : Prévoir une salle froide pour l’entreposage temporaire des déchets et du compostage. Action 5 : Développer ou intégrer une stratégie visant la réduction de notre empreinte environnementale."
+              }
+            }
+          },
+          "commentaires_generaux": {
+            "SR-5": "Pas de commentaires",
+            "DL-3": "Pas de commentaires",
+            "DL-4": "Pas eu le temps",
+            "PDG-IMMO": "PDG projet immo devrait être un partenaire des autres directions afin d’être au courant des évolutions",
+            "DVM": "Pas de commentaires",
+            "SCRP": "Pas de commentaires"
+          }
+        },
+        "2.5": {
+          "titre": "Mobiliser le personnel autour d’une organisation attractive et inspirante",
+          "objectifs": {
+            "2.5.1": {
+              "titre": "Renforcer l’entraide et la collaboration entre et dans les équipes en s’appuyant sur la diversité des compétences, des expériences et des points de vue.",
+              "commentaires": {
+                "SR-1": "Action 3 : Faciliter au lieu de favoriser",
+                "SR-3": "Contrats d’équipe si l’équipe en exprime le besoin.",
+                "DRH": "Action 1 : le contrat d’équipe est en processus de déploiement auprès des équipes. Action 2 : Un plan de formation générique est cours de développement. Action 3 : le terme la collaboration est au cœur du plan d’action 2026 du CEES.",
+                "GCSS": "OK"
+              }
+            },
+            "2.5.2": {
+              "titre": "Renforcer l’attractivité et maintenir l’engagement du personnel",
+              "commentaires": {
+                "SR-1": "Action 3 : Encadrer un mentorat, pas seulement pour les nouveaux employés. Élément de bonification du dernier volet du RÉPIT actuel, sur une base volontaire et si besoin (implication du mentor).",
+                "DL-4": "L’emplacement des laboratoire et des bureaux va jouer beaucoup sur la rétention du personnel. Le déménagement va générer déjà beaucoup de travail donc le recrute",
+                "PDG-IMMO": "Bel espace de travail, MTAA, salle de repos, locaux attractifs",
+                "SCRP": "Action 1 : Moyens : Plateforme de recrutement attrayante. Présence dans des événements universitaires. Participer au Salon de l’emploi à Paris. Développer la marque employeur pour renforcer le sentiment d’appartenance. Reconnaître publiquement les arrivées, les bons coups de nos collègues - en utilisant les réseaux sociaux et le site Web de l’IRSST. Poursuivre l’utilisation de l’intranet comme vitrine de l’engagement de nos collègues à la poursuite de la mission de l’IRSST",
+                "DFPR": "Entreprise en santé : Vise-t-on la certification?",
+                "DRH": "Action 3 : voir action 2 du point 2.5.1, ainsi que le nouvel outil d’évaluation de la performance (REPI)",
+                "GCSS": "OK"
+              }
+            }
+          },
+          "commentaires_generaux": {
+            "SR-2": "Pas de commentaires",
+            "SR-4": "Pas le temps de le faire",
+            "SR-5": "Pas de commentaires",
+            "DL-1": "Pas de commentaires",
+            "DL-2": "Pas de commentaires",
+            "DL-3": "Pas de commentaires",
+            "PDG-IMMO": "PDG projet immo devrait être un partenaire des autres directions afin d’être au courant des évolutions",
+            "DVM": "Pas de commentaires",
+            "DTI": "Pas de commentaires",
+            "DFA": "Pas de commentaires"
+          }
+        }
+      }
+    },
+    "elements_cles_pleniere": {
+      "SR-1": [
+        "MTAA et déménagement : Nous sommes un peu perplexes. Nous avons hâte que ça se concrétise et de voir les plans et les décisions finales. Inviter l’ensemble du personnel à vérifier les simulations et à se prononcer sur les plans. Prévoir du temps et des moyens pour modifier les plans en fonction des simulations.",
+        "Notre rôle avec les médias et le grand public : En ajouter? Établir une stratégie média pour diffuser des connaissances scientifiques sur des enjeux ou problématiques SST émergentes ou d’actualité, leur incidence et des solutions appropriées/utiles/concrètes.",
+        "Point 1.3.3 Développer et offrir des formations en réponse à des besoins exprimés par nos partenaires et qui demandent notre expertise de pointe, principalement la DL, DR, SR, DVM, SCRP Actions 2-3 (formation, documents interactifs) : Nous pensons ne pas avoir les ressources, ça demande trop de temps. Cet objectif est trop ambitieux. Est-ce vraiment en lien avec la mission de l’Institut ?"
+      ],
+      "SR-2": [
+        "On trouve qu’il y a beaucoup de valeurs citées qui, en conséquence, perdent de leur sens. Proposition : choix de quelques valeurs fortes et transversales à toutes les activités de l’Institut (3/4) et en lien avec les objectifs.",
+        "Il y a beaucoup d’objectifs pour trois ans. Préciser la part de la SR pour évaluer le poids de tous ces objectifs.",
+        "Quelle est la part de la responsabilité de chaque direction dans les différents objectifs présentés? Cités mais pas évaluée (10% - 90%); en découle le besoin de moyens nécessaires."
+      ],
+      "SR-3": [
+        "Définir un cadre pour le transfert des connaissances, la mobilisation et la formation",
+        "Mutualisation des espaces, ressources, équipements : communication et consultation",
+        "Cohésion au sein de l’IRSST (entre les personnes, les services et les disciplines)"
+      ],
+      "SR-4": [
+        "Pertinent",
+        "Prend en compte les nouvelles réalités",
+        "Ajouter un objectif sur le suivi d’implantation de la nouvelle loi (long terme) dans différents domaines (mesures introduites, nouveaux outils)",
+        "Valeurs : focusser sur : Ouverture d’esprit, respect et bienveillance"
+      ],
+      "SR-5":
