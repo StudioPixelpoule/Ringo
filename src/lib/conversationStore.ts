@@ -404,6 +404,141 @@ INSTRUCTION IMPORTANTE: Le contenu de ce document n'a pas pu être traité. Util
                 }
               }
             }
+            
+            // Pour les fichiers de données (JSON, CSV), formater de manière plus lisible
+            if (doc.type === 'data' && documentContent) {
+              try {
+                // Vérifier si le contenu est déjà un objet (peut arriver en production)
+                let dataContent = documentContent;
+                
+                // Si c'est une chaîne, essayer de la parser
+                if (typeof documentContent === 'string' && 
+                    documentContent.trim().startsWith('{') && 
+                    documentContent.trim().endsWith('}')) {
+                  try {
+                    dataContent = JSON.parse(documentContent);
+                  } catch (parseError) {
+                    console.warn('Impossible de parser le JSON, utilisation du contenu brut:', parseError);
+                    // Si le parsing échoue, on garde le contenu tel quel
+                  }
+                }
+                
+                // Si dataContent est maintenant un objet, on peut continuer
+                if (typeof dataContent === 'object' && dataContent !== null) {
+                  
+                  // Si c'est un fichier de données traité par notre système (avec type et data)
+                  if (dataContent.type && dataContent.data) {
+                    const dataInfo = dataContent.metadata || {};
+                    
+                    // Créer un résumé structuré des données
+                    let formattedContent = `== DONNÉES STRUCTURÉES ==\n`;
+                    formattedContent += `Type de fichier: ${dataContent.type.toUpperCase()}\n`;
+                    formattedContent += `Nom du fichier: ${dataContent.fileName}\n`;
+                    
+                    if (dataInfo.rowCount !== undefined) {
+                      formattedContent += `Nombre d'enregistrements: ${dataInfo.rowCount}\n`;
+                    }
+                    
+                    if (dataInfo.fields && dataInfo.fields.length > 0) {
+                      formattedContent += `Colonnes/Champs: ${dataInfo.fields.join(', ')}\n`;
+                    }
+                    
+                    formattedContent += `\n== CONTENU DES DONNÉES ==\n`;
+                    
+                    // Pour les tableaux de données, limiter l'affichage aux premiers enregistrements
+                    if (Array.isArray(dataContent.data)) {
+                      const sampleSize = Math.min(5, dataContent.data.length);
+                      formattedContent += `(Affichage des ${sampleSize} premiers enregistrements sur ${dataContent.data.length})\n\n`;
+                      formattedContent += JSON.stringify(dataContent.data.slice(0, sampleSize), null, 2);
+                      
+                      if (dataContent.data.length > sampleSize) {
+                        formattedContent += `\n\n... ${dataContent.data.length - sampleSize} enregistrements supplémentaires non affichés ...\n`;
+                        formattedContent += `\nPour une analyse complète, pose des questions spécifiques sur les données.`;
+                      }
+                    } else {
+                      // Pour les objets JSON simples, afficher de manière formatée
+                      formattedContent += JSON.stringify(dataContent.data, null, 2);
+                    }
+                    
+                    // Remplacer le contenu par la version formatée
+                    documentContent = formattedContent;
+                  } else if (!dataContent.type) {
+                    // C'est un fichier JSON brut (non traité par notre système)
+                    // Analyser la structure pour créer un résumé intelligent
+                    let formattedContent = `== DONNÉES JSON STRUCTURÉES ==\n`;
+                    formattedContent += `Nom du fichier: ${doc.name}\n`;
+                    
+                    // Analyser la structure du JSON
+                    const keys = Object.keys(dataContent);
+                    formattedContent += `Clés principales: ${keys.slice(0, 10).join(', ')}${keys.length > 10 ? '...' : ''}\n`;
+                    
+                    // Compter les éléments si c'est un tableau
+                    if (Array.isArray(dataContent)) {
+                      formattedContent += `Type: Tableau\n`;
+                      formattedContent += `Nombre d'éléments: ${dataContent.length}\n`;
+                      if (dataContent.length > 0 && typeof dataContent[0] === 'object') {
+                        const firstItemKeys = Object.keys(dataContent[0]);
+                        formattedContent += `Structure des éléments: ${firstItemKeys.join(', ')}\n`;
+                      }
+                    } else if (typeof dataContent === 'object') {
+                      formattedContent += `Type: Objet\n`;
+                      // Analyser la structure imbriquée
+                      let totalItems = 0;
+                      let structureInfo = [];
+                      
+                      for (const key of keys) {
+                        const value = dataContent[key];
+                        if (Array.isArray(value)) {
+                          structureInfo.push(`${key}: tableau de ${value.length} éléments`);
+                          totalItems += value.length;
+                        } else if (typeof value === 'object' && value !== null) {
+                          const subKeys = Object.keys(value);
+                          structureInfo.push(`${key}: objet avec ${subKeys.length} propriétés`);
+                          totalItems += subKeys.length;
+                        }
+                      }
+                      
+                      if (structureInfo.length > 0) {
+                        formattedContent += `\nStructure détaillée:\n`;
+                        structureInfo.slice(0, 10).forEach(info => {
+                          formattedContent += `  - ${info}\n`;
+                        });
+                        if (structureInfo.length > 10) {
+                          formattedContent += `  ... et ${structureInfo.length - 10} autres sections\n`;
+                        }
+                      }
+                    }
+                    
+                    formattedContent += `\n== CONTENU COMPLET ==\n`;
+                    
+                    // Limiter la taille du contenu affiché
+                    const jsonString = JSON.stringify(dataContent, null, 2);
+                    const maxLength = 50000; // Limiter à 50000 caractères
+                    
+                    if (jsonString.length > maxLength) {
+                      // Pour les gros fichiers, afficher un échantillon
+                      formattedContent += `(Fichier volumineux - ${Math.round(jsonString.length / 1000)}KB - affichage partiel)\n\n`;
+                      formattedContent += jsonString.substring(0, maxLength);
+                      formattedContent += `\n\n... Contenu tronqué (${Math.round((jsonString.length - maxLength) / 1000)}KB supplémentaires) ...\n`;
+                      formattedContent += `\n💡 Ce fichier JSON est très volumineux. Pour une analyse efficace:\n`;
+                      formattedContent += `- Pose des questions spécifiques sur les sections qui t'intéressent\n`;
+                      formattedContent += `- Demande des extractions ciblées de données\n`;
+                      formattedContent += `- Utilise des filtres pour réduire les données affichées`;
+                    } else {
+                      formattedContent += jsonString;
+                    }
+                    
+                    // Remplacer le contenu par la version formatée
+                    documentContent = formattedContent;
+                  }
+                }
+              } catch (e) {
+                // Si erreur de parsing, garder le contenu original
+                console.error('Erreur lors du formatage des données:', e);
+                // Mais essayer quand même de donner des infos basiques
+                documentContent = `== FICHIER DE DONNÉES ==\nNom: ${doc.name}\nType: ${doc.type}\n\nNote: Le contenu de ce fichier n'a pas pu être analysé automatiquement.\n\n${documentContent}`;
+              }
+            }
 
             return `
 ====== DOCUMENT ACTIF "${doc.name}" ======
