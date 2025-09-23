@@ -408,9 +408,23 @@ INSTRUCTION IMPORTANTE: Le contenu de ce document n'a pas pu être traité. Util
             // Pour les fichiers de données (JSON, CSV), formater de manière plus lisible
             if (doc.type === 'data' && documentContent) {
               try {
-                // Vérifier si le contenu est un JSON formaté par processDocument
-                if (documentContent.trim().startsWith('{') && documentContent.trim().endsWith('}')) {
-                  const dataContent = JSON.parse(documentContent);
+                // Vérifier si le contenu est déjà un objet (peut arriver en production)
+                let dataContent = documentContent;
+                
+                // Si c'est une chaîne, essayer de la parser
+                if (typeof documentContent === 'string' && 
+                    documentContent.trim().startsWith('{') && 
+                    documentContent.trim().endsWith('}')) {
+                  try {
+                    dataContent = JSON.parse(documentContent);
+                  } catch (parseError) {
+                    console.warn('Impossible de parser le JSON, utilisation du contenu brut:', parseError);
+                    // Si le parsing échoue, on garde le contenu tel quel
+                  }
+                }
+                
+                // Si dataContent est maintenant un objet, on peut continuer
+                if (typeof dataContent === 'object' && dataContent !== null) {
                   
                   // Si c'est un fichier de données traité par notre système (avec type et data)
                   if (dataContent.type && dataContent.data) {
@@ -448,7 +462,7 @@ INSTRUCTION IMPORTANTE: Le contenu de ce document n'a pas pu être traité. Util
                     
                     // Remplacer le contenu par la version formatée
                     documentContent = formattedContent;
-                  } else {
+                  } else if (!dataContent.type) {
                     // C'est un fichier JSON brut (non traité par notre système)
                     // Analyser la structure pour créer un résumé intelligent
                     let formattedContent = `== DONNÉES JSON STRUCTURÉES ==\n`;
