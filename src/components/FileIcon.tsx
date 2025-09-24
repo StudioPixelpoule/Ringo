@@ -105,6 +105,21 @@ export const FileIcon: React.FC<FileIconProps> = ({ type, file, className = '', 
     );
   }
 
+  // Markdown file icon
+  if (normalizedType === 'markdown' || ['md', 'markdown', 'mdown', 'mkd', 'mdx'].includes(normalizedType) || normalizedType.includes('text/markdown')) {
+    return (
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="currentColor"
+        className={className}
+      >
+        <path fillRule="evenodd" clipRule="evenodd" d="M9.29289 1.29289C9.48043 1.10536 9.73478 1 10 1H18C19.6569 1 21 2.34315 21 4V20C21 21.6569 19.6569 23 18 23H6C4.34315 23 3 21.6569 3 20V8C3 7.73478 3.10536 7.48043 3.29289 7.29289L9.29289 1.29289ZM18 3H11V8C11 8.55228 10.5523 9 10 9H5V20C5 20.5523 5.44772 21 6 21H18C18.5523 21 19 20.5523 19 20V4C19 3.44772 18.5523 3 18 3ZM6.41421 7H9V4.41421L6.41421 7ZM7 12.5C7 12.2239 7.22386 12 7.5 12H8.5C8.63261 12 8.75979 12.0527 8.85355 12.1464L10 13.2929L11.1464 12.1464C11.2402 12.0527 11.3674 12 11.5 12H12.5C12.7761 12 13 12.2239 13 12.5V17.5C13 17.7761 12.7761 18 12.5 18C12.2239 18 12 17.7761 12 17.5V13.7071L11.3536 14.3536C11.1583 14.5488 10.8417 14.5488 10.6464 14.3536L10 13.7071L9.35355 14.3536C9.15829 14.5488 8.84171 14.5488 8.64645 14.3536L8 13.7071V17.5C8 17.7761 7.77614 18 7.5 18C7.22386 18 7 17.7761 7 17.5V12.5ZM14 16.5V14H15V16.5C15 16.7761 15.2239 17 15.5 17H16.5C16.7761 17 17 16.7761 17 16.5V12.5C17 12.2239 16.7761 12 16.5 12C16.2239 12 16 12.2239 16 12.5V15H15V12.5C15 12.2239 14.7761 12 14.5 12C14.2239 12 14 12.2239 14 12.5V16.5Z" />
+      </svg>
+    );
+  }
+
   // Report icon (HTML)
   if (normalizedType === 'report' || normalizedType === 'html' || normalizedType.includes('text/html')) {
     return (

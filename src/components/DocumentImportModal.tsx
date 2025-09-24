@@ -302,7 +302,10 @@ export function DocumentImportModal() {
       'audio/mp4': ['.mp4'],
       'audio/mpga': ['.mpga'],
       'audio/m4a': ['.m4a'],
-      'text/html': ['.html']
+      'text/html': ['.html'],
+      'text/markdown': ['.md', '.markdown', '.mdown', '.mkd', '.mdx'],
+      'text/x-markdown': ['.md', '.markdown'],
+      'text/plain': ['.txt', '.md', '.markdown']
     },
     multiple: true,
     maxFiles: MAX_DOCUMENTS_PER_CONVERSATION,
