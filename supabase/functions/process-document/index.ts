@@ -3,6 +3,8 @@ import { createClient } from "npm:@supabase/supabase-js@2.39.7";
 import mammoth from "npm:mammoth@1.6.0";
 import * as XLSX from "npm:xlsx@0.18.5";
 import Papa from "npm:papaparse@5.4.1";
+import { safeJsonParse } from './jsonUtils.ts';
+import { processMarkdownDocument } from './markdownProcessor.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -175,13 +177,14 @@ async function processJSONDocument(file: File): Promise<any> {
   console.log('[JSON Processing] Starting processing:', file.name);
   
   const text = await file.text();
-  let data;
+  const parseResult = safeJsonParse(text);
   
-  try {
-    data = JSON.parse(text);
-  } catch (e) {
-    throw new Error('Le fichier JSON est invalide');
+  if (parseResult.error) {
+    console.warn('[JSON Processing] Warning:', parseResult.error);
+    console.log('[JSON Processing] First 100 chars:', text.substring(0, 100));
   }
+  
+  const data = parseResult.data;
   
   // Formater les données pour le stockage
   const formattedData = {
@@ -273,19 +276,30 @@ serve(async (req) => {
     else if (file.type === 'application/json' || extension === 'json') {
       result = await processJSONDocument(file);
     }
+    else if (['md', 'markdown', 'mdown', 'mkd', 'mdx'].includes(extension || '') || 
+             file.type === 'text/markdown' || 
+             file.type === 'text/x-markdown') {
+      // Traiter les fichiers Markdown
+      result = await processMarkdownDocument(file);
+    }
     else if (file.type === 'text/plain' || extension === 'txt') {
-      // Traiter comme un document texte simple
-      const text = await file.text();
-      result = {
-        content: cleanText(text),
-        metadata: {
-          fileName: file.name,
-          fileType: file.type,
-          language: detectLanguage(text)
-        },
-        confidence: 1,
-        processingDate: new Date().toISOString()
-      };
+      // Vérifier si c'est un Markdown déguisé en text/plain
+      if (['md', 'markdown', 'mdown', 'mkd'].includes(extension || '')) {
+        result = await processMarkdownDocument(file);
+      } else {
+        // Traiter comme un document texte simple
+        const text = await file.text();
+        result = {
+          content: cleanText(text),
+          metadata: {
+            fileName: file.name,
+            fileType: file.type,
+            language: detectLanguage(text)
+          },
+          confidence: 1,
+          processingDate: new Date().toISOString()
+        };
+      }
     }
     else {
       throw new Error(`Type de fichier non supporté: ${file.type || extension}`);

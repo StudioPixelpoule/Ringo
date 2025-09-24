@@ -10,6 +10,7 @@ function getDocumentType(fileName: string): string {
          ['ppt', 'pptx'].includes(extension || '') ? 'presentation' :
          ['json', 'csv', 'xlsx', 'xls'].includes(extension || '') ? 'data' :
          ['mp3', 'wav', 'wave', 'aac', 'ogg', 'webm', 'm4a', 'mp4', 'mpga'].includes(extension || '') ? 'audio' :
+         ['md', 'markdown', 'mdown', 'mkd', 'mdx'].includes(extension || '') ? 'markdown' :
          extension === 'html' ? 'report' : 'unknown';
 }
 

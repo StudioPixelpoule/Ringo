@@ -430,30 +430,38 @@ INSTRUCTION IMPORTANTE: Le contenu de ce document n'a pas pu être traité. Util
                   if (dataContent.type && dataContent.data) {
                     const dataInfo = dataContent.metadata || {};
                     
-                    // Créer un résumé structuré des données
-                    let formattedContent = `== DONNÉES STRUCTURÉES ==\n`;
-                    formattedContent += `Type de fichier: ${dataContent.type.toUpperCase()}\n`;
-                    formattedContent += `Nom du fichier: ${dataContent.fileName}\n`;
+                    // Créer un résumé orienté utilisateur
+                    let formattedContent = `📊 ${dataContent.fileName}\n`;
+                    formattedContent += `═`.repeat(Math.min(dataContent.fileName.length + 3, 60)) + '\n\n';
                     
+                    // Informations de base
                     if (dataInfo.rowCount !== undefined) {
-                      formattedContent += `Nombre d'enregistrements: ${dataInfo.rowCount}\n`;
+                      formattedContent += `Ce fichier contient ${dataInfo.rowCount} enregistrement${dataInfo.rowCount > 1 ? 's' : ''}.\n`;
                     }
                     
                     if (dataInfo.fields && dataInfo.fields.length > 0) {
-                      formattedContent += `Colonnes/Champs: ${dataInfo.fields.join(', ')}\n`;
+                      formattedContent += `\nInformations disponibles :\n`;
+                      dataInfo.fields.slice(0, 20).forEach((field: any) => {
+                        formattedContent += `• ${field}\n`;
+                      });
+                      if (dataInfo.fields.length > 20) {
+                        formattedContent += `... et ${dataInfo.fields.length - 20} autres champs\n`;
+                      }
                     }
                     
-                    formattedContent += `\n== CONTENU DES DONNÉES ==\n`;
+                    formattedContent += `\n📝 Aperçu des données :\n\n`;
                     
                     // Pour les tableaux de données, limiter l'affichage aux premiers enregistrements
                     if (Array.isArray(dataContent.data)) {
                       const sampleSize = Math.min(5, dataContent.data.length);
-                      formattedContent += `(Affichage des ${sampleSize} premiers enregistrements sur ${dataContent.data.length})\n\n`;
+                      if (dataContent.data.length > sampleSize) {
+                        formattedContent += `[Premiers enregistrements]\n\n`;
+                      }
                       formattedContent += JSON.stringify(dataContent.data.slice(0, sampleSize), null, 2);
                       
                       if (dataContent.data.length > sampleSize) {
-                        formattedContent += `\n\n... ${dataContent.data.length - sampleSize} enregistrements supplémentaires non affichés ...\n`;
-                        formattedContent += `\nPour une analyse complète, pose des questions spécifiques sur les données.`;
+                        formattedContent += `\n\n[... ${dataContent.data.length - sampleSize} autres enregistrements disponibles pour l'analyse ...]\n`;
+                        formattedContent += `\n💡 Note : Toutes les données sont chargées. Vous pouvez poser vos questions sur l'ensemble du fichier.`;
                       }
                     } else {
                       // Pour les objets JSON simples, afficher de manière formatée
@@ -464,52 +472,55 @@ INSTRUCTION IMPORTANTE: Le contenu de ce document n'a pas pu être traité. Util
                     documentContent = formattedContent;
                   } else if (!dataContent.type) {
                     // C'est un fichier JSON brut (non traité par notre système)
-                    // Analyser la structure pour créer un résumé intelligent
-                    let formattedContent = `== DONNÉES JSON STRUCTURÉES ==\n`;
-                    formattedContent += `Nom du fichier: ${doc.name}\n`;
+                    // Présenter le contenu de manière lisible pour l'utilisateur
+                    let formattedContent = `📊 Données structurées\n`;
+                    formattedContent += `═══════════════════\n\n`;
                     
-                    // Analyser la structure du JSON
-                    const keys = Object.keys(dataContent);
-                    formattedContent += `Clés principales: ${keys.slice(0, 10).join(', ')}${keys.length > 10 ? '...' : ''}\n`;
-                    
-                    // Compter les éléments si c'est un tableau
+                    // Description simple du contenu
                     if (Array.isArray(dataContent)) {
-                      formattedContent += `Type: Tableau\n`;
-                      formattedContent += `Nombre d'éléments: ${dataContent.length}\n`;
+                      formattedContent += `Ce fichier contient ${dataContent.length} enregistrement${dataContent.length > 1 ? 's' : ''}.\n`;
+                      
+                      // Montrer la structure si les éléments sont des objets
                       if (dataContent.length > 0 && typeof dataContent[0] === 'object') {
                         const firstItemKeys = Object.keys(dataContent[0]);
-                        formattedContent += `Structure des éléments: ${firstItemKeys.join(', ')}\n`;
-                      }
-                    } else if (typeof dataContent === 'object') {
-                      formattedContent += `Type: Objet\n`;
-                      // Analyser la structure imbriquée
-                      let totalItems = 0;
-                      let structureInfo = [];
-                      
-                      for (const key of keys) {
-                        const value = dataContent[key];
-                        if (Array.isArray(value)) {
-                          structureInfo.push(`${key}: tableau de ${value.length} éléments`);
-                          totalItems += value.length;
-                        } else if (typeof value === 'object' && value !== null) {
-                          const subKeys = Object.keys(value);
-                          structureInfo.push(`${key}: objet avec ${subKeys.length} propriétés`);
-                          totalItems += subKeys.length;
+                        formattedContent += `\nChaque enregistrement contient les informations suivantes :\n`;
+                        firstItemKeys.slice(0, 15).forEach(key => {
+                          formattedContent += `• ${key}\n`;
+                        });
+                        if (firstItemKeys.length > 15) {
+                          formattedContent += `... et ${firstItemKeys.length - 15} autres champs\n`;
                         }
                       }
+                    } else if (typeof dataContent === 'object') {
+                      const keys = Object.keys(dataContent);
+                      formattedContent += `Ce document contient ${keys.length} section${keys.length > 1 ? 's' : ''} principale${keys.length > 1 ? 's' : ''}.\n\n`;
                       
-                      if (structureInfo.length > 0) {
-                        formattedContent += `\nStructure détaillée:\n`;
-                        structureInfo.slice(0, 10).forEach(info => {
-                          formattedContent += `  - ${info}\n`;
+                      // Analyser le contenu de manière simple
+                      let sections = [];
+                      for (const key of keys.slice(0, 10)) {
+                        const value = dataContent[key];
+                        let description = key;
+                        if (Array.isArray(value)) {
+                          description = `${key} (${value.length} élément${value.length > 1 ? 's' : ''})`;
+                        } else if (typeof value === 'object' && value !== null) {
+                          const subKeys = Object.keys(value);
+                          description = `${key} (${subKeys.length} donnée${subKeys.length > 1 ? 's' : ''})`;
+                        }
+                        sections.push(description);
+                      }
+                      
+                      if (sections.length > 0) {
+                        formattedContent += `Sections disponibles :\n`;
+                        sections.forEach(section => {
+                          formattedContent += `• ${section}\n`;
                         });
-                        if (structureInfo.length > 10) {
-                          formattedContent += `  ... et ${structureInfo.length - 10} autres sections\n`;
+                        if (keys.length > 10) {
+                          formattedContent += `... et ${keys.length - 10} autres sections\n`;
                         }
                       }
                     }
                     
-                    formattedContent += `\n== CONTENU COMPLET ==\n`;
+                    formattedContent += `\n📝 Données complètes :\n\n`;
                     
                     // Limiter la taille du contenu affiché
                     const jsonString = JSON.stringify(dataContent, null, 2);
@@ -517,13 +528,10 @@ INSTRUCTION IMPORTANTE: Le contenu de ce document n'a pas pu être traité. Util
                     
                     if (jsonString.length > maxLength) {
                       // Pour les gros fichiers, afficher un échantillon
-                      formattedContent += `(Fichier volumineux - ${Math.round(jsonString.length / 1000)}KB - affichage partiel)\n\n`;
+                      formattedContent += `[Fichier volumineux - affichage partiel]\n\n`;
                       formattedContent += jsonString.substring(0, maxLength);
-                      formattedContent += `\n\n... Contenu tronqué (${Math.round((jsonString.length - maxLength) / 1000)}KB supplémentaires) ...\n`;
-                      formattedContent += `\n💡 Ce fichier JSON est très volumineux. Pour une analyse efficace:\n`;
-                      formattedContent += `- Pose des questions spécifiques sur les sections qui t'intéressent\n`;
-                      formattedContent += `- Demande des extractions ciblées de données\n`;
-                      formattedContent += `- Utilise des filtres pour réduire les données affichées`;
+                      formattedContent += `\n\n[... Suite du contenu disponible pour l'analyse ...]\n`;
+                      formattedContent += `\n💡 Note : Le fichier complet est chargé. Vous pouvez poser toutes vos questions sur l'ensemble des données.`;
                     } else {
                       formattedContent += jsonString;
                     }
