@@ -22,6 +22,9 @@ const getDocumentIcon = (type: string) => {
       return <FileImage size={16} className="text-orange-500" />;
     case 'web':
       return <Globe size={16} className="text-cyan-500" />;
+    case 'markdown':
+    case 'text':
+      return <FileCode size={16} className="text-indigo-500" />;
     default:
       return <FileCode size={16} className="text-gray-500" />;
   }

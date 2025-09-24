@@ -11,6 +11,7 @@ function getDocumentType(fileName: string): string {
          ['json', 'csv', 'xlsx', 'xls'].includes(extension || '') ? 'data' :
          ['mp3', 'wav', 'wave', 'aac', 'ogg', 'webm', 'm4a', 'mp4', 'mpga'].includes(extension || '') ? 'audio' :
          ['md', 'markdown', 'mdown', 'mkd', 'mdx'].includes(extension || '') ? 'markdown' :
+         ['txt'].includes(extension || '') ? 'text' :
          extension === 'html' ? 'report' : 'unknown';
 }
 
