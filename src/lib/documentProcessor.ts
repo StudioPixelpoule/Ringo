@@ -4,6 +4,7 @@ import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 import { safeJsonParse, detectJsonStructure } from './jsonUtils';
+import { processMarkdownFile, isMarkdownFile } from './markdownProcessor';
 
 // Types communs
 export interface ProcessingOptions {
@@ -341,8 +342,25 @@ export async function processDocument(
     let result: string;
     const extension = file.name.split('.').pop()?.toLowerCase();
 
+    // Handle Markdown files
+    if (isMarkdownFile(file)) {
+      options?.onProgress?.({
+        stage: 'processing',
+        progress: 50,
+        message: 'Traitement du fichier Markdown...'
+      });
+      
+      const markdownResult = await processMarkdownFile(file, { includeStructure: true });
+      result = markdownResult.content;
+      
+      options?.onProgress?.({
+        stage: 'complete',
+        progress: 100,
+        message: 'Document Markdown traité avec succès'
+      });
+    }
     // Handle data files
-    if (['json', 'csv', 'xlsx', 'xls'].includes(extension || '')) {
+    else if (['json', 'csv', 'xlsx', 'xls'].includes(extension || '')) {
       result = await processDataFile(file, options);
     }
     // Handle documents
@@ -354,7 +372,13 @@ export async function processDocument(
 
         case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
         case 'text/plain':
-          result = await processTextDocument(file, options);
+          // Pour text/plain, vérifier si ce n'est pas un Markdown
+          if (extension === 'md' || extension === 'markdown') {
+            const markdownResult = await processMarkdownFile(file, { includeStructure: true });
+            result = markdownResult.content;
+          } else {
+            result = await processTextDocument(file, options);
+          }
           break;
 
         case 'text/html':
