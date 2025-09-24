@@ -222,71 +222,55 @@ function markdownToPlainText(content: string): string {
 }
 
 /**
- * Formater le contenu pour l'affichage structuré
+ * Formater le contenu pour l'affichage orienté utilisateur
  */
 function formatForDisplay(
   content: string, 
   metadata: MarkdownMetadata, 
   structure: MarkdownStructure
 ): string {
-  let formatted = '=== DOCUMENT MARKDOWN ===\n\n';
+  let formatted = '';
 
-  // Ajouter les métadonnées si présentes
-  if (Object.keys(metadata).length > 0) {
-    formatted += '📋 MÉTADONNÉES:\n';
-    for (const [key, value] of Object.entries(metadata)) {
-      if (value !== undefined && value !== null) {
-        formatted += `  • ${key}: ${Array.isArray(value) ? value.join(', ') : value}\n`;
-      }
+  // Titre du document
+  if (metadata.title) {
+    formatted += `📄 ${metadata.title}\n`;
+    formatted += '═'.repeat(Math.min(metadata.title.length + 3, 60)) + '\n\n';
+  } else if (structure.headings.length > 0 && structure.headings[0].level === 1) {
+    formatted += `📄 ${structure.headings[0].text}\n`;
+    formatted += '═'.repeat(Math.min(structure.headings[0].text.length + 3, 60)) + '\n\n';
+  }
+
+  // Informations de contexte simples
+  if (metadata.author || metadata.date) {
+    if (metadata.author) formatted += `Auteur : ${metadata.author}\n`;
+    if (metadata.date) formatted += `Date : ${metadata.date}\n`;
+    if (metadata.tags && Array.isArray(metadata.tags)) {
+      formatted += `Sujets : ${metadata.tags.join(', ')}\n`;
     }
     formatted += '\n';
   }
 
-  // Ajouter le résumé de structure
-  formatted += '📊 STRUCTURE DU DOCUMENT:\n';
-  formatted += `  • ${structure.headings.length} titre(s)\n`;
-  
-  if (structure.headings.length > 0) {
-    formatted += '    Hiérarchie:\n';
-    const maxHeadings = 10;
-    structure.headings.slice(0, maxHeadings).forEach(h => {
-      const indent = '    ' + '  '.repeat(h.level - 1);
-      formatted += `${indent}${h.level === 1 ? '📍' : h.level === 2 ? '▸' : '◦'} ${h.text}\n`;
+  // Sommaire simplifié si le document a une structure
+  if (structure.headings.length > 2) {
+    formatted += '📑 Plan du document :\n\n';
+    const mainSections = structure.headings.filter(h => h.level <= 2);
+    mainSections.slice(0, 10).forEach(h => {
+      if (h.level === 1) {
+        formatted += `• ${h.text}\n`;
+      } else if (h.level === 2) {
+        formatted += `  ◦ ${h.text}\n`;
+      }
     });
-    if (structure.headings.length > maxHeadings) {
-      formatted += `    ... et ${structure.headings.length - maxHeadings} autres titres\n`;
+    if (mainSections.length > 10) {
+      formatted += `  ... et ${mainSections.length - 10} autres sections\n`;
     }
+    formatted += '\n';
   }
 
-  if (structure.codeBlocks.length > 0) {
-    formatted += `  • ${structure.codeBlocks.length} bloc(s) de code`;
-    const languages = [...new Set(structure.codeBlocks.map(b => b.language))];
-    formatted += ` (${languages.join(', ')})\n`;
-  }
-
-  if (structure.links.length > 0) {
-    formatted += `  • ${structure.links.length} lien(s)\n`;
-  }
-
-  if (structure.images.length > 0) {
-    formatted += `  • ${structure.images.length} image(s)\n`;
-  }
-
-  if (structure.tables > 0) {
-    formatted += `  • ${structure.tables} tableau(x)\n`;
-  }
-
-  if (structure.lists.ordered + structure.lists.unordered > 0) {
-    formatted += `  • ${structure.lists.ordered + structure.lists.unordered} élément(s) de liste\n`;
-  }
-
-  formatted += '\n=== CONTENU ===\n\n';
-  
-  // Ajouter le contenu converti en texte brut
+  // Contenu principal
+  formatted += '📝 Contenu :\n\n';
   const plainText = markdownToPlainText(content);
   formatted += plainText;
-
-  formatted += '\n\n=== FIN DU DOCUMENT ===';
 
   return formatted;
 }

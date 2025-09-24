@@ -204,51 +204,48 @@ export async function processMarkdownDocument(file: File): Promise<any> {
   // Convertir en texte brut
   const plainText = markdownToPlainText(content);
 
-  // Formater pour le stockage
-  let formatted = '=== DOCUMENT MARKDOWN ===\n\n';
+  // Formater pour l'utilisateur final
+  let formatted = '';
 
-  // Ajouter les métadonnées
-  if (Object.keys(metadata).length > 0) {
-    formatted += '📋 MÉTADONNÉES:\n';
-    for (const [key, value] of Object.entries(metadata)) {
-      if (value !== undefined && value !== null) {
-        formatted += `  • ${key}: ${Array.isArray(value) ? value.join(', ') : value}\n`;
-      }
+  // Titre du document
+  if (metadata.title) {
+    formatted += `📄 ${metadata.title}\n`;
+    formatted += '═'.repeat(Math.min(metadata.title.length + 3, 60)) + '\n\n';
+  } else if (structure.headings.length > 0 && structure.headings[0].level === 1) {
+    formatted += `📄 ${structure.headings[0].text}\n`;
+    formatted += '═'.repeat(Math.min(structure.headings[0].text.length + 3, 60)) + '\n\n';
+  }
+
+  // Informations de contexte
+  if (metadata.author || metadata.date) {
+    if (metadata.author) formatted += `Auteur : ${metadata.author}\n`;
+    if (metadata.date) formatted += `Date : ${metadata.date}\n`;
+    if (metadata.tags && Array.isArray(metadata.tags)) {
+      formatted += `Sujets : ${metadata.tags.join(', ')}\n`;
     }
     formatted += '\n';
   }
 
-  // Ajouter le résumé de structure
-  formatted += '📊 STRUCTURE:\n';
-  formatted += `  • ${structure.headings.length} titre(s)\n`;
-  
-  if (structure.headings.length > 0) {
-    formatted += '    Hiérarchie:\n';
-    structure.headings.slice(0, 10).forEach(h => {
-      const indent = '    ' + '  '.repeat(h.level - 1);
-      formatted += `${indent}${h.level === 1 ? '📍' : h.level === 2 ? '▸' : '◦'} ${h.text}\n`;
+  // Plan simplifié si nécessaire
+  if (structure.headings.length > 2) {
+    formatted += '📑 Plan du document :\n\n';
+    const mainSections = structure.headings.filter(h => h.level <= 2);
+    mainSections.slice(0, 10).forEach(h => {
+      if (h.level === 1) {
+        formatted += `• ${h.text}\n`;
+      } else if (h.level === 2) {
+        formatted += `  ◦ ${h.text}\n`;
+      }
     });
+    if (mainSections.length > 10) {
+      formatted += `  ... et ${mainSections.length - 10} autres sections\n`;
+    }
+    formatted += '\n';
   }
 
-  if (structure.codeBlocks > 0) {
-    formatted += `  • ${structure.codeBlocks} bloc(s) de code\n`;
-  }
-  if (structure.links > 0) {
-    formatted += `  • ${structure.links} lien(s)\n`;
-  }
-  if (structure.images > 0) {
-    formatted += `  • ${structure.images} image(s)\n`;
-  }
-  if (structure.tables > 0) {
-    formatted += `  • ${structure.tables} tableau(x)\n`;
-  }
-  if (structure.lists > 0) {
-    formatted += `  • ${structure.lists} élément(s) de liste\n`;
-  }
-
-  formatted += '\n=== CONTENU ===\n\n';
+  // Contenu principal
+  formatted += '📝 Contenu :\n\n';
   formatted += plainText;
-  formatted += '\n\n=== FIN DU DOCUMENT ===';
 
   return {
     content: formatted,
