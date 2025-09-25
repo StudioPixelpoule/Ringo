@@ -17,10 +17,14 @@ async function getDocumentContent(doc: ConversationDocument): Promise<string> {
       throw new Error(`Document object missing`);
     }
     
-    const documentId = doc.documents.id;
+    const documentId = doc.document_id;  // Utiliser document_id de la relation
     const documentName = doc.documents.name;
+    const isProcessed = doc.documents.processed;
     
-    console.log(`[ReportGenerator] Fetching content for: ${documentName}, ID: ${documentId}`);
+    console.log(`[ReportGenerator] Fetching content for: ${documentName}`);
+    console.log(`[ReportGenerator] - document_id from relation: ${documentId}`);
+    console.log(`[ReportGenerator] - documents.id: ${doc.documents.id}`);
+    console.log(`[ReportGenerator] - processed: ${isProcessed}`);
     
     // Essayer d'abord de récupérer le contenu depuis document_contents
     const { data: contentData, error: contentError } = await supabase
@@ -35,55 +39,33 @@ async function getDocumentContent(doc: ConversationDocument): Promise<string> {
 
     let data = contentData;
     
-    // Si pas trouvé dans document_contents, chercher dans documents.content
-    if (!data?.content) {
-      console.log(`[ReportGenerator] Content not found in document_contents, trying documents table...`);
-      
-      const { data: docData, error: docError } = await supabase
-        .from('documents')
+    // Si pas trouvé avec document_id, essayer avec documents.id
+    if (!data?.content && doc.documents.id !== documentId) {
+      console.log(`[ReportGenerator] Trying with documents.id: ${doc.documents.id}`);
+      const { data: altData, error: altError } = await supabase
+        .from('document_contents')
         .select('content')
-        .eq('id', documentId)
+        .eq('document_id', doc.documents.id)
         .maybeSingle();
       
-      if (docError && docError.code !== 'PGRST116') {
-        console.error(`[ReportGenerator] Error fetching from documents table:`, docError);
+      if (altError && altError.code !== 'PGRST116') {
+        console.error(`[ReportGenerator] Error with alternate ID:`, altError);
       }
       
-      if (docData?.content) {
-        console.log(`[ReportGenerator] Found content in documents table`);
-        
-        // Le contenu peut être soit directement le texte, soit un JSON stringifié
-        try {
-          // Vérifier si c'est déjà une string non-JSON
-          if (typeof docData.content === 'string' && !docData.content.trim().startsWith('{') && !docData.content.trim().startsWith('[')) {
-            // C'est du texte brut, l'utiliser directement
-            data = { content: docData.content };
-          } else {
-            const parsedContent = JSON.parse(docData.content);
-            
-            // Gérer différents formats de contenu
-            if (typeof parsedContent === 'string') {
-              data = { content: parsedContent };
-            } else if (parsedContent.content) {
-              data = { content: typeof parsedContent.content === 'string' ? parsedContent.content : JSON.stringify(parsedContent.content) };
-            } else if (parsedContent.text) {
-              data = { content: parsedContent.text };
-            } else {
-              data = { content: JSON.stringify(parsedContent, null, 2) };
-            }
-          }
-        } catch (parseError) {
-          // Si ce n'est pas du JSON, c'est directement le contenu
-          data = { content: docData.content };
-        }
-      } else {
-        console.log(`[ReportGenerator] No content found in documents table either`);
+      if (altData?.content) {
+        console.log(`[ReportGenerator] Found content with documents.id`);
+        data = altData;
       }
+    }
+    
+    if (data?.content) {
+      console.log(`[ReportGenerator] Content found, length: ${data.content.length}`);
     } else {
-      console.log(`[ReportGenerator] Found content in document_contents`);
+      console.log(`[ReportGenerator] No content found for document ${documentName}`);
     }
 
     if (!data?.content) {
+      console.error(`[ReportGenerator] Failed to find content. Tried document_id: ${documentId} and documents.id: ${doc.documents.id}`);
       throw new Error(`No content found for document: ${documentName}`);
     }
 
