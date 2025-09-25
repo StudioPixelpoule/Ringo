@@ -11,65 +11,80 @@ interface ReportTemplate {
 
 async function getDocumentContent(doc: ConversationDocument): Promise<string> {
   try {
+    // Vérifier que l'objet documents existe
+    if (!doc.documents) {
+      console.error(`[ReportGenerator] No documents object found in ConversationDocument`);
+      throw new Error(`Document object missing`);
+    }
+    
+    const documentId = doc.documents.id;
+    const documentName = doc.documents.name;
+    
+    console.log(`[ReportGenerator] Fetching content for: ${documentName}, ID: ${documentId}`);
+    
     // Essayer d'abord de récupérer le contenu depuis document_contents
     const { data: contentData, error: contentError } = await supabase
       .from('document_contents')
-      .select('content, is_chunked, chunk_index, total_chunks')
-      .eq('document_id', doc.document_id)
-      .order('chunk_index', { ascending: true })
+      .select('content')
+      .eq('document_id', documentId)
       .maybeSingle();
+
+    if (contentError && contentError.code !== 'PGRST116') { // PGRST116 = no rows found
+      console.error(`[ReportGenerator] Error fetching from document_contents:`, contentError);
+    }
 
     let data = contentData;
     
     // Si pas trouvé dans document_contents, chercher dans documents.content
     if (!data?.content) {
-      console.log(`[ReportGenerator] Content not found in document_contents for ${doc.documents.name}, trying documents table...`);
+      console.log(`[ReportGenerator] Content not found in document_contents, trying documents table...`);
       
       const { data: docData, error: docError } = await supabase
         .from('documents')
         .select('content')
-        .eq('id', doc.document_id)
+        .eq('id', documentId)
         .maybeSingle();
       
+      if (docError && docError.code !== 'PGRST116') {
+        console.error(`[ReportGenerator] Error fetching from documents table:`, docError);
+      }
+      
       if (docData?.content) {
-        console.log(`[ReportGenerator] Found content in documents table for ${doc.documents.name}`);
+        console.log(`[ReportGenerator] Found content in documents table`);
         
         // Le contenu peut être soit directement le texte, soit un JSON stringifié
         try {
-          const parsedContent = JSON.parse(docData.content);
-          
-          // Gérer différents formats de contenu
-          if (typeof parsedContent === 'string') {
-            // Si c'est une string JSON parsée, l'utiliser directement
-            data = { content: parsedContent, is_chunked: false, chunk_index: 0, total_chunks: 1 };
-          } else if (parsedContent.content) {
-            // Si c'est un objet avec une propriété content
-            data = { 
-              content: typeof parsedContent.content === 'string' ? parsedContent.content : JSON.stringify(parsedContent.content),
-              is_chunked: false, 
-              chunk_index: 0, 
-              total_chunks: 1 
-            };
-          } else if (parsedContent.text) {
-            // Si c'est un objet avec une propriété text (format alternatif)
-            data = { content: parsedContent.text, is_chunked: false, chunk_index: 0, total_chunks: 1 };
+          // Vérifier si c'est déjà une string non-JSON
+          if (typeof docData.content === 'string' && !docData.content.trim().startsWith('{') && !docData.content.trim().startsWith('[')) {
+            // C'est du texte brut, l'utiliser directement
+            data = { content: docData.content };
           } else {
-            // Sinon, utiliser l'objet entier stringifié
-            data = { content: JSON.stringify(parsedContent, null, 2), is_chunked: false, chunk_index: 0, total_chunks: 1 };
+            const parsedContent = JSON.parse(docData.content);
+            
+            // Gérer différents formats de contenu
+            if (typeof parsedContent === 'string') {
+              data = { content: parsedContent };
+            } else if (parsedContent.content) {
+              data = { content: typeof parsedContent.content === 'string' ? parsedContent.content : JSON.stringify(parsedContent.content) };
+            } else if (parsedContent.text) {
+              data = { content: parsedContent.text };
+            } else {
+              data = { content: JSON.stringify(parsedContent, null, 2) };
+            }
           }
-        } catch {
+        } catch (parseError) {
           // Si ce n'est pas du JSON, c'est directement le contenu
-          data = { content: docData.content, is_chunked: false, chunk_index: 0, total_chunks: 1 };
+          data = { content: docData.content };
         }
       } else {
-        console.log(`[ReportGenerator] No content found in documents table either for ${doc.documents.name}`);
+        console.log(`[ReportGenerator] No content found in documents table either`);
       }
     } else {
-      console.log(`[ReportGenerator] Found content in document_contents for ${doc.documents.name}`);
+      console.log(`[ReportGenerator] Found content in document_contents`);
     }
 
     if (!data?.content) {
-      throw new Error(`No content found for document: ${doc.documents.name}`);
+      throw new Error(`No content found for document: ${documentName}`);
     }
 
     // Parse content based on document type
@@ -108,7 +123,7 @@ ${JSON.stringify(dataContent.data, null, 2)}
       return data.content;
     }
   } catch (error) {
-    console.error('Error fetching document content for document:', doc.documents.name, error);
+    console.error('Error fetching document content:', error);
     throw error;
   }
 }
