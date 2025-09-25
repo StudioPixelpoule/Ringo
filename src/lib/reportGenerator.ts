@@ -1,6 +1,7 @@
 import { ConversationDocument } from './conversationStore';
 import { supabase } from './supabase';
 import { generateChatResponseSecure } from './secureChat';
+import { migrateDocumentContent } from './migrateDocumentContent';
 
 interface ReportTemplate {
   id: string;
@@ -11,13 +12,32 @@ interface ReportTemplate {
 
 async function getDocumentContent(doc: ConversationDocument): Promise<string> {
   try {
+    console.log(`[ReportGenerator] Fetching content for document: ${doc.documents?.name || 'Unknown'}, ID: ${doc.document_id}`);
+    
+    // Vérifier que l'objet documents existe
+    if (!doc.documents) {
+      console.error(`[ReportGenerator] No documents object found in ConversationDocument:`, doc);
+      throw new Error(`Document object missing for ID: ${doc.document_id}`);
+    }
+    
+    // Utiliser l'ID du document depuis l'objet documents
+    const documentId = doc.documents.id || doc.document_id;
+    console.log(`[ReportGenerator] Using document ID: ${documentId}`);
+    
+    // Tenter de migrer le contenu si nécessaire
+    await migrateDocumentContent(documentId);
+    
     // Essayer d'abord de récupérer le contenu depuis document_contents
     const { data: contentData, error: contentError } = await supabase
       .from('document_contents')
       .select('content, is_chunked, chunk_index, total_chunks')
-      .eq('document_id', doc.document_id)
+      .eq('document_id', documentId)
       .order('chunk_index', { ascending: true })
       .maybeSingle();
+
+    if (contentError && contentError.code !== 'PGRST116') { // PGRST116 = no rows found
+      console.error(`[ReportGenerator] Error fetching from document_contents:`, contentError);
+    }
 
     let data = contentData;
     
@@ -28,36 +48,50 @@ async function getDocumentContent(doc: ConversationDocument): Promise<string> {
       const { data: docData, error: docError } = await supabase
         .from('documents')
         .select('content')
-        .eq('id', doc.document_id)
+        .eq('id', documentId)
         .maybeSingle();
+      
+      if (docError && docError.code !== 'PGRST116') {
+        console.error(`[ReportGenerator] Error fetching from documents table:`, docError);
+      }
       
       if (docData?.content) {
         console.log(`[ReportGenerator] Found content in documents table for ${doc.documents.name}`);
+        console.log(`[ReportGenerator] Content type: ${typeof docData.content}, length: ${docData.content?.length}`);
         
         // Le contenu peut être soit directement le texte, soit un JSON stringifié
         try {
-          const parsedContent = JSON.parse(docData.content);
-          
-          // Gérer différents formats de contenu
-          if (typeof parsedContent === 'string') {
-            // Si c'est une string JSON parsée, l'utiliser directement
-            data = { content: parsedContent, is_chunked: false, chunk_index: 0, total_chunks: 1 };
-          } else if (parsedContent.content) {
-            // Si c'est un objet avec une propriété content
-            data = { 
-              content: typeof parsedContent.content === 'string' ? parsedContent.content : JSON.stringify(parsedContent.content),
-              is_chunked: false, 
-              chunk_index: 0, 
-              total_chunks: 1 
-            };
-          } else if (parsedContent.text) {
-            // Si c'est un objet avec une propriété text (format alternatif)
-            data = { content: parsedContent.text, is_chunked: false, chunk_index: 0, total_chunks: 1 };
+          // Vérifier si c'est déjà une string non-JSON
+          if (typeof docData.content === 'string' && !docData.content.trim().startsWith('{') && !docData.content.trim().startsWith('[')) {
+            // C'est du texte brut, l'utiliser directement
+            data = { content: docData.content, is_chunked: false, chunk_index: 0, total_chunks: 1 };
+            console.log(`[ReportGenerator] Using raw text content`);
           } else {
-            // Sinon, utiliser l'objet entier stringifié
-            data = { content: JSON.stringify(parsedContent, null, 2), is_chunked: false, chunk_index: 0, total_chunks: 1 };
+            const parsedContent = JSON.parse(docData.content);
+            console.log(`[ReportGenerator] Parsed JSON content, type: ${typeof parsedContent}`);
+            
+            // Gérer différents formats de contenu
+            if (typeof parsedContent === 'string') {
+              // Si c'est une string JSON parsée, l'utiliser directement
+              data = { content: parsedContent, is_chunked: false, chunk_index: 0, total_chunks: 1 };
+            } else if (parsedContent.content) {
+              // Si c'est un objet avec une propriété content
+              data = { 
+                content: typeof parsedContent.content === 'string' ? parsedContent.content : JSON.stringify(parsedContent.content),
+                is_chunked: false, 
+                chunk_index: 0, 
+                total_chunks: 1 
+              };
+            } else if (parsedContent.text) {
+              // Si c'est un objet avec une propriété text (format alternatif)
+              data = { content: parsedContent.text, is_chunked: false, chunk_index: 0, total_chunks: 1 };
+            } else {
+              // Sinon, utiliser l'objet entier stringifié
+              data = { content: JSON.stringify(parsedContent, null, 2), is_chunked: false, chunk_index: 0, total_chunks: 1 };
+            }
           }
-        } catch {
+        } catch (parseError) {
+          console.log(`[ReportGenerator] Failed to parse as JSON, using as raw text:`, parseError);
           // Si ce n'est pas du JSON, c'est directement le contenu
           data = { content: docData.content, is_chunked: false, chunk_index: 0, total_chunks: 1 };
         }
