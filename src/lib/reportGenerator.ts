@@ -1,7 +1,6 @@
 import { ConversationDocument } from './conversationStore';
 import { supabase } from './supabase';
 import { generateChatResponseSecure } from './secureChat';
-import { processDocument } from './secureProcessor';
 
 interface ReportTemplate {
   id: string;
@@ -59,50 +58,17 @@ async function getDocumentContent(doc: ConversationDocument): Promise<string> {
       }
     }
     
-    // Si toujours pas trouvé, essayer de récupérer depuis le storage et traiter
-    if (!data?.content && doc.documents.url) {
-      console.log(`[ReportGenerator] Trying to fetch from storage: ${doc.documents.url}`);
-      try {
-        const { data: fileData, error: downloadError } = await supabase.storage
-          .from('documents')
-          .download(doc.documents.url);
-        
-        if (!downloadError && fileData) {
-          console.log(`[ReportGenerator] File downloaded, processing...`);
-          
-          // Créer un objet File à partir du Blob
-          const file = new File([fileData], documentName, { type: fileData.type });
-          
-          // Traiter le document pour extraire le contenu
-          const processedContent = await processDocument(file);
-          
-          if (processedContent) {
-            console.log(`[ReportGenerator] Content processed from storage`);
-            data = { content: processedContent };
-            
-            // Stocker le contenu pour les prochaines fois
-            console.log(`[ReportGenerator] Storing content in document_contents for future use`);
-            await supabase
-              .from('document_contents')
-              .insert([{
-                document_id: documentId,
-                content: processedContent,
-                is_chunked: false,
-                chunk_index: 0,
-                total_chunks: 1
-              }])
-              .then(({ error }) => {
-                if (error) {
-                  console.warn(`[ReportGenerator] Could not cache content:`, error);
-                }
-              });
-          }
-        } else {
-          console.error(`[ReportGenerator] Could not download file from storage:`, downloadError);
-        }
-      } catch (storageError) {
-        console.error(`[ReportGenerator] Error processing from storage:`, storageError);
-      }
+    // Ajouter plus de debugging
+    if (!data?.content) {
+      console.log(`[ReportGenerator] No content found after all attempts`);
+      console.log(`[ReportGenerator] Document details:`, {
+        name: doc.documents.name,
+        type: doc.documents.type,
+        url: doc.documents.url,
+        processed: doc.documents.processed,
+        document_id: documentId,
+        documents_id: doc.documents.id
+      });
     }
     
     if (data?.content) {
