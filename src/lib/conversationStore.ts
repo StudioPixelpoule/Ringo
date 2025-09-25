@@ -6,7 +6,6 @@ import { Document } from './documentStore';
 import { logger } from './logger';
 import { MAX_DOCUMENTS_PER_CONVERSATION, ERROR_MESSAGES, FEATURE_FLAGS, MAX_TOKENS, MAX_TOKENS_CLAUDE } from './constants';
 import { compressDocuments, extractKeywordsFromQuery } from './documentCompressor';
-import { migrateConversationDocuments } from './migrateDocumentContent';
 
 // Fonction pour estimer le nombre total de tokens dans les documents
 const estimateTotalTokens = (documents: string[]): number => {
@@ -1134,13 +1133,6 @@ RAPPEL: Utilise UNIQUEMENT les documents ci-dessus. Si une information n'est pas
       
       logger.info(`Documents récupérés: ${data?.length || 0}`);
       set({ documents: data || [] });
-      
-      // Migrer le contenu des documents si nécessaire (en arrière-plan)
-      if (data && data.length > 0) {
-        migrateConversationDocuments(conversationId).catch(err => {
-          console.warn(`[ConversationStore] Background migration failed:`, err);
-        });
-      }
     } catch (error) {
       logger.error(`Erreur dans fetchConversationDocuments:`, error);
       set({ error: error instanceof Error ? error.message : 'Error fetching conversation documents' });
