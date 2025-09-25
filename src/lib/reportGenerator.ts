@@ -9,6 +9,136 @@ interface ReportTemplate {
   prompt: string;
 }
 
+// Helper function pour formater les JSON de commentaires
+function formatCommentsJson(data: any, fileName: string): string {
+  try {
+    let result = `
+=== Document: ${fileName} ===
+Type: Commentaires structurés
+
+`;
+    
+    // Si c'est un tableau de commentaires
+    if (Array.isArray(data)) {
+      result += `Nombre de commentaires: ${data.length}\n\n`;
+      data.forEach((comment, index) => {
+        if (typeof comment === 'object') {
+          result += `Commentaire ${index + 1}:\n`;
+          Object.entries(comment).forEach(([key, value]) => {
+            if (value && value !== '') {
+              result += `  - ${key}: ${JSON.stringify(value, null, 2)}\n`;
+            }
+          });
+          result += '\n';
+        } else {
+          result += `Commentaire ${index + 1}: ${comment}\n\n`;
+        }
+      });
+    } 
+    // Si c'est un objet avec des sections
+    else if (typeof data === 'object') {
+      Object.entries(data).forEach(([section, content]) => {
+        result += `\n### ${section}\n`;
+        if (Array.isArray(content)) {
+          content.forEach((item: any, idx: number) => {
+            if (typeof item === 'object') {
+              result += `\n${idx + 1}. `;
+              Object.entries(item).forEach(([k, v]) => {
+                if (v) result += `${k}: ${v}; `;
+              });
+            } else {
+              result += `\n${idx + 1}. ${item}`;
+            }
+          });
+        } else if (typeof content === 'object') {
+          result += JSON.stringify(content, null, 2);
+        } else {
+          result += content;
+        }
+        result += '\n';
+      });
+    }
+    
+    result += '\n=== Fin du document ===';
+    return result;
+  } catch (error) {
+    console.error('Error formatting comments JSON:', error);
+    return `
+=== Document: ${fileName} ===
+
+${JSON.stringify(data, null, 2)}
+
+=== Fin du document ===
+`;
+  }
+}
+
+// Helper function pour formater les objets JSON
+function formatObjectJson(data: any, fileName: string): string {
+  try {
+    let result = `
+=== Document: ${fileName} ===
+Type: Données structurées
+
+`;
+    
+    // Extraire les champs importants
+    const keys = Object.keys(data);
+    result += `Nombre de champs: ${keys.length}\n\n`;
+    
+    // Afficher les données de manière structurée
+    Object.entries(data).forEach(([key, value]) => {
+      if (value === null || value === undefined || value === '') {
+        return; // Skip empty values
+      }
+      
+      result += `### ${key}\n`;
+      
+      if (Array.isArray(value)) {
+        result += `(Liste de ${value.length} éléments)\n`;
+        if (value.length <= 10) {
+          value.forEach((item, idx) => {
+            if (typeof item === 'object') {
+              result += `${idx + 1}. ${JSON.stringify(item, null, 2)}\n`;
+            } else {
+              result += `${idx + 1}. ${item}\n`;
+            }
+          });
+        } else {
+          // Si trop d'éléments, afficher les premiers et les derniers
+          result += 'Premiers éléments:\n';
+          value.slice(0, 5).forEach((item, idx) => {
+            result += `${idx + 1}. ${typeof item === 'object' ? JSON.stringify(item) : item}\n`;
+          });
+          result += `\n... (${value.length - 10} autres éléments) ...\n\n`;
+          result += 'Derniers éléments:\n';
+          value.slice(-5).forEach((item, idx) => {
+            result += `${value.length - 4 + idx}. ${typeof item === 'object' ? JSON.stringify(item) : item}\n`;
+          });
+        }
+      } else if (typeof value === 'object') {
+        result += JSON.stringify(value, null, 2) + '\n';
+      } else {
+        result += `${value}\n`;
+      }
+      
+      result += '\n';
+    });
+    
+    result += '=== Fin du document ===';
+    return result;
+  } catch (error) {
+    console.error('Error formatting object JSON:', error);
+    return `
+=== Document: ${fileName} ===
+
+${JSON.stringify(data, null, 2)}
+
+=== Fin du document ===
+`;
+  }
+}
+
 async function getDocumentContent(doc: ConversationDocument): Promise<string> {
   try {
     // Vérifier que l'objet documents existe
@@ -72,7 +202,14 @@ async function getDocumentContent(doc: ConversationDocument): Promise<string> {
     }
     
     if (data?.content) {
-      console.log(`[ReportGenerator] Content found, length: ${data.content.length}`);
+      console.log(`[ReportGenerator] Content found, length: ${data.content?.length || 0}`);
+      
+      // Vérifier si le contenu n'est pas vide ou juste des espaces
+      const contentStr = typeof data.content === 'string' ? data.content : JSON.stringify(data.content);
+      if (!contentStr || contentStr.trim().length === 0) {
+        console.warn(`[ReportGenerator] Content is empty for ${documentName}`);
+        return `[Document: ${documentName}]\n\nCe document ne contient aucune donnée exploitable. Il semble être vide ou mal formaté.\n\nPour résoudre ce problème, veuillez vérifier le contenu du document original et l'importer à nouveau si nécessaire.`;
+      }
     } else {
       console.log(`[ReportGenerator] No content found for document ${documentName}`);
     }
@@ -104,22 +241,148 @@ ${audioData.content}
         console.error('Error parsing audio content:', e);
         return data.content;
       }
-    } else if (doc.documents.type === 'data') {
+    } else if (doc.documents.type === 'data' || doc.documents.type === 'json' || doc.documents.name?.endsWith('.json')) {
       // For data files (JSON, CSV, etc.), format the content
       try {
-        const dataContent = JSON.parse(data.content);
-        return `
-=== Données Structurées ===
-Type: ${dataContent.type}
-Fichier: ${dataContent.fileName}
+        console.log(`[ReportGenerator] Processing JSON/data file: ${doc.documents.name}`);
+        
+        // Le contenu peut être déjà un objet ou une string JSON
+        let parsedContent;
+        if (typeof data.content === 'string') {
+          try {
+            parsedContent = JSON.parse(data.content);
+          } catch {
+            // Si ce n'est pas du JSON valide, utiliser tel quel
+            console.log(`[ReportGenerator] Content is not valid JSON, using as-is`);
+            return `
+=== Document: ${doc.documents.name} ===
 
-${JSON.stringify(dataContent.data, null, 2)}
+${data.content}
+
+=== Fin du document ===
 `;
-      } catch {
+          }
+        } else {
+          parsedContent = data.content;
+        }
+        
+        // Vérifier si c'est un format spécifique avec metadata
+        if (parsedContent && typeof parsedContent === 'object' && parsedContent.data) {
+          const formattedContent = `
+=== Document: ${doc.documents.name} ===
+Type: ${parsedContent.type || 'Données structurées'}
+
+Contenu:
+${JSON.stringify(parsedContent.data, null, 2)}
+
+=== Fin du document ===
+`;
+          console.log(`[ReportGenerator] Formatted structured data, length: ${formattedContent.length}`);
+          return formattedContent;
+        } 
+        
+        // Analyser le contenu pour extraire les informations pertinentes
+        let formattedContent = '';
+        
+        // Si le JSON contient des commentaires ou du texte structuré
+        if (doc.documents.name.includes('comments') || doc.documents.name.includes('commentaires')) {
+          formattedContent = formatCommentsJson(parsedContent, doc.documents.name);
+        } else if (Array.isArray(parsedContent)) {
+          // Si c'est un tableau, formater chaque élément
+          formattedContent = `
+=== Document: ${doc.documents.name} ===
+Type: Données JSON (Liste de ${parsedContent.length} éléments)
+
+Contenu:
+${parsedContent.map((item, index) => {
+  if (typeof item === 'object') {
+    return `\nÉlément ${index + 1}:\n${JSON.stringify(item, null, 2)}`;
+  }
+  return `\nÉlément ${index + 1}: ${item}`;
+}).join('\n')}
+
+=== Fin du document ===
+`;
+        } else if (typeof parsedContent === 'object') {
+          // Pour un objet, essayer d'extraire les champs importants
+          formattedContent = formatObjectJson(parsedContent, doc.documents.name);
+        } else {
+          // Format par défaut
+          formattedContent = `
+=== Document: ${doc.documents.name} ===
+Type: Données JSON
+
+Contenu:
+${JSON.stringify(parsedContent, null, 2)}
+
+=== Fin du document ===
+`;
+        }
+        
+        console.log(`[ReportGenerator] Formatted JSON content, length: ${formattedContent.length}`);
+        return formattedContent;
+        
+      } catch (error) {
+        console.error(`[ReportGenerator] Error processing JSON/data content:`, error);
+        return `
+=== Document: ${doc.documents.name} ===
+
+${data.content}
+
+=== Fin du document ===
+`;
+      }
+    } else if (doc.documents.type === 'csv' || doc.documents.name?.endsWith('.csv')) {
+      // For CSV files, format as table
+      try {
+        console.log(`[ReportGenerator] Processing CSV file: ${doc.documents.name}`);
+        
+        let parsedContent;
+        if (typeof data.content === 'string') {
+          try {
+            parsedContent = JSON.parse(data.content);
+          } catch {
+            // Si ce n'est pas du JSON, c'est peut-être du CSV brut
+            return `
+=== Document CSV: ${doc.documents.name} ===
+
+${data.content}
+
+=== Fin du document ===
+`;
+          }
+        } else {
+          parsedContent = data.content;
+        }
+        
+        if (parsedContent && parsedContent.data) {
+          return `
+=== Document CSV: ${doc.documents.name} ===
+Type: Données tabulaires
+${parsedContent.metadata ? `Nombre de lignes: ${parsedContent.metadata.rowCount}` : ''}
+
+Données:
+${JSON.stringify(parsedContent.data, null, 2)}
+
+=== Fin du document ===
+`;
+        }
+        
+        return `
+=== Document CSV: ${doc.documents.name} ===
+
+${JSON.stringify(parsedContent, null, 2)}
+
+=== Fin du document ===
+`;
+        
+      } catch (error) {
+        console.error(`[ReportGenerator] Error processing CSV content:`, error);
         return data.content;
       }
     } else {
       // For text documents, return content directly
+      console.log(`[ReportGenerator] Processing text document: ${doc.documents.name}, type: ${doc.documents.type}`);
       return data.content;
     }
   } catch (error) {
@@ -179,13 +442,26 @@ ${contents.map((doc, i) => `${i + 1}. ${doc.name} (${doc.type})`).join('\n')}
 CONTEXTE : Ces documents font partie d'une même conversation et doivent être analysés ensemble.`;
 
     // Format document content with clear separation
-    const formattedContent = contents.map(doc => `
+    const formattedContent = contents.map(doc => {
+      // Pour les documents JSON volumineux, optimiser le format
+      let processedContent = doc.content;
+      
+      // Vérifier si le contenu est trop long et le tronquer si nécessaire
+      const MAX_CONTENT_LENGTH = 50000; // Limite de caractères par document
+      
+      if (processedContent.length > MAX_CONTENT_LENGTH) {
+        console.warn(`[ReportGenerator] Content for ${doc.name} is too long (${processedContent.length} chars), truncating...`);
+        processedContent = processedContent.substring(0, MAX_CONTENT_LENGTH) + `\n\n[... Contenu tronqué pour l'analyse. Document original : ${processedContent.length} caractères ...]`;
+      }
+      
+      return `
 ====== DÉBUT DU DOCUMENT: ${doc.name} (${doc.type}) ======
 
-${doc.content}
+${processedContent}
 
 ====== FIN DU DOCUMENT: ${doc.name} ======
-`).join('\n\n---\n\n');
+`;
+    }).join('\n\n---\n\n');
 
     // Generate report content using OpenAI
     const reportContent = await generateChatResponseSecure(
