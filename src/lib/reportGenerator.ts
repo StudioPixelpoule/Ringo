@@ -1,6 +1,6 @@
 import { ConversationDocument } from './conversationStore';
 import { supabase } from './supabase';
-import { generateChatResponse } from './openai';
+import { generateChatResponseSecure } from './secureChat';
 
 interface ReportTemplate {
   id: string;
@@ -124,7 +124,7 @@ ${doc.content}
 `).join('\n\n---\n\n');
 
     // Generate report content using OpenAI
-    const reportContent = await generateChatResponse(
+    const reportContent = await generateChatResponseSecure(
       [
         { role: 'system', content: systemMessage },
         { 
