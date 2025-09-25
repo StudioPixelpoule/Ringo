@@ -81,8 +81,10 @@ async function getDocumentContent(doc: ConversationDocument): Promise<string> {
       console.error(`[ReportGenerator] Failed to find content. Tried:`);
       console.error(`- document_id: ${documentId}`);
       console.error(`- documents.id: ${doc.documents.id}`);
-      console.error(`- storage URL: ${doc.documents.url}`);
-      throw new Error(`No content found for document: ${documentName}`);
+      
+      // Utiliser un contenu de fallback pour ne pas bloquer la génération
+      console.warn(`[ReportGenerator] Using fallback content for ${documentName}`);
+      return `[Document: ${documentName}]\n\nLe contenu de ce document n'a pas pu être récupéré. Le document existe mais son contenu n'est pas accessible pour la génération de rapport.\n\nPour résoudre ce problème, veuillez retirer ce document de la conversation et l'importer à nouveau.`;
     }
 
     // Parse content based on document type
